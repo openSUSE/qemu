@@ -41,6 +41,7 @@ static inline const argtype *thunk_type_next(const argtype *type_ptr)
     case TYPE_CHAR:
     case TYPE_SHORT:
     case TYPE_INT:
+    case TYPE_INTBITFIELD:
     case TYPE_LONGLONG:
     case TYPE_ULONGLONG:
     case TYPE_LONG:
@@ -140,6 +141,26 @@ const argtype *thunk_convert(void *dst, const void *src,
     case TYPE_INT:
         *(uint32_t *)dst = tswap32(*(uint32_t *)src);
         break;
+    case TYPE_INTBITFIELD:
+#if defined(TARGET_I386) && defined(__powerpc__)
+        /* powerpc uses the MSB, whereas i386 uses the LSB
+         * to store the first bit in a field */
+        {
+	    unsigned char byte = *(uint8_t *)src;
+            *(uint8_t *)dst  = ((byte >> 7) & 1)
+		             | ((byte >> 5) & 2)
+			     | ((byte >> 3) & 4)
+			     | ((byte >> 1) & 8)
+			     | ((byte << 1) & 16)
+			     | ((byte << 3) & 32)
+			     | ((byte << 5) & 64)
+			     | ((byte << 7) & 128);
+	    /* FIXME: implement for bitfields > 1 byte and other archs */
+        }
+#else
+        *(uint32_t *)dst = tswap32(*(uint32_t *)src);
+#endif
+	break;
     case TYPE_LONGLONG:
     case TYPE_ULONGLONG:
         *(uint64_t *)dst = tswap64(*(uint64_t *)src);
