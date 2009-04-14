@@ -8914,6 +8914,8 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
     case TARGET_NR_gettimeofday:
         {
             struct timeval tv;
+            if(copy_from_user_timeval(&tv, arg1))
+		goto efault;
             ret = get_errno(gettimeofday(&tv, NULL));
             if (!is_error(ret)) {
                 if (copy_to_user_timeval(arg1, &tv))
