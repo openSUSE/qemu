@@ -2802,6 +2802,8 @@ struct target_ucred {
     uint32_t gid;
 };
 
+#include "ioctls_alsa_structs.h"
+
 typedef int32_t target_timer_t;
 
 #define TARGET_SIGEV_MAX_SIZE 64
