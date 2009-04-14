@@ -4814,6 +4814,11 @@ static abi_long do_ioctl(int fd, int cmd, abi_long arg)
         arg_type++;
         target_size = thunk_type_size(arg_type, 0);
         switch(ie->access) {
+        /* FIXME: actually the direction given in the ioctl should be
+         * correct so we can assume the communication is uni-directional.
+         * The alsa developers did not like this concept though and
+         * declared ioctls IOC_R and IOC_W even though they were IOC_RW.*/
+/*
         case IOC_R:
             ret = get_errno(safe_ioctl(fd, ie->host_cmd, buf_temp));
             if (!is_error(ret)) {
@@ -4832,6 +4837,7 @@ static abi_long do_ioctl(int fd, int cmd, abi_long arg)
             unlock_user(argptr, arg, 0);
             ret = get_errno(safe_ioctl(fd, ie->host_cmd, buf_temp));
             break;
+*/
         default:
         case IOC_RW:
             argptr = lock_user(VERIFY_READ, arg, target_size, 1);
