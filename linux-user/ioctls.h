@@ -319,6 +319,11 @@
   IOCTL(VFAT_IOCTL_READDIR_BOTH, IOC_R, MK_PTR(MK_ARRAY(MK_STRUCT(STRUCT_dirent), 2)))
   IOCTL(VFAT_IOCTL_READDIR_SHORT, IOC_R, MK_PTR(MK_ARRAY(MK_STRUCT(STRUCT_dirent), 2)))
 
+/* FIXME: including these on x86 / x86_64 breaks qemu-i386 */
+#ifdef __powerpc__
+#include "ioctls_alsa.h"
+#endif
+
   IOCTL(LOOP_SET_FD, 0, TYPE_INT)
   IOCTL(LOOP_CLR_FD, 0, TYPE_INT)
   IOCTL(LOOP_SET_STATUS, IOC_W, MK_PTR(MK_STRUCT(STRUCT_loop_info)))

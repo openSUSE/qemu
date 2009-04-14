@@ -83,6 +83,11 @@ STRUCT(buffmem_desc,
 STRUCT(mixer_info,
        MK_ARRAY(TYPE_CHAR, 16), MK_ARRAY(TYPE_CHAR, 32), TYPE_INT, MK_ARRAY(TYPE_INT, 10))
 
+/* FIXME: including these on x86 / x86_64 breaks qemu-i386 */
+#ifdef __powerpc__
+#include "syscall_types_alsa.h"
+#endif
+
 /* loop device ioctls */
 STRUCT(loop_info,
        TYPE_INT,                 /* lo_number */
