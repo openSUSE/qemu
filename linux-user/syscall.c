@@ -8988,6 +8988,9 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
         {
             struct timeval tv;
             struct timezone tz;
+            if (copy_from_user_timeval(&tv, arg1)) {
+                return -TARGET_EFAULT;
+            }
 
             ret = get_errno(gettimeofday(&tv, &tz));
             if (!is_error(ret)) {
