@@ -37,6 +37,7 @@ typedef enum argtype {
     TYPE_ARRAY,
     TYPE_STRUCT,
     TYPE_OLDDEVT,
+    TYPE_INTBITFIELD,
 } argtype;
 
 #define MK_PTR(type) TYPE_PTR, type
@@ -90,6 +91,7 @@ static inline int thunk_type_size(const argtype *type_ptr, int is_host)
     case TYPE_SHORT:
         return 2;
     case TYPE_INT:
+    case TYPE_INTBITFIELD:
         return 4;
     case TYPE_LONGLONG:
     case TYPE_ULONGLONG:
@@ -152,6 +154,7 @@ static inline int thunk_type_align(const argtype *type_ptr, int is_host)
     case TYPE_SHORT:
         return 2;
     case TYPE_INT:
+    case TYPE_INTBITFIELD:
         return 4;
     case TYPE_LONGLONG:
     case TYPE_ULONGLONG:
