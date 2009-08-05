@@ -22,6 +22,7 @@ block-obj-$(CONFIG_GLUSTERFS) += gluster.o
 block-obj-$(CONFIG_LIBSSH2) += ssh.o
 block-obj-y += accounting.o dirty-bitmap.o
 block-obj-y += dictzip.o
+block-obj-y += tar.o
 block-obj-y += write-threshold.o
 block-obj-y += backup.o
 block-obj-$(CONFIG_REPLICATION) += replication.o
