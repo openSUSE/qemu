@@ -66,7 +66,7 @@ struct VirtIOSerial {
     struct VirtIOSerialPostLoad *post_load;
 };
 
-static VirtIOSerialPort *find_port_by_id(VirtIOSerial *vser, uint32_t id)
+VirtIOSerialPort *find_port_by_id(VirtIOSerial *vser, uint32_t id)
 {
     VirtIOSerialPort *port;
 

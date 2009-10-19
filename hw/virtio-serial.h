@@ -205,4 +205,7 @@ size_t virtio_serial_guest_ready(VirtIOSerialPort *port);
  */
 void virtio_serial_throttle_port(VirtIOSerialPort *port, bool throttle);
 
+void virtio_console_print_early(VirtIODevice *vdev, uint8_t *buf);
+VirtIOSerialPort *find_port_by_id(VirtIOSerial *vser, uint32_t id);
+
 #endif

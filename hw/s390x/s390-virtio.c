@@ -76,6 +76,9 @@ static int s390_virtio_hcall_notify(const uint64_t *args)
         }
     } else {
         /* Early printk */
+	uint8_t *p = (uint8_t *)qemu_get_ram_ptr(mem);
+	VirtIOS390Device *dev = s390_virtio_bus_console(s390_bus);
+	virtio_console_print_early(dev->vdev, p);
     }
     return r;
 }

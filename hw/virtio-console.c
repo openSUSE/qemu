@@ -20,6 +20,14 @@ typedef struct VirtConsole {
     CharDriverState *chr;
 } VirtConsole;
 
+void virtio_console_print_early(VirtIODevice *vdev, uint8_t *buf)
+{
+    VirtIOSerial *vser = (void*)vdev;
+    VirtIOSerialPort *port = find_port_by_id(vser, 0);
+    VirtConsole *vcon = DO_UPCAST(VirtConsole, port, port);
+
+    qemu_chr_fe_write(vcon->chr, buf, strlen((char*)buf));
+}
 
 /* Callback function that's called when the guest sends us data */
 static ssize_t flush_buf(VirtIOSerialPort *port, const uint8_t *buf, size_t len)
