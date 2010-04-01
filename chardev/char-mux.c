@@ -22,6 +22,7 @@
  * THE SOFTWARE.
  */
 
+#define HW_POISON_H /* avoid poison since we patch against rules it "enforces" */
 #include "qemu/osdep.h"
 #include "qapi/error.h"
 #include "qemu/option.h"
@@ -190,6 +191,15 @@ static void mux_chr_accept_input(Chardev *chr)
         be->chr_read(be->opaque,
                      &d->buffer[m][d->cons[m]++ & MUX_BUFFER_MASK], 1);
     }
+
+#if defined(TARGET_S390X)
+    /* We're still not able to sync producer and consumer, so let's wait a bit
+       and try again by then. */
+    if (d->prod[m] != d->cons[m]) {
+        qemu_mod_timer(d->accept_timer, qemu_get_clock_ns(vm_clock)
+                                        + (int64_t)100000);
+    }
+#endif
 }
 
 static int mux_chr_can_read(void *opaque)
@@ -324,6 +334,10 @@ static void qemu_chr_open_mux(Chardev *chr,
     }
 
     d->focus = -1;
+#if defined(TARGET_S390X)
+    d->accept_timer = qemu_new_timer_ns(vm_clock,
+                                     (QEMUTimerCB *)mux_chr_accept_input, chr);
+#endif
     /* only default to opened state if we've realized the initial
      * set of muxes
      */
