@@ -37,6 +37,9 @@ struct MuxChardev {
     Chardev parent;
     CharBackend *backends[MAX_MUX];
     CharBackend chr;
+#if defined(TARGET_S390X)
+    QEMUTimer *accept_timer;
+#endif
     int focus;
     int mux_cnt;
     int term_got_escape;
