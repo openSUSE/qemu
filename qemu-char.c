@@ -240,6 +240,9 @@ typedef struct {
     IOEventHandler *chr_event[MAX_MUX];
     void *ext_opaque[MAX_MUX];
     CharDriverState *drv;
+#if defined(TARGET_S390X)
+    QEMUTimer *accept_timer;
+#endif
     int focus;
     int mux_cnt;
     int term_got_escape;
@@ -396,6 +399,15 @@ static void mux_chr_accept_input(CharDriverState *chr)
         d->chr_read[m](d->ext_opaque[m],
                        &d->buffer[m][d->cons[m]++ & MUX_BUFFER_MASK], 1);
     }
+
+#if defined(TARGET_S390X)
+    /* We're still not able to sync producer and consumer, so let's wait a bit
+       and try again by then. */
+    if (d->prod[m] != d->cons[m]) {
+        qemu_mod_timer(d->accept_timer, qemu_get_clock_ns(vm_clock)
+                                        + (int64_t)100000);
+    }
+#endif
 }
 
 static int mux_chr_can_read(void *opaque)
@@ -478,6 +490,10 @@ static CharDriverState *qemu_chr_open_mux(CharDriverState *drv)
     chr->opaque = d;
     d->drv = drv;
     d->focus = -1;
+#if defined(TARGET_S390X)
+    d->accept_timer = qemu_new_timer_ns(vm_clock,
+                                     (QEMUTimerCB*)mux_chr_accept_input, chr);
+#endif
     chr->chr_write = mux_chr_write;
     chr->chr_update_read_handler = mux_chr_update_read_handler;
     chr->chr_accept_input = mux_chr_accept_input;
