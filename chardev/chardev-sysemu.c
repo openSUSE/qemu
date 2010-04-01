@@ -22,6 +22,7 @@
  * THE SOFTWARE.
  */
 
+#define HW_POISON_H /* avoid poison since we patch against rules it "enforces" */
 #include "qemu/osdep.h"
 #include "sysemu/sysemu.h"
 #include "chardev/char.h"
