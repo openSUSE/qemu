@@ -41,6 +41,9 @@ struct MuxChardev {
     /* Linked backend */
     CharBackend chr;
     unsigned long mux_bitset;
+#if defined(TARGET_S390X)
+    QEMUTimer *accept_timer;
+#endif
     int focus;
     bool term_got_escape;
     /* Intermediate input buffer catches escape sequences even if the
