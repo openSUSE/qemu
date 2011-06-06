@@ -951,7 +951,7 @@ static void console_putchar(QemuConsole *s, int ch)
         } else {
             if (s->nb_esc_params < MAX_ESC_PARAMS)
                 s->nb_esc_params++;
-            if (ch == ';')
+            if (ch == ';' || ch == '?')
                 break;
 #ifdef DEBUG_CONSOLE
             fprintf(stderr, "escape sequence CSI%d;%d%c, %d parameters\n",
