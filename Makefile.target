@@ -41,6 +41,10 @@ ifdef CONFIG_USER_ONLY
 include $(SRC_PATH)/tests/tcg/Makefile.include
 endif
 
+ifdef CONFIG_LINUX_USER
+PROGS+=$(QEMU_PROG)-binfmt
+endif
+
 config-target.h: config-target.h-timestamp
 config-target.h-timestamp: config-target.mak
 
@@ -119,6 +123,8 @@ QEMU_CFLAGS+=-I$(SRC_PATH)/linux-user/$(TARGET_ABI_DIR) \
 obj-y += linux-user/
 obj-y += gdbstub.o thunk.o
 
+obj-binfmt-y += linux-user/
+
 endif #CONFIG_LINUX_USER
 
 #########################################################
@@ -161,7 +167,11 @@ endif # CONFIG_SOFTMMU
 # Workaround for http://gcc.gnu.org/PR55489, see configure.
 %/translate.o: QEMU_CFLAGS += $(TRANSLATE_OPT_CFLAGS)
 
+ifdef CONFIG_LINUX_USER
+dummy := $(call unnest-vars,,obj-y obj-binfmt-y)
+else
 dummy := $(call unnest-vars,,obj-y)
+endif
 all-obj-y := $(obj-y)
 
 target-obj-y :=
@@ -201,6 +211,9 @@ ifdef CONFIG_DARWIN
 	$(call quiet-command,Rez -append $(SRC_PATH)/pc-bios/qemu.rsrc -o $@,"REZ","$(TARGET_DIR)$@")
 	$(call quiet-command,SetFile -a C $@,"SETFILE","$(TARGET_DIR)$@")
 endif
+
+$(QEMU_PROG)-binfmt: $(obj-binfmt-y)
+	$(call LINK,$^)
 
 gdbstub-xml.c: $(TARGET_XML_FILES) $(SRC_PATH)/scripts/feature_to_c.sh
 	$(call quiet-command,rm -f $@ && $(SHELL) $(SRC_PATH)/scripts/feature_to_c.sh $@ $(TARGET_XML_FILES),"GEN","$(TARGET_DIR)$@")
