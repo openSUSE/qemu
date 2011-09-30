@@ -3048,6 +3048,11 @@ endforeach
 
 # Other build targets
 
+if 'CONFIG_LINUX_USER' in config_target
+    executable('qemu-binfmt', files('linux-user/binfmt.c'),
+               install: true)
+endif
+
 if 'CONFIG_PLUGIN' in config_host
   install_headers('include/qemu/qemu-plugin.h')
 endif
