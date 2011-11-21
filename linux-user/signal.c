@@ -575,6 +575,10 @@ static void QEMU_NORETURN dump_core_and_abort(int target_sig)
     trace_user_force_sig(env, target_sig, host_sig);
     gdb_signalled(env, target_sig);
 
+    if (target_sig == 6) {
+        goto no_core;
+    }
+
     /* dump core if supported by target binary format */
     if (core_dump_signal(target_sig) && (ts->bprm->core_dump != NULL)) {
         stop_all_tasks();
@@ -591,6 +595,8 @@ static void QEMU_NORETURN dump_core_and_abort(int target_sig)
         (void) fprintf(stderr, "qemu: uncaught target signal %d (%s) - %s\n",
             target_sig, strsignal(host_sig), "core dumped" );
     }
+
+no_core:
 
     /* The proper exit code for dying from an uncaught signal is
      * -<signal>.  The kernel doesn't allow exit() or _exit() to pass
