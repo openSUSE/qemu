@@ -135,6 +135,8 @@ typedef struct TaskState {
     struct sigqueue sigqueue_table[MAX_SIGQUEUE_SIZE]; /* siginfo queue */
     struct sigqueue *first_free; /* first free siginfo queue entry */
     int signal_pending; /* non zero if a signal may be pending */
+    int signal_in_syscall; /* non zero if we are in do_syscall() */
+    int signal_restart; /* non zero if we need to restart a syscall */
 } __attribute__((aligned(16))) TaskState;
 
 extern char *exec_path;
@@ -200,6 +202,7 @@ int get_osversion(void);
 void init_qemu_uname_release(void);
 void fork_start(void);
 void fork_end(int child);
+int syscall_restartable(int syscall_nr);
 
 /* Creates the initial guest address space in the host memory space using
  * the given host start address hint and size.  The guest_start parameter

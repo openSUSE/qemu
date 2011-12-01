@@ -815,15 +815,22 @@ void cpu_loop(CPUARMState *env)
                             break;
                         }
                     } else {
-                        env->regs[0] = do_syscall(env,
-                                                  n,
-                                                  env->regs[0],
-                                                  env->regs[1],
-                                                  env->regs[2],
-                                                  env->regs[3],
-                                                  env->regs[4],
-                                                  env->regs[5],
-                                                  0, 0);
+                        TaskState *ts = cs->opaque;
+                        target_ulong r;
+                        r = do_syscall(env, n, env->regs[0], env->regs[1],
+                                       env->regs[2], env->regs[3], env->regs[4],
+                                       env->regs[5], 0, 0);
+                        if ((r == -EINTR) && ts->signal_restart &&
+                            syscall_restartable(n)) {
+                            if (env->thumb) {
+                                env->regs[15] -= 2;
+                            } else {
+                                env->regs[15] -= 4;
+                            }
+                        } else {
+                            env->regs[0] = r;
+                        }
+                        ts->signal_restart = 0;
                     }
                 } else {
                     goto error;

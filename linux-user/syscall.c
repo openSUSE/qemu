@@ -5512,6 +5512,87 @@ static target_timer_t get_timer_id(abi_long arg)
     return timerid;
 }
 
+int syscall_restartable(int syscall_nr)
+{
+    switch (syscall_nr) {
+#ifdef TARGET_NR_sigsuspend
+    case TARGET_NR_sigsuspend:
+#endif
+#ifdef TARGET_NR_pause
+    case TARGET_NR_pause:
+#endif
+#ifdef TARGET_NR_setsockopt
+    case TARGET_NR_setsockopt:
+#endif
+#ifdef TARGET_NR_accept
+    case TARGET_NR_accept:
+#endif
+#ifdef TARGET_NR_recv
+    case TARGET_NR_recv:
+#endif
+#ifdef TARGET_NR_recvfrom
+    case TARGET_NR_recvfrom:
+#endif
+#ifdef TARGET_NR_recvmsg
+    case TARGET_NR_recvmsg:
+#endif
+#ifdef TARGET_NR_socketcall
+    case TARGET_NR_socketcall:
+#endif
+#ifdef TARGET_NR_connect
+    case TARGET_NR_connect:
+#endif
+#ifdef TARGET_NR_send
+    case TARGET_NR_send:
+#endif
+#ifdef TARGET_NR_sendmsg
+    case TARGET_NR_sendmsg:
+#endif
+#ifdef TARGET_NR_sendto
+    case TARGET_NR_sendto:
+#endif
+#ifdef TARGET_NR_poll
+    case TARGET_NR_poll:
+#endif
+#ifdef TARGET_NR_ppoll
+    case TARGET_NR_ppoll:
+#endif
+#if defined(TARGET_NR_select)
+    case TARGET_NR_select:
+#endif
+#ifdef TARGET_NR_pselect6
+    case TARGET_NR_pselect6:
+#endif
+#ifdef TARGET_NR__newselect
+    case TARGET_NR__newselect:
+#endif
+#ifdef TARGET_NR_msgrcv
+    case TARGET_NR_msgrcv:
+#endif
+#ifdef TARGET_NR_msgsnd
+    case TARGET_NR_msgsnd:
+#endif
+#ifdef TARGET_NR_semop
+    case TARGET_NR_semop:
+#endif
+#ifdef TARGET_NR_ipc
+    case TARGET_NR_ipc:
+#endif
+#ifdef TARGET_NR_clock_nanosleep
+    case TARGET_NR_clock_nanosleep:
+#endif
+    case TARGET_NR_rt_sigsuspend:
+    case TARGET_NR_rt_sigtimedwait:
+    case TARGET_NR_nanosleep:
+    case TARGET_NR_close:
+        /* can not be restarted */
+        return 0;
+    }
+
+    /* every other syscall can be restarted */
+    return 1;
+}
+
 /* do_syscall() should always have a single exit point at the end so
    that actions, such as logging of syscall results, can be performed.
    All errnos that do_syscall() returns must be -TARGET_<errcode>. */
@@ -5525,6 +5606,12 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
     struct stat st;
     struct statfs stfs;
     void *p;
+    TaskState *ts = (TaskState*)cpu->opaque;
+
+    if (!ts->signal_restart) {
+        /* remember syscall info for restart */
+        ts->signal_in_syscall = 1;
+    }
 
 #ifdef DEBUG
     gemu_log("syscall %d", num);
@@ -8794,7 +8881,7 @@ abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
 	cmd = target_to_host_fcntl_cmd(arg2);
         if (cmd == -TARGET_EINVAL) {
             ret = cmd;
-            break;
+            goto fail;
         }
 
         switch(arg2) {
@@ -9825,6 +9912,7 @@ fail:
 #endif
     if(do_strace)
         print_syscall_ret(num, ret);
+    ts->signal_in_syscall = 0;
     return ret;
 efault:
     ret = -TARGET_EFAULT;

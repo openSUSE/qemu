@@ -25,6 +25,7 @@
 #include <assert.h>
 #include <sys/ucontext.h>
 #include <sys/resource.h>
+#include <sched.h>
 
 #include "qemu.h"
 #include "qemu-common.h"
@@ -571,6 +572,11 @@ int queue_signal(CPUArchState *env, int sig, target_siginfo_t *info)
         k->pending = 1;
         /* signal that a new signal is pending */
         ts->signal_pending = 1;
+        /* check if we have to restart the current syscall */
+        if ((sigact_table[sig - 1].sa_flags & SA_RESTART) &&
+            ts->signal_in_syscall) {
+            ts->signal_restart = 1;
+        }
         return 1; /* indicates that the signal was queued */
     }
 }
@@ -717,8 +723,24 @@ int do_sigaction(int sig, const struct target_sigaction *act,
         if (host_sig != SIGSEGV && host_sig != SIGBUS) {
             sigfillset(&act1.sa_mask);
             act1.sa_flags = SA_SIGINFO;
+#ifdef TARGET_ARM
+            /* Breaks boehm-gc, we have to do this manually */
+            /*
+             * Unfortunately our hacks only work as long as we don't do parallel
+             * signal delivery and futexes, so let's do a dirty hack here to
+             * pin our guest process to a single host CPU if we're using the
+             * boehm-gc.
+             */
+            if ((k->sa_flags & TARGET_SA_RESTART) && host_sig == SIGPWR) {
+                cpu_set_t mask;
+                CPU_ZERO(&mask);
+                CPU_SET(0, &mask);
+                sched_setaffinity(0, sizeof(mask), &mask);
+            }
+#else
             if (k->sa_flags & TARGET_SA_RESTART)
                 act1.sa_flags |= SA_RESTART;
+#endif
             /* NOTE: it is important to update the host kernel signal
                ignore state to avoid getting unexpected interrupted
                syscalls */
