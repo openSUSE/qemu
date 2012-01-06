@@ -1230,11 +1230,13 @@ static void *file_ram_alloc(RAMBlock *block,
     int fd = -1;
     int64_t page_size;
 
+#ifndef TARGET_PPC
     if (kvm_enabled() && !kvm_has_sync_mmu()) {
         error_setg(errp,
                    "host lacks kvm mmu notifiers, -mem-path unsupported");
         return NULL;
     }
+#endif
 
     for (;;) {
         fd = open(path, O_RDWR);
