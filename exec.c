@@ -1950,11 +1950,13 @@ RAMBlock *qemu_ram_alloc_from_fd(ram_addr_t size, MemoryRegion *mr,
         return NULL;
     }
 
+#ifndef TARGET_PPC
     if (kvm_enabled() && !kvm_has_sync_mmu()) {
         error_setg(errp,
                    "host lacks kvm mmu notifiers, -mem-path unsupported");
         return NULL;
     }
+#endif
 
     if (phys_mem_alloc != qemu_anon_ram_alloc) {
         /*
