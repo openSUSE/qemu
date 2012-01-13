@@ -24,6 +24,12 @@
 #include <pthread.h>
 #define spin_lock pthread_mutex_lock
 #define spin_unlock pthread_mutex_unlock
+static inline void spin_unlock_safe(pthread_mutex_t *lock)
+{
+    /* unlocking an unlocked mutex results in undefined behavior */
+    pthread_mutex_trylock(lock);
+    pthread_mutex_unlock(lock);
+}
 #define spinlock_t pthread_mutex_t
 #define SPIN_LOCK_UNLOCKED PTHREAD_MUTEX_INITIALIZER
 
@@ -43,6 +49,10 @@ static inline void spin_lock(spinlock_t *lock)
 }
 
 static inline void spin_unlock(spinlock_t *lock)
+{
+}
+
+static inline void spin_unlock_safe(spinlock_t *lock)
 {
 }
 
