@@ -78,6 +78,10 @@ static inline int handle_cpu_signal(uintptr_t pc, unsigned long address,
     printf("qemu: SIGSEGV pc=0x%08lx address=%08lx w=%d oldset=0x%08lx\n",
            pc, address, is_write, *(unsigned long *)old_set);
 #endif
+
+    /* Maybe we're still holding the TB fiddling lock? */
+    tb_lock_reset();
+
     /* XXX: locking issue */
     if (is_write && h2g_valid(address)) {
         switch (page_unprotect(h2g(address), pc)) {
