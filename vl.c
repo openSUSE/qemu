@@ -2829,9 +2829,20 @@ int main(int argc, char **argv, char **envp)
     };
     const char *trace_events = NULL;
     const char *trace_file = NULL;
+    struct rlimit rlimit_as;
 
     atexit(qemu_run_exit_notifiers);
     error_set_progname(argv[0]);
+
+    /*
+     * Try to raise the soft address space limit.
+     * Default on SLES 11 SP2 is 80% of physical+swap memory.
+     */
+    getrlimit(RLIMIT_AS, &rlimit_as);
+    if (rlimit_as.rlim_cur < rlimit_as.rlim_max) {
+        rlimit_as.rlim_cur = rlimit_as.rlim_max;
+        setrlimit(RLIMIT_AS, &rlimit_as);
+    }
 
     g_mem_set_vtable(&mem_trace);
     if (!g_thread_supported()) {
