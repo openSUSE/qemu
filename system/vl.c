@@ -45,6 +45,7 @@
 #include "system/reset.h"
 #include "system/runstate.h"
 #include "system/runstate-action.h"
+#include <sys/resource.h>
 #include "system/seccomp.h"
 #include "system/tcg.h"
 #include "system/xen.h"
@@ -2850,6 +2851,17 @@ void qemu_init(int argc, char **argv)
     MachineClass *machine_class;
     bool userconfig = true;
     FILE *vmstate_dump_file = NULL;
+    struct rlimit rlimit_as;
+
+    /*
+     * Try to raise the soft address space limit.
+     * Default on SLES 11 SP2 is 80% of physical+swap memory.
+     */
+    getrlimit(RLIMIT_AS, &rlimit_as);
+    if (rlimit_as.rlim_cur < rlimit_as.rlim_max) {
+        rlimit_as.rlim_cur = rlimit_as.rlim_max;
+        setrlimit(RLIMIT_AS, &rlimit_as);
+    }
 
     qemu_add_opts(&qemu_drive_opts);
     qemu_add_drive_opts(&qemu_legacy_drive_opts);
