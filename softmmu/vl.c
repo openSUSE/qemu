@@ -34,6 +34,7 @@
 #include "qemu/uuid.h"
 #include "sysemu/reset.h"
 #include "sysemu/runstate.h"
+#include <sys/resource.h>
 #include "sysemu/seccomp.h"
 #include "sysemu/tcg.h"
 #include "sysemu/xen.h"
@@ -2868,6 +2869,7 @@ void qemu_init(int argc, char **argv, char **envp)
     BlockdevOptionsQueue bdo_queue = QSIMPLEQ_HEAD_INITIALIZER(bdo_queue);
     QemuPluginList plugin_list = QTAILQ_HEAD_INITIALIZER(plugin_list);
     int mem_prealloc = 0; /* force preallocation of physical target memory */
+    struct rlimit rlimit_as;
 
     os_set_line_buffering();
 
@@ -2878,6 +2880,16 @@ void qemu_init(int argc, char **argv, char **envp)
     qemu_init_cpu_loop();
 
     qemu_mutex_lock_iothread();
+
+    /*
+     * Try to raise the soft address space limit.
+     * Default on SLES 11 SP2 is 80% of physical+swap memory.
+     */
+    getrlimit(RLIMIT_AS, &rlimit_as);
+    if (rlimit_as.rlim_cur < rlimit_as.rlim_max) {
+        rlimit_as.rlim_cur = rlimit_as.rlim_max;
+        setrlimit(RLIMIT_AS, &rlimit_as);
+    }
 
     atexit(qemu_run_exit_notifiers);
     qemu_init_exec_dir(argv[0]);
