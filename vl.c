@@ -27,6 +27,7 @@
 #include <time.h>
 #include <errno.h>
 #include <sys/time.h>
+#include <sys/resource.h>
 
 #include "config-host.h"
 
@@ -2768,6 +2769,7 @@ int main(int argc, char **argv, char **envp)
     uint64_t ram_slots = 0;
     FILE *vmstate_dump_file = NULL;
     Error *main_loop_err = NULL;
+    struct rlimit rlimit_as;
 
     qemu_init_cpu_loop();
     qemu_mutex_lock_iothread();
@@ -2775,6 +2777,16 @@ int main(int argc, char **argv, char **envp)
     atexit(qemu_run_exit_notifiers);
     error_set_progname(argv[0]);
     qemu_init_exec_dir(argv[0]);
+
+    /*
+     * Try to raise the soft address space limit.
+     * Default on SLES 11 SP2 is 80% of physical+swap memory.
+     */
+    getrlimit(RLIMIT_AS, &rlimit_as);
+    if (rlimit_as.rlim_cur < rlimit_as.rlim_max) {
+        rlimit_as.rlim_cur = rlimit_as.rlim_max;
+        setrlimit(RLIMIT_AS, &rlimit_as);
+    }
 
     g_mem_set_vtable(&mem_trace);
 
