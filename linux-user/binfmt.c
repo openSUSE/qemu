@@ -5,6 +5,9 @@
 #include <string.h>
 #include <stdlib.h>
 
+#ifdef __x86_64__
+#define ARCH_NAME "x86_64"
+#endif
 
 int main(int argc, char **argv, char **envp)
 {
@@ -27,6 +30,29 @@ int main(int argc, char **argv, char **envp)
 
     binfmt[0] = '\0';
     /* Now argv[0] is the real qemu binary name */
+
+#ifdef ARCH_NAME
+    {
+        char *hostbin;
+        char *guestarch;
+        int r;
+
+        guestarch = strrchr(argv[0], '-') ;
+        if (!guestarch) {
+            goto skip;
+        }
+        guestarch++;
+        r = asprintf(&hostbin, "/emul/" ARCH_NAME "-for-%s/%s", guestarch, argv[1]);
+        if ((r > 0) && !access(hostbin, X_OK)) {
+            /*
+             * We found a host binary replacement for the non-host binary. Let's
+             * use that instead!
+             */
+            return execve(hostbin, &argv[2], envp);
+        }
+    }
+skip:
+#endif
 
     new_argv = (char **)malloc((argc + 2) * sizeof(*new_argv));
     if (argc > 3) {
