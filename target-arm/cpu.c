@@ -191,9 +191,12 @@ static void arm_cpu_reset(CPUState *s)
                               &env->vfp.fp_status);
     set_float_detect_tininess(float_tininess_before_rounding,
                               &env->vfp.standard_fp_status);
-    tlb_flush(s, 1);
 
 #ifndef CONFIG_USER_ONLY
+    /* XXX hack alert! automoc4 segfaults after spawning a new thread with this
+           flush enabled */
+    tlb_flush(s, 1);
+
     if (kvm_enabled()) {
         kvm_arm_reset_vcpu(cpu);
     }
