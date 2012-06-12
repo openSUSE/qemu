@@ -1068,6 +1068,7 @@ struct target_pollfd {
 #define TARGET_LOOP_SET_STATUS64      0x4C04
 #define TARGET_LOOP_GET_STATUS64      0x4C05
 #define TARGET_LOOP_CHANGE_FD         0x4C06
+#define TARGET_LOOP_BOGUS_CMD         0x4C82
 
 /* fb ioctls */
 #define TARGET_FBIOGET_VSCREENINFO    0x4600
