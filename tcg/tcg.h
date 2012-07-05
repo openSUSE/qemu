@@ -29,6 +29,7 @@
 #include "cpu.h"
 #include "exec/tb-context.h"
 #include "qemu/bitops.h"
+#include "qemu/thread.h"
 #include "tcg-target.h"
 
 /* XXX: make safe guess about sizes */
@@ -697,6 +698,8 @@ struct TCGContext {
 
     uint16_t gen_insn_end_off[TCG_MAX_INSNS];
     target_ulong gen_insn_data[TCG_MAX_INSNS][TARGET_INSN_START_WORDS];
+
+    QemuMutex lock;
 };
 
 extern TCGContext tcg_ctx;
@@ -903,6 +906,9 @@ TCGOp *tcg_op_insert_before(TCGContext *s, TCGOp *op, TCGOpcode opc, int narg);
 TCGOp *tcg_op_insert_after(TCGContext *s, TCGOp *op, TCGOpcode opc, int narg);
 
 void tcg_optimize(TCGContext *s);
+
+extern void tcg_lock(void);
+extern void tcg_unlock(void);
 
 /* only used for debugging purposes */
 void tcg_dump_ops(TCGContext *s);

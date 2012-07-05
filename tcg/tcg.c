@@ -33,6 +33,8 @@
 #include "qemu/cutils.h"
 #include "qemu/host-utils.h"
 #include "qemu/timer.h"
+#include "config-host.h"
+#include "qemu/thread.h"
 
 /* Note: the long term plan is to reduce the dependencies on the QEMU
    CPU definitions. Currently they are used for qemu_ld/st
@@ -119,6 +121,29 @@ static bool tcg_out_tb_finalize(TCGContext *s);
 
 static TCGRegSet tcg_target_available_regs[2];
 static TCGRegSet tcg_target_call_clobber_regs;
+
+#ifdef CONFIG_USER_ONLY
+static __thread int tcg_lock_count;
+#endif
+void tcg_lock(void)
+{
+#ifdef CONFIG_USER_ONLY
+    TCGContext *s = &tcg_ctx;
+    if (tcg_lock_count++ == 0) {
+        qemu_mutex_lock(&s->lock);
+    }
+#endif
+}
+
+void tcg_unlock(void)
+{
+#ifdef CONFIG_USER_ONLY
+    TCGContext *s = &tcg_ctx;
+    if (--tcg_lock_count == 0) {
+        qemu_mutex_unlock(&s->lock);
+    }
+#endif
+}
 
 #if TCG_TARGET_INSN_UNIT_SIZE == 1
 static __attribute__((unused)) inline void tcg_out8(TCGContext *s, uint8_t v)
@@ -332,6 +357,7 @@ void tcg_context_init(TCGContext *s)
 
     memset(s, 0, sizeof(*s));
     s->nb_globals = 0;
+    qemu_mutex_init(&s->lock);
 
     /* Count total number of arguments and allocate the corresponding
        space */
@@ -2551,6 +2577,7 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
         qemu_log("\n");
     }
 #endif
+    tcg_lock();
 
 #ifdef CONFIG_PROFILER
     s->opt_time -= profile_getclock();
@@ -2673,6 +2700,7 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
            the buffer completely.  Thus we can test for overflow after
            generating code without having to check during generation.  */
         if (unlikely((void *)s->code_ptr > s->code_gen_highwater)) {
+            tcg_unlock();
             return -1;
         }
     }
@@ -2686,6 +2714,7 @@ int tcg_gen_code(TCGContext *s, TranslationBlock *tb)
 
     /* flush instruction cache */
     flush_icache_range((uintptr_t)s->code_buf, (uintptr_t)s->code_ptr);
+    tcg_unlock();
 
     return tcg_current_code_size(s);
 }
