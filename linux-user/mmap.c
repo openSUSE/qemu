@@ -23,6 +23,7 @@
 
 #include "qemu.h"
 #include "qemu-common.h"
+#include "tcg.h"
 #include "translate-all.h"
 
 //#define DEBUG_MMAP
@@ -34,6 +35,7 @@ void mmap_lock(void)
 {
     if (mmap_lock_count++ == 0) {
         pthread_mutex_lock(&mmap_mutex);
+        tcg_lock();
     }
 }
 
@@ -41,6 +43,7 @@ void mmap_unlock(void)
 {
     if (--mmap_lock_count == 0) {
         pthread_mutex_unlock(&mmap_mutex);
+        tcg_unlock();
     }
 }
 
