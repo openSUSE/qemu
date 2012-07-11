@@ -715,19 +715,23 @@ static TranslationBlock *tb_alloc(target_ulong pc)
 {
     TranslationBlock *tb;
 
+    tcg_lock();
     if (tcg_ctx.tb_ctx.nb_tbs >= tcg_ctx.code_gen_max_blocks ||
         (tcg_ctx.code_gen_ptr - tcg_ctx.code_gen_buffer) >=
          tcg_ctx.code_gen_buffer_max_size) {
+        tcg_unlock();
         return NULL;
     }
     tb = &tcg_ctx.tb_ctx.tbs[tcg_ctx.tb_ctx.nb_tbs++];
     tb->pc = pc;
     tb->cflags = 0;
+    tcg_unlock();
     return tb;
 }
 
 void tb_free(TranslationBlock *tb)
 {
+    tcg_lock();
     /* In practice this is mostly used for single use temporary TB
        Ignore the hard cases and just back up if this TB happens to
        be the last one generated.  */
@@ -736,6 +740,7 @@ void tb_free(TranslationBlock *tb)
         tcg_ctx.code_gen_ptr = tb->tc_ptr;
         tcg_ctx.tb_ctx.nb_tbs--;
     }
+    tcg_unlock();
 }
 
 static inline void invalidate_page_bitmap(PageDesc *p)
@@ -793,6 +798,7 @@ void tb_flush(CPUArchState *env1)
            ((unsigned long)(tcg_ctx.code_gen_ptr - tcg_ctx.code_gen_buffer)) /
            tcg_ctx.tb_ctx.nb_tbs : 0);
 #endif
+    tcg_lock();
     if ((unsigned long)(tcg_ctx.code_gen_ptr - tcg_ctx.code_gen_buffer)
         > tcg_ctx.code_gen_buffer_size) {
         cpu_abort(cpu, "Internal error: code buffer overflow\n");
@@ -810,6 +816,7 @@ void tb_flush(CPUArchState *env1)
     /* XXX: flush processor icache at this point if cache flush is
        expensive */
     tcg_ctx.tb_ctx.tb_flush_count++;
+    tcg_unlock();
 }
 
 #ifdef DEBUG_TB_CHECK
@@ -1119,8 +1126,10 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
     int current_flags = 0;
 #endif /* TARGET_HAS_PRECISE_SMC */
 
+    tcg_lock();
     p = page_find(start >> TARGET_PAGE_BITS);
     if (!p) {
+        tcg_unlock();
         return;
     }
     if (!p->code_bitmap &&
@@ -1213,6 +1222,7 @@ void tb_invalidate_phys_page_range(tb_page_addr_t start, tb_page_addr_t end,
         cpu_resume_from_signal(cpu, NULL);
     }
 #endif
+    tcg_unlock();
 }
 
 /* len must be <= 8 and start must be a multiple of len */
@@ -1420,13 +1430,16 @@ static TranslationBlock *tb_find_pc(uintptr_t tc_ptr)
 {
     int m_min, m_max, m;
     uintptr_t v;
-    TranslationBlock *tb;
+    TranslationBlock *tb, *r;
 
+    tcg_lock();
     if (tcg_ctx.tb_ctx.nb_tbs <= 0) {
+        tcg_unlock();
         return NULL;
     }
     if (tc_ptr < (uintptr_t)tcg_ctx.code_gen_buffer ||
         tc_ptr >= (uintptr_t)tcg_ctx.code_gen_ptr) {
+        tcg_unlock();
         return NULL;
     }
     /* binary search (cf Knuth) */
@@ -1437,6 +1450,7 @@ static TranslationBlock *tb_find_pc(uintptr_t tc_ptr)
         tb = &tcg_ctx.tb_ctx.tbs[m];
         v = (uintptr_t)tb->tc_ptr;
         if (v == tc_ptr) {
+            tcg_unlock();
             return tb;
         } else if (tc_ptr < v) {
             m_max = m - 1;
@@ -1444,7 +1458,9 @@ static TranslationBlock *tb_find_pc(uintptr_t tc_ptr)
             m_min = m + 1;
         }
     }
-    return &tcg_ctx.tb_ctx.tbs[m_max];
+    r = &tcg_ctx.tb_ctx.tbs[m_max];
+    tcg_unlock();
+    return r;
 }
 
 #if !defined(CONFIG_USER_ONLY)
