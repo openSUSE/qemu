@@ -8341,7 +8341,7 @@ void target_exception_dump(CPUArchState *env, const char *fmt, int code)
 
 #if HOST_BIG_ENDIAN != TARGET_BIG_ENDIAN || \
     defined(TARGET_SPARC) || defined(TARGET_M68K) || defined(TARGET_HPPA) || \
-    defined(TARGET_RISCV) || defined(TARGET_S390X)
+    defined(TARGET_RISCV) || defined(TARGET_S390X) || defined(TARGET_ARM)
 static int is_proc(const char *filename, const char *entry)
 {
     return strcmp(filename, entry) == 0;
@@ -8415,6 +8415,26 @@ static int open_cpuinfo(CPUArchState *cpu_env, int fd)
         dprintf(fd, "model\t\t: 9000/778/B160L - "
                     "Merlin L2 160 QEMU (9000/778/B160L)\n\n");
     }
+    return 0;
+}
+#endif
+
+#if defined(TARGET_ARM)
+static int open_cpuinfo(CPUArchState *cpu_env, int fd)
+{
+    dprintf(fd,
+"Processor       : ARMv7 Processor rev 5 (v7l)\n"
+"BogoMIPS        : 799.53\n"
+"Features        : swp half thumb fastmult vfp edsp thumbee neon vfpv3\n"
+"CPU implementer : 0x41\n"
+"CPU architecture: 7\n"
+"CPU variant     : 0x2\n"
+"CPU part        : 0xc08\n"
+"CPU revision    : 5\n"
+"\n"
+"Hardware        : Genesi Efika MX (Smarttop)\n"
+"Revision        : 51030\n"
+"Serial          : 0000000000000000\n");
     return 0;
 }
 #endif
@@ -8579,7 +8599,8 @@ int do_guest_openat(CPUArchState *cpu_env, int dirfd, const char *fname,
         { "/proc/net/route", open_net_route, is_proc },
 #endif
 #if defined(TARGET_SPARC) || defined(TARGET_HPPA) || \
-    defined(TARGET_RISCV) || defined(TARGET_S390X)
+    defined(TARGET_RISCV) || defined(TARGET_S390X) || \
+    defined(TARGET_ARM)
         { "/proc/cpuinfo", open_cpuinfo, is_proc },
 #endif
 #if defined(TARGET_M68K)
