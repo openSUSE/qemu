@@ -5080,6 +5080,11 @@ static abi_long do_ioctl_fs_ioc_fiemap(const IOCTLEntry *ie, uint8_t *buf_temp,
     uint32_t outbufsz;
     int free_fm = 0;
 
+    if (1) {
+        /* XXX agraf: fiemap breaks for me */
+        return -TARGET_EINVAL;
+    }
+
     assert(arg_type[0] == TYPE_PTR);
     assert(ie->access == IOC_RW);
     arg_type++;
