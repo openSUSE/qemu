@@ -51,6 +51,8 @@ static const struct timeval VNC_REFRESH_LOSSY = { 2, 0 };
 static QTAILQ_HEAD(, VncDisplay) vnc_displays =
     QTAILQ_HEAD_INITIALIZER(vnc_displays);
 
+static int allowed_connections = 0;
+
 static int vnc_cursor_define(VncState *vs);
 static void vnc_release_modifiers(VncState *vs);
 
@@ -1221,6 +1223,7 @@ static void vnc_disconnect_start(VncState *vs)
 void vnc_disconnect_finish(VncState *vs)
 {
     int i;
+    static int num_disconnects = 0;
 
     vnc_jobs_join(vs); /* Wait encoding jobs */
 
@@ -1269,6 +1272,13 @@ void vnc_disconnect_finish(VncState *vs)
     }
     g_free(vs->lossy_rect);
     g_free(vs);
+
+    num_disconnects++;
+    if (allowed_connections > 0 && allowed_connections <= num_disconnects) {
+        VNC_DEBUG("Maximum number of disconnects (%d) reached:"
+                  " Session terminating\n", allowed_connections);
+        exit(0);
+    }
 }
 
 int vnc_client_io_error(VncState *vs, int ret, int last_errno)
@@ -3240,6 +3250,39 @@ char *vnc_display_local_addr(const char *id)
     return vnc_socket_local_addr("%s:%s", vs->lsock);
 }
 
+static void read_file_password(const char *id, const char *filename)
+{
+    FILE *pfile = NULL;
+    char *passwd = NULL;
+    int start = 0, length = 0, rc = 0;
+
+    if (strlen(filename) == 0) {
+        printf("No file supplied\n");
+        return;
+    }
+
+    pfile = fopen(filename, "r");
+    if (pfile == NULL) {
+        printf("Could not read from %s\n", filename);
+        return;
+    }
+
+    start  = ftell(pfile);
+    fseek(pfile, 0L, SEEK_END);
+    length = ftell(pfile);
+    fseek(pfile, 0L, start);
+
+    passwd = g_malloc(length + 1);
+    rc = fread(passwd, 1, length, pfile);
+    fclose(pfile);
+
+    if (rc == length && rc > 0) {
+        vnc_display_password(id, passwd);
+    }
+
+    g_free(passwd);
+}
+
 static QemuOptsList qemu_vnc_opts = {
     .name = "vnc",
     .head = QTAILQ_HEAD_INITIALIZER(qemu_vnc_opts.head),
@@ -3267,6 +3310,9 @@ static QemuOptsList qemu_vnc_opts = {
             .name = "connections",
             .type = QEMU_OPT_NUMBER,
         },{
+            .name = "allowed-connections",
+            .type = QEMU_OPT_NUMBER,
+        },{
             .name = "to",
             .type = QEMU_OPT_NUMBER,
         },{
@@ -3278,6 +3324,9 @@ static QemuOptsList qemu_vnc_opts = {
         },{
             .name = "password",
             .type = QEMU_OPT_BOOL,
+        },{
+            .name = "password-file",
+            .type = QEMU_OPT_STRING,
         },{
             .name = "reverse",
             .type = QEMU_OPT_BOOL,
@@ -3443,6 +3492,7 @@ void vnc_display_open(const char *id, Error **errp)
     const char *share, *device_id;
     QemuConsole *con;
     bool password = false;
+    const char *password_file;
     bool reverse = false;
     const char *vnc;
     const char *has_to;
@@ -3523,6 +3573,10 @@ void vnc_display_open(const char *id, Error **errp)
                    "methods as an alternative");
         goto fail;
     }
+    password_file = qemu_opt_get(opts, "password-file");
+    if (password_file) {
+        read_file_password(id, password_file);
+    }
 
     reverse = qemu_opt_get_bool(opts, "reverse", false);
     lock_key_sync = qemu_opt_get_bool(opts, "lock-key-sync", true);
@@ -3576,6 +3630,7 @@ void vnc_display_open(const char *id, Error **errp)
         vs->share_policy = VNC_SHARE_POLICY_ALLOW_EXCLUSIVE;
     }
     vs->connections_limit = qemu_opt_get_number(opts, "connections", 32);
+    allowed_connections = qemu_opt_get_number(opts, "allowed-connections", 0);
 
     websocket = qemu_opt_get(opts, "websocket");
     if (websocket) {
