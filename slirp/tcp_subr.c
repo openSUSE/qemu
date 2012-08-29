@@ -391,12 +391,19 @@ tcp_sockclosed(struct tcpcb *tp)
  * nonblocking.  Connect returns after the SYN is sent, and does
  * not wait for ACK+SYN.
  */
+extern int slirp_nooutgoing;
+
 int tcp_fconnect(struct socket *so, unsigned short af)
 {
   int ret=0;
 
   DEBUG_CALL("tcp_fconnect");
   DEBUG_ARG("so = %p", so);
+
+  if (slirp_nooutgoing) {
+    errno = EHOSTUNREACH;
+    return -1;
+  }
 
   ret = so->s = qemu_socket(af, SOCK_STREAM, 0);
   if (ret >= 0) {
@@ -476,6 +483,11 @@ void tcp_connect(struct socket *inso)
     s = accept(inso->s, (struct sockaddr *)&addr, &addrlen);
     if (s < 0) {
         tcp_close(sototcpcb(so)); /* This will sofree() as well */
+        return;
+    }
+    if (slirp_nooutgoing && ((struct sockaddr_in *)&addr)->sin_addr.s_addr != slirp_nooutgoing) {
+        tcp_close(sototcpcb(so)); /* This will sofree() as well */
+        closesocket(s);
         return;
     }
     qemu_set_nonblock(s);

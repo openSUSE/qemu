@@ -168,6 +168,7 @@ int smp_threads = 1;
 int acpi_enabled = 1;
 int no_hpet = 0;
 int fd_bootchk = 1;
+int slirp_nooutgoing = 0;
 static int no_reboot;
 int no_shutdown = 0;
 int cursor_hide = 1;
@@ -3404,6 +3405,14 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_singlestep:
                 singlestep = 1;
+                break;
+            case QEMU_OPTION_nooutgoing:
+                slirp_nooutgoing = inet_addr(optarg);
+                if (slirp_nooutgoing == INADDR_NONE) {
+                    printf("Invalid address: %s.\nOnly addresses of the format "
+                           "xxx.xxx.xxx.xxx are supported.\n", optarg);
+                    exit(1);
+                }
                 break;
             case QEMU_OPTION_S:
                 autostart = 0;
