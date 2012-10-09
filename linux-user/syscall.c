@@ -6929,10 +6929,10 @@ static int host_to_target_cpu_mask(const unsigned long *host_mask,
  * of syscall results, can be performed.
  * All errnos that do_syscall() returns must be -TARGET_<errcode>.
  */
-static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
-                            abi_long arg2, abi_long arg3, abi_long arg4,
-                            abi_long arg5, abi_long arg6, abi_long arg7,
-                            abi_long arg8)
+static abi_long do_syscall1(void *cpu_env, int num, abi_ulong arg1,
+                            abi_ulong arg2, abi_ulong arg3, abi_ulong arg4,
+                            abi_ulong arg5, abi_ulong arg6, abi_ulong arg7,
+                            abi_ulong arg8)
 {
     CPUState *cpu = ENV_GET_CPU(cpu_env);
     abi_long ret;
@@ -9668,7 +9668,7 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
              */
             ret = -TARGET_EINVAL;
             if (cpu_isar_feature(aa64_sve, arm_env_get_cpu(cpu_env))
-                && arg2 >= 0 && arg2 <= 512 * 16 && !(arg2 & 15)) {
+                && arg2 <= 512 * 16 && !(arg2 & 15)) {
                 CPUARMState *env = cpu_env;
                 ARMCPU *cpu = arm_env_get_cpu(env);
                 uint32_t vq, old_vq;
@@ -11535,10 +11535,10 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_long arg1,
     return ret;
 }
 
-abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
-                    abi_long arg2, abi_long arg3, abi_long arg4,
-                    abi_long arg5, abi_long arg6, abi_long arg7,
-                    abi_long arg8)
+abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
+                    abi_ulong arg2, abi_ulong arg3, abi_ulong arg4,
+                    abi_ulong arg5, abi_ulong arg6, abi_ulong arg7,
+                    abi_ulong arg8)
 {
     CPUState *cpu = ENV_GET_CPU(cpu_env);
     abi_long ret;
