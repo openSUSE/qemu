@@ -7710,10 +7710,10 @@ static target_timer_t get_timer_id(abi_long arg)
 /* do_syscall() should always have a single exit point at the end so
    that actions, such as logging of syscall results, can be performed.
    All errnos that do_syscall() returns must be -TARGET_<errcode>. */
-abi_long do_syscall(void *cpu_env, int num, abi_long arg1,
-                    abi_long arg2, abi_long arg3, abi_long arg4,
-                    abi_long arg5, abi_long arg6, abi_long arg7,
-                    abi_long arg8)
+abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
+                    abi_ulong arg2, abi_ulong arg3, abi_ulong arg4,
+                    abi_ulong arg5, abi_ulong arg6, abi_ulong arg7,
+                    abi_ulong arg8)
 {
     CPUState *cpu = ENV_GET_CPU(cpu_env);
     abi_long ret;
