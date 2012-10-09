@@ -6351,8 +6351,8 @@ static abi_long do_prctl_inval1(CPUArchState *env, abi_long arg2)
 #define do_prctl_sme_set_vl do_prctl_inval1
 #endif
 
-static abi_long do_prctl(CPUArchState *env, abi_long option, abi_long arg2,
-                         abi_long arg3, abi_long arg4, abi_long arg5)
+static abi_long do_prctl(CPUArchState *env, abi_ulong option, abi_ulong arg2,
+                         abi_ulong arg3, abi_ulong arg4, abi_ulong arg5)
 {
     abi_long ret;
 
@@ -8980,10 +8980,10 @@ _syscall5(int, sys_move_mount, int, __from_dfd, const char *, __from_pathname,
  * of syscall results, can be performed.
  * All errnos that do_syscall() returns must be -TARGET_<errcode>.
  */
-static abi_long do_syscall1(CPUArchState *cpu_env, int num, abi_long arg1,
-                            abi_long arg2, abi_long arg3, abi_long arg4,
-                            abi_long arg5, abi_long arg6, abi_long arg7,
-                            abi_long arg8)
+static abi_long do_syscall1(CPUArchState *cpu_env, int num, abi_ulong arg1,
+                            abi_ulong arg2, abi_ulong arg3, abi_ulong arg4,
+                            abi_ulong arg5, abi_ulong arg6, abi_ulong arg7,
+                            abi_ulong arg8)
 {
     CPUState *cpu = env_cpu(cpu_env);
     abi_long ret;
@@ -13653,10 +13653,10 @@ static abi_long do_syscall1(CPUArchState *cpu_env, int num, abi_long arg1,
     return ret;
 }
 
-abi_long do_syscall(CPUArchState *cpu_env, int num, abi_long arg1,
-                    abi_long arg2, abi_long arg3, abi_long arg4,
-                    abi_long arg5, abi_long arg6, abi_long arg7,
-                    abi_long arg8)
+abi_long do_syscall(CPUArchState *cpu_env, int num, abi_ulong arg1,
+                    abi_ulong arg2, abi_ulong arg3, abi_ulong arg4,
+                    abi_ulong arg5, abi_ulong arg6, abi_ulong arg7,
+                    abi_ulong arg8)
 {
     CPUState *cpu = env_cpu(cpu_env);
     abi_long ret;
