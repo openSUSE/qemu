@@ -71,6 +71,9 @@ STRUCT(kbentry,
 STRUCT(kbsentry,
        TYPE_CHAR, MK_ARRAY(TYPE_CHAR, 512))
 
+STRUCT(blkdiscard,
+       MK_ARRAY(TYPE_LONGLONG, 2))
+
 STRUCT(audio_buf_info,
        TYPE_INT, TYPE_INT, TYPE_INT, TYPE_INT)
 
