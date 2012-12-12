@@ -139,6 +139,27 @@ void qemu_format_nic_info_str(NetClientState *nc, uint8_t macaddr[6])
              macaddr[3], macaddr[4], macaddr[5]);
 }
 
+static void default_mac_check(void)
+{
+    static const MACAddr def_mac = { .a = { 0x52,0x54,0x00,0x12,0x34,0x56 } };
+    static int warned = 0;
+    int i;
+
+    for (i = 0; i < MAX_NICS; i++)
+    {
+        if (!nd_table[i].used)
+            continue;
+        if (memcmp(nd_table[i].macaddr.a, def_mac.a, 5))
+            continue;
+        if (nd_table[i].macaddr.a[5] >= 0x56 &&
+            nd_table[i].macaddr.a[5] < 0x56  + MAX_NICS && !warned) {
+            warned = 1;
+            fprintf(stderr, "Warning: default mac address being used, creating "
+                    "potential for address conflict\n");
+        }
+    }
+}
+
 void qemu_macaddr_default_if_unset(MACAddr *macaddr)
 {
     static int index = 0;
@@ -1128,6 +1149,7 @@ int net_init_clients(void)
     if (qemu_opts_foreach(net, net_init_client, NULL, 1) == -1) {
         return -1;
     }
+    default_mac_check();
 
     return 0;
 }
