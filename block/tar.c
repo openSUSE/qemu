@@ -83,7 +83,8 @@ static int str_ends(char *str, const char *end)
     return !strncmp(str + str_len - end_len, end, end_len);
 }
 
-static int is_target_file(BlockDriverState *bs, char *filename)
+static int is_target_file(BlockDriverState *bs, char *filename,
+                          char *header)
 {
     int retval = 0;
 
@@ -99,10 +100,17 @@ static int is_target_file(BlockDriverState *bs, char *filename)
     if (str_ends(filename, ".vmdk"))
         retval = 1;
 
+    if (retval &&
+        (header[OFFS_TYPE] != '0') &&
+        (header[OFFS_TYPE] != 'S')) {
+        retval = 0;
+    }
+
     dprintf("does filename %s match? %s\n", filename, retval ? "yes" : "no");
 
     /* make sure we're not using this name again */
     filename[0] = '\0';
+
     return retval;
 }
 
@@ -201,12 +209,13 @@ static int tar_open(BlockDriverState *bs, const char *filename, int flags)
             bdrv_pread(s->hd, header_offs - s->file_len, s->longfile,
                        sizeof(s->longfile));
             s->longfile[sizeof(s->longfile)-1] = '\0';
+            real_file = header;
         } else if (s->longfile[0]) {
             real_file = s->longfile;
         } else {
             real_file = header;
         }
-    } while(!is_target_file(bs, real_file));
+    } while(!is_target_file(bs, real_file, header));
 
     /* We found an image! */
 
