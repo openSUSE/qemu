@@ -324,6 +324,9 @@ tcp_sockclosed(struct tcpcb *tp)
  * nonblocking.  Connect returns after the SYN is sent, and does
  * not wait for ACK+SYN.
  */
+
+extern int slirp_nooutgoing;
+
 int tcp_fconnect(struct socket *so)
 {
   Slirp *slirp = so->slirp;
@@ -331,6 +334,11 @@ int tcp_fconnect(struct socket *so)
 
   DEBUG_CALL("tcp_fconnect");
   DEBUG_ARG("so = %lx", (long )so);
+
+  if (slirp_nooutgoing) {
+    errno = EHOSTUNREACH;
+    return -1;
+  }
 
   if( (ret = so->s = qemu_socket(AF_INET,SOCK_STREAM,0)) >= 0) {
     int opt, s=so->s;
@@ -424,6 +432,13 @@ tcp_connect(struct socket *inso)
 		tcp_close(sototcpcb(so)); /* This will sofree() as well */
 		return;
 	}
+
+	if (slirp_nooutgoing && addr.sin_addr.s_addr != slirp_nooutgoing) {
+		tcp_close(sototcpcb(so)); /* This will sofree() as well */
+		close(s);
+		return;
+	}
+
 	qemu_set_nonblock(s);
 	opt = 1;
 	setsockopt(s,SOL_SOCKET,SO_REUSEADDR,(char *)&opt,sizeof(int));
@@ -434,6 +449,7 @@ tcp_connect(struct socket *inso)
 
 	so->so_fport = addr.sin_port;
 	so->so_faddr = addr.sin_addr;
+
 	/* Translate connections from localhost to the real hostname */
         if (so->so_faddr.s_addr == 0 ||
             (so->so_faddr.s_addr & loopback_mask) ==

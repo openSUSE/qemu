@@ -531,6 +531,8 @@ sorecvfrom(struct socket *so)
 	} /* if ping packet */
 }
 
+extern int slirp_nooutgoing;
+
 /*
  * sendto() a socket
  */
@@ -560,6 +562,12 @@ sosendto(struct socket *so, struct mbuf *m)
 	addr.sin_port = so->so_fport;
 
 	DEBUG_MISC((dfd, " sendto()ing, addr.sin_port=%d, addr.sin_addr.s_addr=%.16s\n", ntohs(addr.sin_port), inet_ntoa(addr.sin_addr)));
+
+	/* Only allow DNS requests */
+	if (slirp_nooutgoing && ntohs(addr.sin_port) != 53) {
+		errno = EHOSTUNREACH;
+		return -1;
+	}
 
 	/* Don't care what port we get */
 	ret = sendto(so->s, m->m_data, m->m_len, 0,

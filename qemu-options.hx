@@ -2463,6 +2463,16 @@ Store the QEMU process PID in @var{file}. It is useful if you launch QEMU
 from a script.
 ETEXI
 
+DEF("nooutgoing", HAS_ARG, QEMU_OPTION_nooutgoing, \
+    "-nooutgoing <IP>\n" \
+    "                incoming traffic only from IP, no outgoing\n", \
+    QEMU_ARCH_ALL)
+STEXI
+@item -nooutgoing
+Forbid userspace networking to make outgoing connections. Only accept incoming
+connections from ip address IP.
+ETEXI
+
 DEF("singlestep", 0, QEMU_OPTION_singlestep, \
     "-singlestep     always run in singlestep mode\n", QEMU_ARCH_ALL)
 STEXI
