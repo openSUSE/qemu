@@ -206,7 +206,6 @@ static const struct QemuSeccompSyscall seccomp_whitelist[] = {
     { SCMP_SYS(fstatfs), 241 },
     { SCMP_SYS(sendfile), 241 },
     { SCMP_SYS(getitimer), 241 },
-    { SCMP_SYS(syncfs), 241 },
     { SCMP_SYS(fsync), 241 },
     { SCMP_SYS(fchdir), 241 },
     { SCMP_SYS(flock), 241 },
@@ -225,10 +224,6 @@ static const struct QemuSeccompSyscall seccomp_whitelist[] = {
     { SCMP_SYS(get_robust_list), 241 },
     { SCMP_SYS(splice), 241 },
     { SCMP_SYS(vmsplice), 241 },
-    { SCMP_SYS(getcpu), 241 },
-    { SCMP_SYS(sendmmsg), 241 },
-    { SCMP_SYS(recvmmsg), 241 },
-    { SCMP_SYS(prlimit64), 241 },
     { SCMP_SYS(waitid), 241 }
 };
 
