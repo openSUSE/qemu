@@ -7283,8 +7283,13 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_ulong arg1,
         return ret;
 #endif
 #ifdef TARGET_NR_lseek
-    case TARGET_NR_lseek:
-        return get_errno(lseek(arg1, arg2, arg3));
+    case TARGET_NR_lseek: {
+        off_t off = arg2;
+        if (arg3 != SEEK_SET) {
+            off = (abi_long)arg2;
+        }
+        return get_errno(lseek(arg1, off, arg3));
+    }
 #endif
 #if defined(TARGET_NR_getxpid) && defined(TARGET_ALPHA)
     /* Alpha specific */
