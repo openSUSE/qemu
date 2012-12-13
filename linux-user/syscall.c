@@ -8107,9 +8107,14 @@ abi_long do_syscall(void *cpu_env, int num, abi_ulong arg1,
     case TARGET_NR_oldstat:
         goto unimplemented;
 #endif
-    case TARGET_NR_lseek:
-        ret = get_errno(lseek(arg1, arg2, arg3));
+    case TARGET_NR_lseek: {
+        off_t off = arg2;
+        if (arg3 != SEEK_SET) {
+            off = (abi_long)arg2;
+        }
+        ret = get_errno(lseek(arg1, off, arg3));
         break;
+    }
 #if defined(TARGET_NR_getxpid) && defined(TARGET_ALPHA)
     /* Alpha specific */
     case TARGET_NR_getxpid:
