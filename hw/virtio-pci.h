@@ -22,7 +22,7 @@
 #include "virtio-serial.h"
 #include "virtio-scsi.h"
 #include "virtio-bus.h"
-#include "hw/9pfs/virtio-9p-device.h"
+#include "hw/virtio-9p.h"
 
 typedef struct VirtIOPCIProxy VirtIOPCIProxy;
 
