@@ -288,7 +288,6 @@ static QEMUMachine s390_machine = {
     .no_sdcard = 1,
     .use_virtcon = 1,
     .max_cpus = 255,
-    .is_default = 1,
     DEFAULT_MACHINE_OPTIONS,
 };
 
