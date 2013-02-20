@@ -224,7 +224,12 @@ static const struct QemuSeccompSyscall seccomp_whitelist[] = {
     { SCMP_SYS(get_robust_list), 241 },
     { SCMP_SYS(splice), 241 },
     { SCMP_SYS(vmsplice), 241 },
-    { SCMP_SYS(waitid), 241 }
+    { SCMP_SYS(waitid), 241 },
+    { SCMP_SYS(fadvise64), 241 },
+    { SCMP_SYS(shmdt), 241 },
+    { SCMP_SYS(shmat), 241 },
+    { SCMP_SYS(shmctl), 241 },
+    { SCMP_SYS(shmget), 241 }
 };
 
 int seccomp_start(void)
