@@ -189,7 +189,6 @@ struct DisplayChangeListener {
 
 struct DisplayState {
     struct DisplaySurface *surface;
-    void *opaque;
     struct QEMUTimer *gui_timer;
     bool have_gfx;
     bool have_text;
