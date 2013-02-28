@@ -1875,11 +1875,12 @@ static void display_update(DisplayChangeListener *dcl,
     }
 }
 
-static void display_resize(DisplayChangeListener *dcl,
-                           struct DisplayState *ds)
+static void display_switch(DisplayChangeListener *dcl,
+                           struct DisplayState *ds,
+                           struct DisplaySurface *surface)
 {
     if (qxl0->mode == QXL_MODE_VGA) {
-        qemu_spice_display_resize(&qxl0->ssd);
+        qemu_spice_display_switch(&qxl0->ssd, surface);
     }
 }
 
@@ -1898,7 +1899,7 @@ static void display_refresh(DisplayChangeListener *dcl,
 static DisplayChangeListenerOps display_listener_ops = {
     .dpy_name        = "spice/qxl",
     .dpy_gfx_update  = display_update,
-    .dpy_gfx_resize  = display_resize,
+    .dpy_gfx_switch  = display_switch,
     .dpy_refresh     = display_refresh,
 };
 

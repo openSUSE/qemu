@@ -367,7 +367,8 @@ void qemu_spice_display_update(SimpleSpiceDisplay *ssd,
     qemu_spice_rect_union(&ssd->dirty, &update_area);
 }
 
-void qemu_spice_display_resize(SimpleSpiceDisplay *ssd)
+void qemu_spice_display_switch(SimpleSpiceDisplay *ssd,
+                               DisplaySurface *surface)
 {
     SimpleSpiceUpdate *update;
 
@@ -590,10 +591,11 @@ static void display_update(DisplayChangeListener *dcl,
     qemu_spice_display_update(&sdpy, x, y, w, h);
 }
 
-static void display_resize(DisplayChangeListener *dcl,
-                           struct DisplayState *ds)
+static void display_switch(DisplayChangeListener *dcl,
+                           struct DisplayState *ds,
+                           struct DisplaySurface *surface)
 {
-    qemu_spice_display_resize(&sdpy);
+    qemu_spice_display_switch(&sdpy, surface);
 }
 
 static void display_refresh(DisplayChangeListener *dcl,
@@ -605,7 +607,7 @@ static void display_refresh(DisplayChangeListener *dcl,
 static const DisplayChangeListenerOps display_listener_ops = {
     .dpy_name        = "spice",
     .dpy_gfx_update  = display_update,
-    .dpy_gfx_resize  = display_resize,
+    .dpy_gfx_switch  = display_switch,
     .dpy_refresh     = display_refresh,
 };
 
