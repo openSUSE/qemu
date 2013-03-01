@@ -1867,7 +1867,6 @@ static void qxl_vm_change_state_handler(void *opaque, int running,
 /* display change listener */
 
 static void display_update(DisplayChangeListener *dcl,
-                           struct DisplayState *ds,
                            int x, int y, int w, int h)
 {
     if (qxl0->mode == QXL_MODE_VGA) {
@@ -1876,7 +1875,6 @@ static void display_update(DisplayChangeListener *dcl,
 }
 
 static void display_switch(DisplayChangeListener *dcl,
-                           struct DisplayState *ds,
                            struct DisplaySurface *surface)
 {
     if (qxl0->mode == QXL_MODE_VGA) {
@@ -1884,8 +1882,7 @@ static void display_switch(DisplayChangeListener *dcl,
     }
 }
 
-static void display_refresh(DisplayChangeListener *dcl,
-                            struct DisplayState *ds)
+static void display_refresh(DisplayChangeListener *dcl)
 {
     if (qxl0->mode == QXL_MODE_VGA) {
         qemu_spice_display_refresh(&qxl0->ssd);

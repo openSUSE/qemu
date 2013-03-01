@@ -585,21 +585,18 @@ static const QXLInterface dpy_interface = {
 static SimpleSpiceDisplay sdpy;
 
 static void display_update(DisplayChangeListener *dcl,
-                           struct DisplayState *ds,
                            int x, int y, int w, int h)
 {
     qemu_spice_display_update(&sdpy, x, y, w, h);
 }
 
 static void display_switch(DisplayChangeListener *dcl,
-                           struct DisplayState *ds,
                            struct DisplaySurface *surface)
 {
     qemu_spice_display_switch(&sdpy, surface);
 }
 
-static void display_refresh(DisplayChangeListener *dcl,
-                            struct DisplayState *ds)
+static void display_refresh(DisplayChangeListener *dcl)
 {
     qemu_spice_display_refresh(&sdpy);
 }
