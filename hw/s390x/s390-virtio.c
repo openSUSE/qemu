@@ -50,7 +50,9 @@
 
 #define MAX_BLK_DEVS                    10
 
+#if 0
 static VirtIOS390Bus *s390_bus;
+#endif
 static S390CPU **ipi_states;
 
 S390CPU *s390_cpu_addr2state(uint16_t cpu_addr)
@@ -62,6 +64,7 @@ S390CPU *s390_cpu_addr2state(uint16_t cpu_addr)
     return ipi_states[cpu_addr];
 }
 
+#if 0
 static int s390_virtio_hcall_notify(const uint64_t *args)
 {
     uint64_t mem = args[0];
@@ -126,6 +129,7 @@ static void s390_virtio_register_hcalls(void)
     s390_register_virtio_hypercall(KVM_S390_VIRTIO_SET_STATUS,
                                    s390_virtio_hcall_set_status);
 }
+#endif
 
 /*
  * The number of running CPUs. On s390 a shutdown is the state of all CPUs
@@ -222,6 +226,7 @@ void s390_create_virtio_net(BusState *bus, const char *name)
     }
 }
 
+#if 0
 /* PC hardware initialisation */
 static void s390_init(QEMUMachineInitArgs *args)
 {
@@ -299,3 +304,4 @@ static void s390_machine_init(void)
 }
 
 machine_init(s390_machine_init);
+#endif
