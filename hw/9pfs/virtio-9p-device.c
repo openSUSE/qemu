@@ -12,11 +12,11 @@
  */
 
 #include "hw/virtio.h"
+#include "hw/virtio/virtio-9p.h"
 #include "hw/pc.h"
 #include "qemu/sockets.h"
 #include "virtio-9p.h"
 #include "fsdev/qemu-fsdev.h"
-#include "virtio-9p-device.h"
 #include "virtio-9p-xattr.h"
 #include "virtio-9p-coth.h"
 
