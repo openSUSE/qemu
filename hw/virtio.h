@@ -254,11 +254,6 @@ typedef struct VirtIOSCSIConf VirtIOSCSIConf;
 VirtIODevice *virtio_scsi_init(DeviceState *dev, VirtIOSCSIConf *conf);
 typedef struct VirtIORNGConf VirtIORNGConf;
 VirtIODevice *virtio_rng_init(DeviceState *dev, VirtIORNGConf *conf);
-#ifdef CONFIG_VIRTFS
-VirtIODevice *virtio_9p_init(DeviceState *dev, V9fsConf *conf);
-#endif
-
-
 void virtio_net_exit(VirtIODevice *vdev);
 void virtio_blk_exit(VirtIODevice *vdev);
 void virtio_serial_exit(VirtIODevice *vdev);
