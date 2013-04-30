@@ -1134,6 +1134,18 @@ EventNotifier *virtio_queue_get_host_notifier(VirtQueue *vq)
     return &vq->host_notifier;
 }
 
+void virtio_device_set_child_bus_name(VirtIODevice *vdev, char *bus_name)
+{
+    if (vdev->bus_name) {
+        g_free(vdev->bus_name);
+        vdev->bus_name = NULL;
+    }
+
+    if (bus_name) {
+        vdev->bus_name = g_strdup(bus_name);
+    }
+}
+
 static int virtio_device_init(DeviceState *qdev)
 {
     VirtIODevice *vdev = VIRTIO_DEVICE(qdev);
@@ -1146,11 +1158,23 @@ static int virtio_device_init(DeviceState *qdev)
     return 0;
 }
 
+static int virtio_device_exit(DeviceState *qdev)
+{
+    VirtIODevice *vdev = VIRTIO_DEVICE(qdev);
+
+    if (vdev->bus_name) {
+        g_free(vdev->bus_name);
+        vdev->bus_name = NULL;
+    }
+    return 0;
+}
+
 static void virtio_device_class_init(ObjectClass *klass, void *data)
 {
     /* Set the default value here. */
     DeviceClass *dc = DEVICE_CLASS(klass);
     dc->init = virtio_device_init;
+    dc->exit = virtio_device_exit;
     dc->bus_type = TYPE_VIRTIO_BUS;
 }
 
