@@ -9,6 +9,13 @@
  * the COPYING file in the top-level directory.
  */
 
+/* work around a broken sys/capability.h */
+#if defined(__i386__)
+typedef unsigned long long __u64;
+#endif
+#if defined(__powerpc64__)
+#include <asm/types.h>
+#endif
 #include "qemu/osdep.h"
 #include <sys/resource.h>
 #include <getopt.h>
