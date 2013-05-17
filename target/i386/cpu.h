@@ -1699,7 +1699,7 @@ uint64_t cpu_get_tsc(CPUX86State *env);
 /* XXX: This value should match the one returned by CPUID
  * and in exec.c */
 # if defined(TARGET_X86_64)
-# define TCG_PHYS_ADDR_BITS 40
+# define TCG_PHYS_ADDR_BITS 42
 # else
 # define TCG_PHYS_ADDR_BITS 36
 # endif
