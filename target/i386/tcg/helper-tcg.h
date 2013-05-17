@@ -26,7 +26,7 @@
 #define TARGET_MAX_INSN_SIZE 16
 
 #if defined(TARGET_X86_64)
-# define TCG_PHYS_ADDR_BITS 40
+# define TCG_PHYS_ADDR_BITS 42
 #else
 # define TCG_PHYS_ADDR_BITS 36
 #endif
