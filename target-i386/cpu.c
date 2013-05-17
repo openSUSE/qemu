@@ -2564,7 +2564,7 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
         if (env->features[FEAT_8000_0001_EDX] & CPUID_EXT2_LM) {
             /* 64 bit processor */
 /* XXX: The physical address space is limited to 42 bits in exec.c. */
-            *eax = 0x00003028; /* 48 bits virtual, 40 bits physical */
+            *eax = 0x0000302A; /* 48 bits virtual, 42 bits physical */
         } else {
             if (env->features[FEAT_1_EDX] & CPUID_PSE36) {
                 *eax = 0x00000024; /* 36 bits physical */
