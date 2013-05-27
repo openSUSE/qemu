@@ -210,6 +210,7 @@ int cpu_exec(CPUArchState *env)
     }
 
     cpu_single_env = env;
+    current_cpu = cpu;
 
     if (unlikely(exit_request)) {
         env->exit_request = 1;
@@ -663,6 +664,7 @@ int cpu_exec(CPUArchState *env)
             /* Reload env after longjmp - the compiler may have smashed all
              * local variables as longjmp is marked 'noreturn'. */
             env = cpu_single_env;
+            cpu = current_cpu;
         }
     } /* for(;;) */
 
@@ -697,5 +699,6 @@ int cpu_exec(CPUArchState *env)
 
     /* fail safe : never use cpu_single_env outside cpu_exec() */
     cpu_single_env = NULL;
+    current_cpu = NULL;
     return ret;
 }

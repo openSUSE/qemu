@@ -22,6 +22,7 @@
 
 #include "hw/qdev-core.h"
 #include "qemu/thread.h"
+#include "qemu/tls.h"
 #include "qemu/typedefs.h"
 
 /**
@@ -107,6 +108,9 @@ struct CPUState {
     /* TODO Move common fields from CPUArchState here. */
     int cpu_index; /* used by alpha TCG */
 };
+
+DECLARE_TLS(CPUState *, current_cpu);
+#define current_cpu tls_var(current_cpu)
 
 /**
  * cpu_paging_enabled:

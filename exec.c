@@ -75,6 +75,7 @@ CPUArchState *first_cpu;
 /* current CPU in the current thread. It is only valid inside
    cpu_exec() */
 DEFINE_TLS(CPUArchState *,cpu_single_env);
+DEFINE_TLS(CPUState *, current_cpu);
 /* 0 = Do not count executed instructions.
    1 = Precise instruction counting.
    2 = Adaptive rate instruction counting.  */

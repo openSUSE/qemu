@@ -674,9 +674,11 @@ void run_on_cpu(CPUState *cpu, void (*func)(void *data), void *data)
     qemu_cpu_kick(cpu);
     while (!wi.done) {
         CPUArchState *self_env = cpu_single_env;
+        CPUState *self_cpu = current_cpu;
 
         qemu_cond_wait(&qemu_work_cond, &qemu_global_mutex);
         cpu_single_env = self_env;
+        current_cpu = self_cpu;
     }
 }
 
@@ -750,6 +752,7 @@ static void *qemu_kvm_cpu_thread_fn(void *arg)
     qemu_thread_get_self(cpu->thread);
     cpu->thread_id = qemu_get_thread_id();
     cpu_single_env = env;
+    current_cpu = cpu;
 
     r = kvm_init_vcpu(cpu);
     if (r < 0) {
@@ -799,8 +802,10 @@ static void *qemu_dummy_cpu_thread_fn(void *arg)
     qemu_cond_signal(&qemu_cpu_cond);
 
     cpu_single_env = env;
+    current_cpu = cpu;
     while (1) {
         cpu_single_env = NULL;
+        current_cpu = NULL;
         qemu_mutex_unlock_iothread();
         do {
             int sig;
@@ -812,6 +817,7 @@ static void *qemu_dummy_cpu_thread_fn(void *arg)
         }
         qemu_mutex_lock_iothread();
         cpu_single_env = env;
+        current_cpu = cpu;
         qemu_wait_io_event_common(cpu);
     }
 
