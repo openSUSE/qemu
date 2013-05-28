@@ -33,6 +33,21 @@ static bool cpu_common_get_paging_enabled(const CPUState *cpu)
     return true;
 }
 
+void cpu_get_memory_mapping(CPUState *cpu, MemoryMappingList *list,
+                            Error **errp)
+{
+    CPUClass *cc = CPU_GET_CLASS(cpu);
+
+    return cc->get_memory_mapping(cpu, list, errp);
+}
+
+static void cpu_common_get_memory_mapping(CPUState *cpu,
+                                          MemoryMappingList *list,
+                                          Error **errp)
+{
+    error_setg(errp, "Obtaining memory mappings is unsupported on this CPU.");
+}
+
 void cpu_reset(CPUState *cpu)
 {
     CPUClass *klass = CPU_GET_CLASS(cpu);
@@ -66,6 +81,7 @@ static void cpu_class_init(ObjectClass *klass, void *data)
     k->class_by_name = cpu_common_class_by_name;
     k->reset = cpu_common_reset;
     k->get_paging_enabled = cpu_common_get_paging_enabled;
+    k->get_memory_mapping = cpu_common_get_memory_mapping;
     dc->no_user = 1;
 }
 

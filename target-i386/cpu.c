@@ -2234,6 +2234,9 @@ static void x86_cpu_common_class_init(ObjectClass *oc, void *data)
     xcc->parent_reset = cc->reset;
     cc->reset = x86_cpu_reset;
     cc->get_paging_enabled = x86_cpu_get_paging_enabled;
+#ifndef CONFIG_USER_ONLY
+    cc->get_memory_mapping = x86_cpu_get_memory_mapping;
+#endif
 }
 
 static const TypeInfo x86_cpu_type_info = {

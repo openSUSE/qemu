@@ -22,6 +22,7 @@
 
 #include "hw/qdev-core.h"
 #include "qemu/thread.h"
+#include "qemu/typedefs.h"
 
 /**
  * SECTION:cpu
@@ -44,6 +45,7 @@ typedef struct CPUState CPUState;
  * instantiatable CPU type.
  * @reset: Callback to reset the #CPUState to its initial state.
  * @get_paging_enabled: Callback for inquiring whether paging is enabled.
+ * @get_memory_mapping: Callback for obtaining the memory mappings.
  *
  * Represents a CPU family or model.
  */
@@ -56,6 +58,8 @@ typedef struct CPUClass {
 
     void (*reset)(CPUState *cpu);
     bool (*get_paging_enabled)(const CPUState *cpu);
+    void (*get_memory_mapping)(CPUState *cpu, MemoryMappingList *list,
+                               Error **errp);
 } CPUClass;
 
 struct KVMState;
@@ -111,6 +115,15 @@ struct CPUState {
  * Returns: %true if paging is enabled, %false otherwise.
  */
 bool cpu_paging_enabled(const CPUState *cpu);
+
+/**
+ * cpu_get_memory_mapping:
+ * @cpu: The CPU whose memory mappings are to be obtained.
+ * @list: Where to write the memory mappings to.
+ * @errp: Pointer for reporting an #Error.
+ */
+void cpu_get_memory_mapping(CPUState *cpu, MemoryMappingList *list,
+                            Error **errp);
 
 /**
  * cpu_reset:

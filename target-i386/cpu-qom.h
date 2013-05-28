@@ -76,4 +76,7 @@ static inline X86CPU *x86_env_get_cpu(CPUX86State *env)
 void x86_cpu_realize(Object *obj, Error **errp);
 
 
+void x86_cpu_get_memory_mapping(CPUState *cpu, MemoryMappingList *list,
+                                Error **errp);
+
 #endif
