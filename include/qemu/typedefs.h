@@ -18,6 +18,8 @@ typedef struct DeviceState DeviceState;
 typedef struct BusState BusState;
 typedef struct BusClass BusClass;
 
+typedef struct MemoryMappingList MemoryMappingList;
+
 typedef struct NICInfo NICInfo;
 typedef struct HCIInfo HCIInfo;
 typedef struct AudioState AudioState;
