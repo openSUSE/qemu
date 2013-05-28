@@ -43,6 +43,7 @@ typedef struct CPUState CPUState;
  * @class_by_name: Callback to map -cpu command line model name to an
  * instantiatable CPU type.
  * @reset: Callback to reset the #CPUState to its initial state.
+ * @get_paging_enabled: Callback for inquiring whether paging is enabled.
  *
  * Represents a CPU family or model.
  */
@@ -54,6 +55,7 @@ typedef struct CPUClass {
     ObjectClass *(*class_by_name)(const char *cpu_model);
 
     void (*reset)(CPUState *cpu);
+    bool (*get_paging_enabled)(const CPUState *cpu);
 } CPUClass;
 
 struct KVMState;
@@ -102,6 +104,13 @@ struct CPUState {
     int cpu_index; /* used by alpha TCG */
 };
 
+/**
+ * cpu_paging_enabled:
+ * @cpu: The CPU whose state is to be inspected.
+ *
+ * Returns: %true if paging is enabled, %false otherwise.
+ */
+bool cpu_paging_enabled(const CPUState *cpu);
 
 /**
  * cpu_reset:

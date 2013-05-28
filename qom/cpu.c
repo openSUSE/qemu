@@ -21,6 +21,18 @@
 #include "qom/cpu.h"
 #include "qemu-common.h"
 
+bool cpu_paging_enabled(const CPUState *cpu)
+{
+    CPUClass *cc = CPU_GET_CLASS(cpu);
+
+    return cc->get_paging_enabled(cpu);
+}
+
+static bool cpu_common_get_paging_enabled(const CPUState *cpu)
+{
+    return true;
+}
+
 void cpu_reset(CPUState *cpu)
 {
     CPUClass *klass = CPU_GET_CLASS(cpu);
@@ -53,6 +65,7 @@ static void cpu_class_init(ObjectClass *klass, void *data)
 
     k->class_by_name = cpu_common_class_by_name;
     k->reset = cpu_common_reset;
+    k->get_paging_enabled = cpu_common_get_paging_enabled;
     dc->no_user = 1;
 }
 
