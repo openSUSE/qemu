@@ -332,10 +332,10 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
             ret = -EINVAL;
             break;
         }
-        indicators = ldq_phys(ccw.cda);
-        if (!indicators) {
+        if (!ccw.cda) {
             ret = -EFAULT;
         } else {
+            indicators = ldq_phys(ccw.cda);
             dev->indicators = indicators;
             sch->curr_status.scsw.count = ccw.count - sizeof(indicators);
             ret = 0;
@@ -352,10 +352,10 @@ static int virtio_ccw_cb(SubchDev *sch, CCW1 ccw)
             ret = -EINVAL;
             break;
         }
-        indicators = ldq_phys(ccw.cda);
-        if (!indicators) {
+        if (!ccw.cda) {
             ret = -EFAULT;
         } else {
+            indicators = ldq_phys(ccw.cda);
             dev->indicators2 = indicators;
             sch->curr_status.scsw.count = ccw.count - sizeof(indicators);
             ret = 0;
