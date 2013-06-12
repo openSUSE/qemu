@@ -453,7 +453,32 @@ static QEMUMachine pc_machine_v1_0 = {
 };
 
 #define PC_COMPAT_0_15 \
-        PC_COMPAT_1_0
+        PC_COMPAT_1_0,\
+        {\
+            .driver   = "VGA",\
+            .property = "vgamem_mb",\
+            .value    = stringify(16),\
+        },{\
+            .driver   = "vmware-svga",\
+            .property = "vgamem_mb",\
+            .value    = stringify(16),\
+        },{\
+            .driver   = "qxl-vga",\
+            .property = "vgamem_mb",\
+            .value    = stringify(16),\
+        },{\
+            .driver   = "qxl",\
+            .property = "vgamem_mb",\
+            .value    = stringify(16),\
+        },{\
+            .driver   = "isa-cirrus-vga",\
+            .property = "vgamem_mb",\
+            .value    = stringify(16),\
+        },{\
+            .driver   = "cirrus-vga",\
+            .property = "vgamem_mb",\
+            .value    = stringify(16),\
+        }
 
 static QEMUMachine pc_machine_v0_15 = {
     .name = "pc-0.15",
