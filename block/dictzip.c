@@ -360,9 +360,25 @@ static void dictzip_read_cb(void *opaque, int ret)
     struct BDRVDictZipState *s = acb->s;
     uint8_t *buf;
     DictCache *cache;
-    int r;
+    int r, i;
 
     buf = g_malloc(acb->chunks_len);
+
+    /* try to find zlib stream for decoding */
+    do {
+        for (i = 0; i < Z_STREAM_COUNT; i++) {
+            if (!(s->stream_in_use & (1 << i))) {
+                s->stream_in_use |= (1 << i);
+                acb->zStream_id = i;
+                acb->zStream = &s->zStream[i];
+                break;
+            }
+        }
+    } while(!acb->zStream);
+
+    /* sure, we could handle more streams, but this callback should be single
+       threaded and when it's not, we really want to know! */
+    assert(i == 0);
 
     /* uncompress the chunk */
     acb->zStream->next_in   = acb->gzipped;
@@ -454,17 +470,6 @@ static BlockDriverAIOCB *dictzip_aio_readv(BlockDriverState *bs,
     }
 
     /* No cache, so let's decode */
-    do {
-        for (i = 0; i < Z_STREAM_COUNT; i++) {
-            if (!(s->stream_in_use & (1 << i))) {
-                s->stream_in_use |= (1 << i);
-                acb->zStream_id = i;
-                acb->zStream = &s->zStream[i];
-                break;
-            }
-        }
-    } while(!acb->zStream);
-
     /* We need to read these chunks */
     first_chunk  = start / s->chunk_len;
     first_offset = start - first_chunk * s->chunk_len;
