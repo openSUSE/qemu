@@ -153,6 +153,7 @@ static int dictzip_open(BlockDriverState *bs, const char *filename, int flags)
     uint8_t header_flags;
     uint16_t chunk_len16;
     uint16_t chunk_cnt16;
+    uint32_t chunk_len32;
     uint16_t header_ver;
     uint16_t tmp_short;
     uint64_t offset;
@@ -237,11 +238,11 @@ static int dictzip_open(BlockDriverState *bs, const char *filename, int flags)
             break;
         case 99: /* Special Alex pigz version */
             /* number of chunks */
-            if (bdrv_pread(s->hd, GZ_99_CHUNKSIZE, &s->chunk_len, 4) != 4)
+            if (bdrv_pread(s->hd, GZ_99_CHUNKSIZE, &chunk_len32, 4) != 4)
                 goto fail;
 
-            dprintf("chunk len [%#x] = %d\n", GZ_99_CHUNKSIZE, s->chunk_len);
-            s->chunk_len = le32_to_cpu(s->chunk_len);
+            dprintf("chunk len [%#x] = %d\n", GZ_99_CHUNKSIZE, chunk_len32);
+            s->chunk_len = le32_to_cpu(chunk_len32);
 
             /* chunk count */
             if (bdrv_pread(s->hd, GZ_99_CHUNKCNT, &s->chunk_cnt, 4) != 4)
@@ -320,10 +321,10 @@ static int dictzip_open(BlockDriverState *bs, const char *filename, int flags)
         s->offsets[i] = offset;
         switch (header_ver) {
         case 1:
-            offset += s->chunks[i];
+            offset += le16_to_cpu(s->chunks[i]);
             break;
         case 99:
-            offset += s->chunks32[i];
+            offset += le32_to_cpu(s->chunks32[i]);
             break;
         }
 
@@ -473,9 +474,9 @@ static BlockDriverAIOCB *dictzip_aio_readv(BlockDriverState *bs,
     gz_len = 0;
     for (i = first_chunk; i <= last_chunk; i++) {
         if (s->chunks32)
-            gz_len += s->chunks32[i];
+            gz_len += le32_to_cpu(s->chunks32[i]);
         else
-            gz_len += s->chunks[i];
+            gz_len += le16_to_cpu(s->chunks[i]);
     }
 
     gz_sector_num = gz_start / SECTOR_SIZE;
