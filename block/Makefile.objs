@@ -18,7 +18,7 @@ endif
 common-obj-y += stream.o
 common-obj-y += commit.o
 common-obj-y += mirror.o
-common-obj-y += dictzip.o
-common-obj-y += tar.o
+block-obj-y += dictzip.o
+block-obj-y += tar.o
 
 $(obj)/curl.o: QEMU_CFLAGS+=$(CURL_CFLAGS)
