@@ -727,7 +727,32 @@ DEFINE_I440FX_MACHINE(v1_0, "pc-1.0", pc_compat_1_2,
 
 
 #define PC_COMPAT_0_15 \
-        PC_COMPAT_1_0
+        PC_COMPAT_1_0 \
+        {\
+            .driver   = "VGA",\
+            .property = "vgamem_mb",\
+            .value    = stringify(16),\
+        },{\
+            .driver   = "vmware-svga",\
+            .property = "vgamem_mb",\
+            .value    = stringify(16),\
+        },{\
+            .driver   = "qxl-vga",\
+            .property = "vgamem_mb",\
+            .value    = stringify(16),\
+        },{\
+            .driver   = "qxl",\
+            .property = "vgamem_mb",\
+            .value    = stringify(16),\
+        },{\
+            .driver   = "isa-cirrus-vga",\
+            .property = "vgamem_mb",\
+            .value    = stringify(16),\
+        },{\
+            .driver   = "cirrus-vga",\
+            .property = "vgamem_mb",\
+            .value    = stringify(16),\
+        },
 
 static void pc_i440fx_0_15_machine_options(MachineClass *m)
 {
