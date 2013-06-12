@@ -804,6 +804,31 @@ static void pc_i440fx_0_15_machine_options(MachineClass *m)
 {
     static GlobalProperty compat[] = {
         PC_CPU_MODEL_IDS("0.15")
+        {
+            .driver   = "VGA",
+            .property = "vgamem_mb",
+            .value    = stringify(16),
+        },{
+            .driver   = "vmware-svga",
+            .property = "vgamem_mb",
+            .value    = stringify(16),
+        },{
+            .driver   = "qxl-vga",
+            .property = "vgamem_mb",
+            .value    = stringify(16),
+        },{
+            .driver   = "qxl",
+            .property = "vgamem_mb",
+            .value    = stringify(16),
+        },{
+            .driver   = "isa-cirrus-vga",
+            .property = "vgamem_mb",
+            .value    = stringify(16),
+        },{
+            .driver   = "cirrus-vga",
+            .property = "vgamem_mb",
+            .value    = stringify(16),
+        },
     };
 
     pc_i440fx_1_0_machine_options(m);
