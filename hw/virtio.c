@@ -1158,6 +1158,28 @@ static int virtio_device_init(DeviceState *qdev)
     return 0;
 }
 
+static void virtio_device_realize(DeviceState *dev, Error **errp)
+{
+    VirtIODevice *vdev = VIRTIO_DEVICE(dev);
+    VirtioDeviceClass *vdc = VIRTIO_DEVICE_GET_CLASS(dev);
+    Error *err = NULL;
+
+    assert(vdc->init != NULL || vdc->realize != NULL);
+    if (vdc->realize != NULL) {
+        vdc->realize(dev, &err);
+        if (err != NULL) {
+            error_propagate(errp, err);
+            return;
+        }
+    } else {
+        if (vdc->init(vdev) < 0) {
+            error_setg(errp, "Device initialization failed.");
+            return;
+        }
+    }
+    virtio_bus_device_plugged(vdev);
+}
+
 static int virtio_device_exit(DeviceState *qdev)
 {
     VirtIODevice *vdev = VIRTIO_DEVICE(qdev);
@@ -1174,15 +1196,21 @@ static int virtio_device_exit(DeviceState *qdev)
     return 0;
 }
 
-static int virtio_device_exit(DeviceState *qdev)
+static void virtio_device_unrealize(DeviceState *dev, Error **errp)
 {
-    VirtIODevice *vdev = VIRTIO_DEVICE(qdev);
+    VirtIODevice *vdev = VIRTIO_DEVICE(dev);
+    VirtioDeviceClass *k = VIRTIO_DEVICE_GET_CLASS(dev);
+
+    virtio_bus_device_unplugged(vdev);
+
+    if (k->exit != NULL) {
+        k->exit(vdev);
+    }
 
     if (vdev->bus_name) {
         g_free(vdev->bus_name);
         vdev->bus_name = NULL;
     }
-    return 0;
 }
 
 static void virtio_device_class_init(ObjectClass *klass, void *data)
@@ -1191,6 +1219,9 @@ static void virtio_device_class_init(ObjectClass *klass, void *data)
     DeviceClass *dc = DEVICE_CLASS(klass);
     dc->init = virtio_device_init;
     dc->exit = virtio_device_exit;
+
+    dc->realize = virtio_device_realize;
+    dc->unrealize = virtio_device_unrealize;
     dc->bus_type = TYPE_VIRTIO_BUS;
 }
 
