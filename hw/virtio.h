@@ -162,7 +162,9 @@ struct VirtIODevice
 };
 
 typedef struct VirtioDeviceClass {
+    /*< private >*/
     DeviceClass parent;
+    /*< public >*/
 
     /* This is what a VirtioDevice must implement */
     int (*init)(VirtIODevice *vdev);
