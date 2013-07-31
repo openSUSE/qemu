@@ -275,7 +275,7 @@ static bool piix4_vmstate_need_smbus(void *opaque, int version_id)
 static const VMStateDescription vmstate_acpi = {
     .name = "piix4_pm",
     .version_id = 3,
-    .minimum_version_id = 3,
+    .minimum_version_id = 2, /* qemu-kvm */
     .post_load = vmstate_acpi_post_load,
     .fields = (VMStateField[]) {
         VMSTATE_PCI_DEVICE(parent_obj, PIIX4PMState),
