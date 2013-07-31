@@ -259,6 +259,12 @@ static int pit_dispatch_post_load(void *opaque, int version_id)
     return 0;
 }
 
+static bool is_qemu_kvm(void *opaque, int version_id)
+{
+    /* HACK: We ignore incoming migration from upstream qemu */
+    return version_id < 3;
+}
+
 static const VMStateDescription vmstate_pit_common = {
     .name = "i8254",
     .version_id = 3,
@@ -268,6 +274,7 @@ static const VMStateDescription vmstate_pit_common = {
     .pre_save = pit_dispatch_pre_save,
     .post_load = pit_dispatch_post_load,
     .fields = (VMStateField[]) {
+        VMSTATE_UNUSED_TEST(is_qemu_kvm, 4),
         VMSTATE_UINT32_V(channels[0].irq_disabled, PITCommonState, 3),
         VMSTATE_STRUCT_ARRAY(channels, PITCommonState, 3, 2,
                              vmstate_pit_channel, PITChannelState),
