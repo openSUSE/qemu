@@ -15,7 +15,8 @@
 #include "exec/cpu-all.h"
 #include "sysemu/memory_mapping.h"
 
-int qemu_get_guest_memory_mapping(MemoryMappingList *list)
+int qemu_get_guest_memory_mapping(MemoryMappingList *list,
+                                   const GuestPhysBlockList *guest_phys_blocks)
 {
     return -2;
 }

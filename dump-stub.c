@@ -52,7 +52,8 @@ int cpu_write_elf32_qemunote(write_core_dump_function f,
     return -1;
 }
 
-int cpu_get_dump_info(ArchDumpInfo *info)
+int cpu_get_dump_info(ArchDumpInfo *info,
+                      const struct GuestPhysBlockList *guest_phys_blocks)
 {
     return -1;
 }
