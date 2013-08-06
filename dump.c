@@ -21,6 +21,7 @@
 #include "sysemu/dump.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/memory_mapping.h"
+#include "sysemu/cpus.h"
 #include "qapi/error.h"
 #include "qmp-commands.h"
 #include "exec/gdbstub.h"
@@ -59,6 +60,7 @@ static uint64_t cpu_convert_to_target64(uint64_t val, int endian)
 }
 
 typedef struct DumpState {
+    GuestPhysBlockList guest_phys_blocks;
     ArchDumpInfo dump_info;
     MemoryMappingList list;
     uint16_t phdr_num;
@@ -81,6 +83,7 @@ static int dump_cleanup(DumpState *s)
 {
     int ret = 0;
 
+    guest_phys_blocks_free(&s->guest_phys_blocks);
     memory_mapping_list_free(&s->list);
     if (s->fd != -1) {
         close(s->fd);
@@ -722,31 +725,34 @@ static int dump_init(DumpState *s, int fd, bool paging, bool has_filter,
         s->resume = false;
     }
 
+    /* If we use KVM, we should synchronize the registers before we get dump
+     * info or physmap info.
+     */
+    cpu_synchronize_all_states();
+    nr_cpus = 0;
+    for (env = first_cpu; env != NULL; env = env->next_cpu) {
+        nr_cpus++;
+    }
+
     s->errp = errp;
     s->fd = fd;
     s->has_filter = has_filter;
     s->begin = begin;
     s->length = length;
+
+    guest_phys_blocks_init(&s->guest_phys_blocks);
+    /* FILL LIST */
+
     s->start = get_start_block(s);
     if (s->start == -1) {
         error_set(errp, QERR_INVALID_PARAMETER, "begin");
         goto cleanup;
     }
 
-    /*
-     * get dump info: endian, class and architecture.
+    /* get dump info: endian, class and architecture.
      * If the target architecture is not supported, cpu_get_dump_info() will
      * return -1.
-     *
-     * if we use kvm, we should synchronize the register before we get dump
-     * info.
      */
-    nr_cpus = 0;
-    for (env = first_cpu; env != NULL; env = env->next_cpu) {
-        cpu_synchronize_state(env);
-        nr_cpus++;
-    }
-
     ret = cpu_get_dump_info(&s->dump_info);
     if (ret < 0) {
         error_set(errp, QERR_UNSUPPORTED);
@@ -817,6 +823,8 @@ static int dump_init(DumpState *s, int fd, bool paging, bool has_filter,
     return 0;
 
 cleanup:
+    guest_phys_blocks_free(&s->guest_phys_blocks);
+
     if (s->resume) {
         vm_start();
     }
@@ -864,7 +872,7 @@ void qmp_dump_guest_memory(bool paging, const char *file, bool has_begin,
         return;
     }
 
-    s = g_malloc(sizeof(DumpState));
+    s = g_malloc0(sizeof(DumpState));
 
     ret = dump_init(s, fd, paging, has_begin, begin, length, errp);
     if (ret < 0) {
