@@ -35,6 +35,7 @@ typedef struct VirtIOBlock
     BlockConf *conf;
     VirtIOBlkConf *blk;
     unsigned short sector_mask;
+    bool original_wce;
     DeviceState *qdev;
     VMChangeStateEntry *change;
 #ifdef CONFIG_VIRTIO_BLK_DATA_PLANE
@@ -479,9 +480,9 @@ static void virtio_blk_dma_restart_cb(void *opaque, int running,
 
 static void virtio_blk_reset(VirtIODevice *vdev)
 {
-#ifdef CONFIG_VIRTIO_BLK_DATA_PLANE
     VirtIOBlock *s = to_virtio_blk(vdev);
 
+#ifdef CONFIG_VIRTIO_BLK_DATA_PLANE
     if (s->dataplane) {
         virtio_blk_data_plane_stop(s->dataplane);
     }
@@ -492,6 +493,7 @@ static void virtio_blk_reset(VirtIODevice *vdev)
      * are per-device request lists.
      */
     bdrv_drain_all();
+    bdrv_set_enable_write_cache(s->bs, s->original_wce);
 }
 
 /* coalesce internal state, copy to pci i/o region 0
@@ -583,7 +585,25 @@ static void virtio_blk_set_status(VirtIODevice *vdev, uint8_t status)
     }
 
     features = vdev->guest_features;
-    bdrv_set_enable_write_cache(s->bs, !!(features & (1 << VIRTIO_BLK_F_WCE)));
+
+    /* A guest that supports VIRTIO_BLK_F_CONFIG_WCE must be able to send
+     * cache flushes.  Thus, the "auto writethrough" behavior is never
+     * necessary for guests that support the VIRTIO_BLK_F_CONFIG_WCE feature.
+     * Leaving it enabled would break the following sequence:
+     *
+     *     Guest started with "-drive cache=writethrough"
+     *     Guest sets status to 0
+     *     Guest sets DRIVER bit in status field
+     *     Guest reads host features (WCE=0, CONFIG_WCE=1)
+     *     Guest writes guest features (WCE=0, CONFIG_WCE=1)
+     *     Guest writes 1 to the WCE configuration field (writeback mode)
+     *     Guest sets DRIVER_OK bit in status field
+     *
+     * s->bs would erroneously be placed in writethrough mode.
+     */
+    if (!(features & (1 << VIRTIO_BLK_F_CONFIG_WCE))) {
+        bdrv_set_enable_write_cache(s->bs, !!(features & (1 << VIRTIO_BLK_F_WCE)));
+    }
 }
 
 static void virtio_blk_save(QEMUFile *f, void *opaque)
@@ -663,6 +683,7 @@ VirtIODevice *virtio_blk_init(DeviceState *dev, VirtIOBlkConf *blk)
                                           sizeof(struct virtio_blk_config),
                                           sizeof(VirtIOBlock));
 
+    s->original_wce = bdrv_enable_write_cache(blk->conf.bs);
     s->vdev.get_config = virtio_blk_update_config;
     s->vdev.set_config = virtio_blk_set_config;
     s->vdev.get_features = virtio_blk_get_features;
