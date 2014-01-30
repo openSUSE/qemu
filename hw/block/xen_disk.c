@@ -114,6 +114,7 @@ struct XenBlkDev {
     int                 requests_finished;
 
     /* Persistent grants extension */
+    gboolean            feature_discard;
     gboolean            feature_persistent;
     GTree               *persistent_gnts;
     unsigned int        persistent_gnt_count;
@@ -253,6 +254,8 @@ static int ioreq_parse(struct ioreq *ioreq)
     case BLKIF_OP_WRITE:
         ioreq->prot = PROT_READ; /* from memory */
         break;
+    case BLKIF_OP_DISCARD:
+        return 0;
     default:
         xen_be_printf(&blkdev->xendev, 0, "error: unknown operation (%d)\n",
                       ioreq->req.operation);
@@ -521,6 +524,17 @@ static int ioreq_runio_qemu_aio(struct ioreq *ioreq)
                         &ioreq->v, ioreq->v.size / BLOCK_SIZE,
                         qemu_aio_complete, ioreq);
         break;
+    case BLKIF_OP_DISCARD:
+    {
+        struct blkif_request_discard *discard_req = (void *)&ioreq->req;
+        bdrv_acct_start(blkdev->bs, &ioreq->acct,
+                        discard_req->nr_sectors * BLOCK_SIZE, BDRV_ACCT_WRITE);
+        ioreq->aio_inflight++;
+        bdrv_aio_discard(blkdev->bs,
+                        discard_req->sector_number, discard_req->nr_sectors,
+                        qemu_aio_complete, ioreq);
+        break;
+    }
     default:
         /* unknown operation (shouldn't happen -- parse catches this) */
         goto err;
@@ -699,6 +713,21 @@ static void blk_alloc(struct XenDevice *xendev)
     }
 }
 
+static void blk_parse_discard(struct XenBlkDev *blkdev)
+{
+    int enable;
+
+    blkdev->feature_discard = true;
+
+    if (xenstore_read_be_int(&blkdev->xendev, "discard-enable", &enable) == 0) {
+        blkdev->feature_discard = !!enable;
+    }
+
+    if (blkdev->feature_discard) {
+        xenstore_write_be_int(&blkdev->xendev, "feature-discard", 1);
+    }
+}
+
 static int blk_init(struct XenDevice *xendev)
 {
     struct XenBlkDev *blkdev = container_of(xendev, struct XenBlkDev, xendev);
@@ -766,6 +795,8 @@ static int blk_init(struct XenDevice *xendev)
     xenstore_write_be_int(&blkdev->xendev, "feature-persistent", 1);
     xenstore_write_be_int(&blkdev->xendev, "info", info);
 
+    blk_parse_discard(blkdev);
+
     g_free(directiosafe);
     return 0;
 
@@ -800,6 +831,9 @@ static int blk_connect(struct XenDevice *xendev)
     if (strcmp(blkdev->mode, "w") == 0) {
         qflags |= BDRV_O_RDWR;
         readonly = false;
+    }
+    if (blkdev->feature_discard) {
+        qflags |= BDRV_O_UNMAP;
     }
 
     /* init qemu block driver */
