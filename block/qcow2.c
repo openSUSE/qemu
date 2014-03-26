@@ -322,6 +322,19 @@ static int qcow2_open(BlockDriverState *bs, int flags)
 
     s->qcow_version = header.version;
 
+    /* Initialise cluster size */
+    if (header.cluster_bits < MIN_CLUSTER_BITS ||
+        header.cluster_bits > MAX_CLUSTER_BITS) {
+        report_unsupported(bs, "Unsupported cluster size: 2^%i",
+                           header.cluster_bits);
+        ret = -EINVAL;
+        goto fail;
+    }
+
+    s->cluster_bits = header.cluster_bits;
+    s->cluster_size = 1 << s->cluster_bits;
+    s->cluster_sectors = 1 << (s->cluster_bits - 9);
+
     /* Initialise version 3 header fields */
     if (header.version == 2) {
         header.incompatible_features    = 0;
@@ -335,6 +348,18 @@ static int qcow2_open(BlockDriverState *bs, int flags)
         be64_to_cpus(&header.autoclear_features);
         be32_to_cpus(&header.refcount_order);
         be32_to_cpus(&header.header_length);
+
+        if (header.header_length < 104) {
+            report_unsupported(bs, "qcow2 header too short");
+            ret = -EINVAL;
+            goto fail;
+        }
+    }
+
+    if (header.header_length > s->cluster_size) {
+        report_unsupported(bs, "qcow2 header exceeds cluster size");
+        ret = -EINVAL;
+        goto fail;
     }
 
     if (header.header_length > sizeof(header)) {
@@ -377,11 +402,6 @@ static int qcow2_open(BlockDriverState *bs, int flags)
         goto fail;
     }
 
-    if (header.cluster_bits < MIN_CLUSTER_BITS ||
-        header.cluster_bits > MAX_CLUSTER_BITS) {
-        ret = -EINVAL;
-        goto fail;
-    }
     if (header.crypt_method > QCOW_CRYPT_AES) {
         ret = -EINVAL;
         goto fail;
@@ -390,9 +410,7 @@ static int qcow2_open(BlockDriverState *bs, int flags)
     if (s->crypt_method_header) {
         bs->encrypted = 1;
     }
-    s->cluster_bits = header.cluster_bits;
-    s->cluster_size = 1 << s->cluster_bits;
-    s->cluster_sectors = 1 << (s->cluster_bits - 9);
+
     s->l2_bits = s->cluster_bits - 3; /* L2 is always one cluster */
     s->l2_size = 1 << s->l2_bits;
     bs->total_sectors = header.size / 512;
