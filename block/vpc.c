@@ -234,6 +234,12 @@ static int vpc_open(BlockDriverState *bs, int flags)
         }
 
         s->block_size = be32_to_cpu(dyndisk_header->block_size);
+        if (!is_power_of_2(s->block_size) || s->block_size < BDRV_SECTOR_SIZE) {
+            qerror_report(ERROR_CLASS_GENERIC_ERROR,
+                          "Invalid block size %" PRIu32, s->block_size);
+            ret = -EINVAL;
+            goto fail;
+        }
         s->bitmap_size = ((s->block_size / (8 * 512)) + 511) & ~511;
 
         s->max_table_entries = be32_to_cpu(dyndisk_header->max_table_entries);
