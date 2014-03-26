@@ -40,6 +40,10 @@
 #define QCOW_MAX_CRYPT_CLUSTERS 32
 #define QCOW_MAX_SNAPSHOTS 65536
 
+/* 8 MB refcount table is enough for 2 PB images at 64k cluster size
+ * (128 GB for 512 byte clusters, 2 EB for 2 MB clusters) */
+#define QCOW_MAX_REFTABLE_SIZE 0x800000
+
 /* indicate that the refcount of the referenced cluster is exactly one. */
 #define QCOW_OFLAG_COPIED     (1LL << 63)
 /* indicate that the cluster is compressed (they never have the copied flag) */
@@ -304,6 +308,11 @@ static inline int64_t align_offset(int64_t offset, int n)
 {
     offset = (offset + n - 1) & ~(n - 1);
     return offset;
+}
+
+static inline uint64_t qcow2_max_refcount_clusters(BDRVQcowState *s)
+{
+    return QCOW_MAX_REFTABLE_SIZE >> s->cluster_bits;
 }
 
 static inline int qcow2_get_cluster_type(uint64_t l2_entry)
