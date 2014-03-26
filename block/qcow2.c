@@ -469,6 +469,21 @@ static int qcow2_open(BlockDriverState *bs, int flags)
         goto fail;
     }
 
+    /* Snapshot table offset/length */
+    if (header.nb_snapshots > QCOW_MAX_SNAPSHOTS) {
+        report_unsupported(bs, "Too many snapshots");
+        ret = -EINVAL;
+        goto fail;
+    }
+
+    ret = validate_table_offset(bs, header.snapshots_offset,
+                                header.nb_snapshots,
+                                sizeof(QCowSnapshotHeader));
+    if (ret < 0) {
+        report_unsupported(bs, "Invalid snapshot table offset");
+        goto fail;
+    }
+
     s->snapshots_offset = header.snapshots_offset;
     s->nb_snapshots = header.nb_snapshots;
 
