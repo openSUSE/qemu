@@ -372,6 +372,12 @@ static int qcow2_open(BlockDriverState *bs, int flags)
         }
     }
 
+    if (header.backing_file_offset > s->cluster_size) {
+        report_unsupported(bs, "Invalid backing file offset");
+        ret = -EINVAL;
+        goto fail;
+    }
+
     if (header.backing_file_offset) {
         ext_end = header.backing_file_offset;
     } else {
