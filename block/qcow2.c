@@ -488,6 +488,13 @@ static int qcow2_open(BlockDriverState *bs, int flags)
     s->nb_snapshots = header.nb_snapshots;
 
     /* read the level 1 table */
+    if (header.l1_size > 0x2000000) {
+        /* 32 MB L1 table is enough for 2 PB images at 64k cluster size
+         * (128 GB for 512 byte clusters, 2 EB for 2 MB clusters) */
+        report_unsupported(bs, "Active L1 table too large");
+        ret = -EFBIG;
+        goto fail;
+    }
     s->l1_size = header.l1_size;
     s->l1_vm_state_index = size_to_l1(s, header.size);
     /* the L1 table must contain at least enough entries to put
@@ -496,7 +503,16 @@ static int qcow2_open(BlockDriverState *bs, int flags)
         ret = -EINVAL;
         goto fail;
     }
+
+    ret = validate_table_offset(bs, header.l1_table_offset,
+                                header.l1_size, sizeof(uint64_t));
+    if (ret < 0) {
+        report_unsupported(bs, "Invalid L1 table offset");
+        goto fail;
+    }
     s->l1_table_offset = header.l1_table_offset;
+
+
     if (s->l1_size > 0) {
         s->l1_table = g_malloc0(
             align_offset(s->l1_size * sizeof(uint64_t), 512));
