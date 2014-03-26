@@ -485,9 +485,7 @@ static int qcow2_open(BlockDriverState *bs, int flags)
     }
 
     /* read the level 1 table */
-    if (header.l1_size > 0x2000000) {
-        /* 32 MB L1 table is enough for 2 PB images at 64k cluster size
-         * (128 GB for 512 byte clusters, 2 EB for 2 MB clusters) */
+    if (header.l1_size > QCOW_MAX_L1_SIZE) {
         report_unsupported(bs, "Active L1 table too large");
         ret = -EFBIG;
         goto fail;
