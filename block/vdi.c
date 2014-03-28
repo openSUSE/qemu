@@ -120,6 +120,11 @@ typedef unsigned char uuid_t[16];
 
 #define VDI_IS_ALLOCATED(X) ((X) < VDI_DISCARDED)
 
+/* max blocks in image is (0xffffffff / 4) */
+#define VDI_BLOCKS_IN_IMAGE_MAX  0x3fffffff
+#define VDI_DISK_SIZE_MAX        ((uint64_t)VDI_BLOCKS_IN_IMAGE_MAX * \
+                                  (uint64_t)DEFAULT_CLUSTER_SIZE)
+
 #if !defined(CONFIG_UUID)
 static inline void uuid_generate(uuid_t out)
 {
@@ -383,6 +388,14 @@ static int vdi_open(BlockDriverState *bs, int flags)
     vdi_header_print(&header);
 #endif
 
+    if (header.disk_size > VDI_DISK_SIZE_MAX) {
+        logout("Unsupported VDI image size (size is 0x%" PRIx64
+               ", max supported is 0x%" PRIx64 ")\n",
+               header.disk_size, VDI_DISK_SIZE_MAX);
+        ret = -ENOTSUP;
+        goto fail;
+    }
+
     if (header.disk_size % SECTOR_SIZE != 0) {
         /* 'VBoxManage convertfromraw' can create images with odd disk sizes.
            We accept them but round the disk size to the next multiple of
@@ -415,8 +428,9 @@ static int vdi_open(BlockDriverState *bs, int flags)
         logout("unsupported sector size %u B\n", header.sector_size);
         ret = -ENOTSUP;
         goto fail;
-    } else if (header.block_size != 1 * MiB) {
-        logout("unsupported block size %u B\n", header.block_size);
+    } else if (header.block_size != DEFAULT_CLUSTER_SIZE) {
+        logout("unsupported VDI image (block size %u is not %u)\n",
+               header.block_size, DEFAULT_CLUSTER_SIZE);
         ret = -ENOTSUP;
         goto fail;
     } else if (header.disk_size >
@@ -430,6 +444,11 @@ static int vdi_open(BlockDriverState *bs, int flags)
         goto fail;
     } else if (!uuid_is_null(header.uuid_parent)) {
         logout("parent uuid != 0, unsupported\n");
+        ret = -ENOTSUP;
+        goto fail;
+    } else if (header.blocks_in_image > VDI_BLOCKS_IN_IMAGE_MAX) {
+        logout("unsupported VDI image (too many blocks %u, max is %u)\n",
+               header.blocks_in_image, VDI_BLOCKS_IN_IMAGE_MAX);
         ret = -ENOTSUP;
         goto fail;
     }
@@ -668,11 +687,20 @@ static int vdi_create(const char *filename, QEMUOptionParameter *options)
         options++;
     }
 
+    if (bytes > VDI_DISK_SIZE_MAX) {
+        result = -ENOTSUP;
+        logout("Unsupported VDI image size (size is 0x%" PRIx64
+               ", max supported is 0x%" PRIx64 ")\n",
+               bytes, VDI_DISK_SIZE_MAX);
+        goto exit;
+    }
+
     fd = qemu_open(filename,
                    O_WRONLY | O_CREAT | O_TRUNC | O_BINARY | O_LARGEFILE,
                    0644);
     if (fd < 0) {
-        return -errno;
+        result = -errno;
+        goto exit;
     }
 
     /* We need enough blocks to store the given disk size,
@@ -733,6 +761,7 @@ static int vdi_create(const char *filename, QEMUOptionParameter *options)
         result = -errno;
     }
 
+exit:
     return result;
 }
 
