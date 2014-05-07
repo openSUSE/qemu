@@ -124,10 +124,19 @@ static int qcow_open(BlockDriverState *bs, int flags)
         goto fail;
     }
 
-    if (header.size <= 1 || header.cluster_bits < 9) {
+    if (header.size <= 1) {
+        qerror_report(ERROR_CLASS_GENERIC_ERROR,
+                      "Image size is too small (must be at least 2 bytes)");
         ret = -EINVAL;
         goto fail;
     }
+    if (header.cluster_bits < 9 || header.cluster_bits > 16) {
+        qerror_report(ERROR_CLASS_GENERIC_ERROR,
+                      "Cluster size must be between 512 and 64k");
+        ret = -EINVAL;
+        goto fail;
+    }
+
     if (header.crypt_method > QCOW_CRYPT_AES) {
         ret = -EINVAL;
         goto fail;
