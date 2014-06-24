@@ -93,8 +93,6 @@
  */
 #define wmb() do { } while (0)
 
-/* HACK for virtio to determine if it's running a big endian guest */
-bool virtio_is_big_endian(void);
 
 /* virtio device */
 /* DeviceState to VirtIOPCIProxy. For use off data-path. TODO: use QOM. */
