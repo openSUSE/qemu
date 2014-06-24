@@ -61,6 +61,12 @@ static void cpu_common_reset(CPUState *cpu)
 {
 }
 
+bool target_words_bigendian(void);
+static bool cpu_common_virtio_is_big_endian(CPUState *cpu)
+{
+    return target_words_bigendian();
+}
+
 ObjectClass *cpu_class_by_name(const char *typename, const char *cpu_model)
 {
     CPUClass *cc = CPU_CLASS(object_class_by_name(typename));
@@ -82,6 +88,7 @@ static void cpu_class_init(ObjectClass *klass, void *data)
     k->reset = cpu_common_reset;
     k->get_paging_enabled = cpu_common_get_paging_enabled;
     k->get_memory_mapping = cpu_common_get_memory_mapping;
+    k->virtio_is_big_endian = cpu_common_virtio_is_big_endian;
     dc->no_user = 1;
 }
 
