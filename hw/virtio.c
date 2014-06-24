@@ -18,6 +18,7 @@
 #include "virtio.h"
 #include "qemu/atomic.h"
 #include "virtio-bus.h"
+#include "migration/migration.h"
 #include "virtio-access.h"
 
 /* The alignment to use between consumer and producer parts of vring.
@@ -847,6 +848,16 @@ void virtio_notify_config(VirtIODevice *vdev)
     virtio_notify_vector(vdev, vdev->config_vector);
 }
 
+static const VMStateDescription vmstate_virtio = {
+    .name = "virtio",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .minimum_version_id_old = 1,
+    .fields = (VMStateField[]) {
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 void virtio_save(VirtIODevice *vdev, QEMUFile *f)
 {
     int i;
@@ -878,6 +889,9 @@ void virtio_save(VirtIODevice *vdev, QEMUFile *f)
         if (vdev->binding->save_queue)
             vdev->binding->save_queue(vdev->binding_opaque, i, f);
     }
+
+    /* Subsections */
+    vmstate_save_state(f, &vmstate_virtio, vdev);
 }
 
 int virtio_set_features(VirtIODevice *vdev, uint32_t val)
@@ -1005,7 +1019,7 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f)
 
     virtio_notify_vector(vdev, VIRTIO_NO_VECTOR);
 
-    return 0;
+    return vmstate_load_state(f, &vmstate_virtio, vdev, 1);
 }
 
 void virtio_common_cleanup(VirtIODevice *vdev)
