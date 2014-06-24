@@ -556,12 +556,40 @@ void virtio_set_status(VirtIODevice *vdev, uint8_t val)
     vdev->status = val;
 }
 
+bool target_words_bigendian(void);
+static enum virtio_device_endian virtio_default_endian(void)
+{
+    if (target_words_bigendian()) {
+        return VIRTIO_DEVICE_ENDIAN_BIG;
+    } else {
+        return VIRTIO_DEVICE_ENDIAN_LITTLE;
+    }
+}
+
+static enum virtio_device_endian virtio_current_cpu_endian(void)
+{
+    CPUClass *cc = CPU_GET_CLASS(current_cpu);
+
+    if (cc->virtio_is_big_endian(current_cpu)) {
+        return VIRTIO_DEVICE_ENDIAN_BIG;
+    } else {
+        return VIRTIO_DEVICE_ENDIAN_LITTLE;
+    }
+}
+
 void virtio_reset(void *opaque)
 {
     VirtIODevice *vdev = opaque;
     int i;
 
     virtio_set_status(vdev, 0);
+    if (current_cpu) {
+        /* Guest initiated reset */
+        vdev->device_endian = virtio_current_cpu_endian();
+    } else {
+        /* System reset */
+        vdev->device_endian = virtio_default_endian();
+    }
 
     if (vdev->reset)
         vdev->reset(vdev);
@@ -865,6 +893,12 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f)
     uint32_t features;
     uint32_t supported_features;
 
+    /*
+     * We poison the endianness to ensure it does not get used before
+     * subsections have been loaded.
+     */
+    vdev->device_endian = VIRTIO_DEVICE_ENDIAN_UNKNOWN;
+
     if (vdev->binding->load_config) {
         ret = vdev->binding->load_config(vdev->binding_opaque, f);
         if (ret)
@@ -908,18 +942,7 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f)
         vdev->vq[i].notification = true;
 
         if (vdev->vq[i].pa) {
-            uint16_t nheads;
             virtqueue_init(&vdev->vq[i]);
-            nheads = vring_avail_idx(&vdev->vq[i]) - vdev->vq[i].last_avail_idx;
-            /* Check it isn't doing very strange things with descriptor numbers. */
-            if (nheads > vdev->vq[i].vring.num) {
-                error_report("VQ %d size 0x%x Guest index 0x%x "
-                             "inconsistent with Host index 0x%x: delta 0x%x",
-                             i, vdev->vq[i].vring.num,
-                             vring_avail_idx(&vdev->vq[i]),
-                             vdev->vq[i].last_avail_idx, nheads);
-                return -1;
-            }
         } else if (vdev->vq[i].last_avail_idx) {
             error_report("VQ %d address 0x0 "
                          "inconsistent with Host index 0x%x",
@@ -933,7 +956,28 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f)
         }
     }
 
+    if (vdev->device_endian == VIRTIO_DEVICE_ENDIAN_UNKNOWN) {
+        vdev->device_endian = virtio_default_endian();
+    }
+
+    for (i = 0; i < num; i++) {
+        if (vdev->vq[i].pa) {
+            uint16_t nheads;
+            nheads = vring_avail_idx(&vdev->vq[i]) - vdev->vq[i].last_avail_idx;
+            /* Check it isn't doing strange things with descriptor numbers. */
+            if (nheads > vdev->vq[i].vring.num) {
+                error_report("VQ %d size 0x%x Guest index 0x%x "
+                             "inconsistent with Host index 0x%x: delta 0x%x",
+                             i, vdev->vq[i].vring.num,
+                             vring_avail_idx(&vdev->vq[i]),
+                             vdev->vq[i].last_avail_idx, nheads);
+                return -1;
+            }
+        }
+    }
+
     virtio_notify_vector(vdev, VIRTIO_NO_VECTOR);
+
     return 0;
 }
 
@@ -995,6 +1039,7 @@ void virtio_init(VirtIODevice *vdev, const char *name,
     }
     vdev->vmstate = qemu_add_vm_change_state_handler(virtio_vmstate_change,
                                                      vdev);
+    vdev->device_endian = virtio_default_endian();
 }
 
 VirtIODevice *virtio_common_init(const char *name, uint16_t device_id,

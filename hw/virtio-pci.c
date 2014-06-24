@@ -402,13 +402,13 @@ static uint64_t virtio_pci_config_read(void *opaque, hwaddr addr,
         break;
     case 2:
         val = virtio_config_readw(proxy->vdev, addr);
-        if (virtio_is_big_endian()) {
+        if (virtio_is_big_endian(proxy->vdev)) {
             val = bswap16(val);
         }
         break;
     case 4:
         val = virtio_config_readl(proxy->vdev, addr);
-        if (virtio_is_big_endian()) {
+        if (virtio_is_big_endian(proxy->vdev)) {
             val = bswap32(val);
         }
         break;
@@ -435,13 +435,13 @@ static void virtio_pci_config_write(void *opaque, hwaddr addr,
         virtio_config_writeb(proxy->vdev, addr, val);
         break;
     case 2:
-        if (virtio_is_big_endian()) {
+        if (virtio_is_big_endian(proxy->vdev)) {
             val = bswap16(val);
         }
         virtio_config_writew(proxy->vdev, addr, val);
         break;
     case 4:
-        if (virtio_is_big_endian()) {
+        if (virtio_is_big_endian(proxy->vdev)) {
             val = bswap32(val);
         }
         virtio_config_writel(proxy->vdev, addr, val);
