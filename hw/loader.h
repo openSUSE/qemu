@@ -5,6 +5,7 @@
 /* loader.c */
 int get_image_size(const char *filename);
 int load_image(const char *filename, uint8_t *addr); /* deprecated */
+ssize_t load_image_size(const char *filename, void *addr, size_t size);
 int load_image_targphys(const char *filename, hwaddr,
                         uint64_t max_sz);
 int load_elf(const char *filename, uint64_t (*translate_fn)(void *, uint64_t),
