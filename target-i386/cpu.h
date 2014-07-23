@@ -367,6 +367,13 @@
 
 #define MSR_VM_HSAVE_PA                 0xc0010117
 
+#define XSTATE_FP                       (1ULL << 0)
+#define XSTATE_SSE                      (1ULL << 1)
+#define XSTATE_YMM                      (1ULL << 2)
+#define XSTATE_BNDREGS                  (1ULL << 3)
+#define XSTATE_BNDCSR                   (1ULL << 4)
+
+
 /* CPUID feature words */
 typedef enum FeatureWord {
     FEAT_1_EDX,         /* CPUID[1].EDX */
