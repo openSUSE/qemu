@@ -1744,19 +1744,10 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
         break;
     case 0xA:
         /* Architectural Performance Monitoring Leaf */
-        if (kvm_enabled()) {
-            KVMState *s = cs->kvm_state;
-
-            *eax = kvm_arch_get_supported_cpuid(s, 0xA, count, R_EAX);
-            *ebx = kvm_arch_get_supported_cpuid(s, 0xA, count, R_EBX);
-            *ecx = kvm_arch_get_supported_cpuid(s, 0xA, count, R_ECX);
-            *edx = kvm_arch_get_supported_cpuid(s, 0xA, count, R_EDX);
-        } else {
-            *eax = 0;
-            *ebx = 0;
-            *ecx = 0;
-            *edx = 0;
-        }
+        *eax = 0;
+        *ebx = 0;
+        *ecx = 0;
+        *edx = 0;
         break;
     case 0xD:
         /* Processor Extended State */
