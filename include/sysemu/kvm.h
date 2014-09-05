@@ -252,6 +252,7 @@ uint32_t kvm_arch_get_supported_cpuid(KVMState *env, uint32_t function,
 void kvm_cpu_synchronize_state(CPUArchState *env);
 void kvm_cpu_synchronize_post_reset(CPUArchState *env);
 void kvm_cpu_synchronize_post_init(CPUArchState *env);
+void kvm_cpu_clean_state(CPUArchState *env);
 
 /* generic hooks - to be moved/refactored once there are more users */
 
@@ -276,6 +277,12 @@ static inline void cpu_synchronize_post_init(CPUArchState *env)
     }
 }
 
+static inline void cpu_clean_state(CPUArchState *env)
+{
+    if (kvm_enabled()) {
+        kvm_cpu_clean_state(env);
+    }
+}
 
 #if !defined(CONFIG_USER_ONLY)
 int kvm_physical_memory_addr_from_host(KVMState *s, void *ram_addr,

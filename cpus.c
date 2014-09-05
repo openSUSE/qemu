@@ -432,6 +432,15 @@ void cpu_synchronize_all_post_init(void)
     }
 }
 
+void cpu_clean_all_dirty(void)
+{
+    CPUArchState *cpu;
+
+    for (cpu = first_cpu; cpu; cpu = cpu->next_cpu) {
+        cpu_clean_state(cpu);
+    }
+}
+
 bool cpu_is_stopped(CPUState *cpu)
 {
     return !runstate_is_running() || cpu->stopped;

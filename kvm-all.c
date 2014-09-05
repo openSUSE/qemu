@@ -1535,6 +1535,12 @@ void kvm_cpu_synchronize_post_init(CPUArchState *env)
     cpu->kvm_vcpu_dirty = false;
 }
 
+void kvm_cpu_clean_state(CPUArchState *env)
+{
+    CPUState *cpu = ENV_GET_CPU(env);
+    cpu->kvm_vcpu_dirty = false;
+}
+
 int kvm_cpu_exec(CPUArchState *env)
 {
     CPUState *cpu = ENV_GET_CPU(env);
