@@ -911,6 +911,7 @@ static void kvm_irqchip_commit_routes(KVMState *s)
     assert(ret == 0);
 }
 
+static void kvm_flush_dynamic_msi_routes(KVMState *s);
 static void kvm_add_routing_entry(KVMState *s,
                                   struct kvm_irq_routing_entry *entry)
 {
@@ -927,6 +928,12 @@ static void kvm_add_routing_entry(KVMState *s,
         s->irq_routes = g_realloc(s->irq_routes, size);
         s->nr_allocated_irq_routes = n;
     }
+
+    if (!s->direct_msi && (s->irq_routes->nr >= s->gsi_count)) {
+        /* We exceeded the maximum number of routing entries - try to flush */
+        kvm_flush_dynamic_msi_routes(s);
+    }
+
     n = s->irq_routes->nr++;
     new = &s->irq_routes->entries[n];
     memset(new, 0, sizeof(*new));
