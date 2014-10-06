@@ -28,9 +28,7 @@
 
 #undef VERBOSE
 #define HW_RECT_ACCEL
-#if 0
 #define HW_FILL_ACCEL
-#endif
 #define HW_MOUSE_ACCEL
 
 #include "vga_int.h"
@@ -436,7 +434,7 @@ static inline int vmsvga_copy_rect(struct vmsvga_state_s *s,
 #endif
 
 #ifdef HW_FILL_ACCEL
-static inline void vmsvga_fill_rect(struct vmsvga_state_s *s,
+static inline int vmsvga_fill_rect(struct vmsvga_state_s *s,
                 uint32_t c, int x, int y, int w, int h)
 {
     int bypl = ds_get_linesize(s->vga.ds);
@@ -447,6 +445,10 @@ static inline void vmsvga_fill_rect(struct vmsvga_state_s *s,
     uint8_t *dst;
     uint8_t *src;
     uint8_t col[4];
+
+    if (!vmsvga_verify_rect(s->vga.ds, __func__, x, y, w, h)) {
+        return -1;
+    }
 
     col[0] = c;
     col[1] = c >> 8;
@@ -472,6 +474,7 @@ static inline void vmsvga_fill_rect(struct vmsvga_state_s *s,
     }
 
     vmsvga_update_rect_delayed(s, x, y, w, h);
+    return 0;
 }
 #endif
 
@@ -604,12 +607,12 @@ static void vmsvga_fifo_run(struct vmsvga_state_s *s)
             width = vmsvga_fifo_read(s);
             height = vmsvga_fifo_read(s);
 #ifdef HW_FILL_ACCEL
-            vmsvga_fill_rect(s, colour, x, y, width, height);
-            break;
-#else
+            if (vmsvga_fill_rect(s, colour, x, y, width, height) == 0) {
+                break;
+            }
+#endif
             args = 0;
             goto badcmd;
-#endif
 
         case SVGA_CMD_RECT_COPY:
             len -= 7;
