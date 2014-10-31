@@ -651,10 +651,11 @@ void ide_dma_cb(void *opaque, int ret)
     n = s->nsector;
     s->io_buffer_index = 0;
     s->io_buffer_size = n * 512;
-    if (s->bus->dma->ops->prepare_buf(s->bus->dma, ide_cmd_is_read(s)) == 0) {
+    if (s->bus->dma->ops->prepare_buf(s->bus->dma, ide_cmd_is_read(s)) < 512) {
         /* The PRDs were too short. Reset the Active bit, but don't raise an
          * interrupt. */
         s->status = READY_STAT | SEEK_STAT;
+        dma_buf_commit(s);
         goto eot;
     }
 
@@ -2097,6 +2098,11 @@ static int ide_nop_int(IDEDMA *dma, int x)
     return 0;
 }
 
+static int32_t ide_nop_int32(IDEDMA *dma, int x)
+{
+    return 0;
+}
+
 static void ide_nop_restart(void *opaque, int x, RunState y)
 {
 }
@@ -2104,7 +2110,7 @@ static void ide_nop_restart(void *opaque, int x, RunState y)
 static const IDEDMAOps ide_dma_nop_ops = {
     .start_dma      = ide_nop_start,
     .start_transfer = ide_nop,
-    .prepare_buf    = ide_nop_int,
+    .prepare_buf    = ide_nop_int32,
     .rw_buf         = ide_nop_int,
     .set_unit       = ide_nop_int,
     .add_status     = ide_nop_int,

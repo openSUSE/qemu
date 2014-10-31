@@ -636,7 +636,8 @@ static void ahci_write_fis_d2h(AHCIDevice *ad, uint8_t *cmd_fis)
     }
 }
 
-static int ahci_populate_sglist(AHCIDevice *ad, QEMUSGList *sglist, int offset)
+static int ahci_populate_sglist(AHCIDevice *ad, QEMUSGList *sglist,
+                                int32_t offset)
 {
     AHCICmdHdr *cmd = ad->cur_cmd;
     uint32_t opts = le32_to_cpu(cmd->opts);
@@ -647,10 +648,18 @@ static int ahci_populate_sglist(AHCIDevice *ad, QEMUSGList *sglist, int offset)
     uint8_t *prdt;
     int i;
     int r = 0;
-    int sum = 0;
+    uint64_t sum = 0;
     int off_idx = -1;
-    int off_pos = -1;
+    int64_t off_pos = -1;
     int tbl_entry_size;
+
+    /*
+     * Note: AHCI PRDT can describe up to 256GiB. SATA/ATA only support
+     * transactions of up to 32MiB as of ATA8-ACS3 rev 1b, assuming a
+     * 512 byte sector size. We limit the PRDT in this implementation to
+     * a reasonably large 2GiB, which can accommodate the maximum transfer
+     * request for sector sizes up to 32K.
+     */
 
     if (!sglist_alloc_hint) {
         DPRINTF(ad->port_no, "no sg list given by guest: 0x%08x\n", opts);
@@ -686,7 +695,7 @@ static int ahci_populate_sglist(AHCIDevice *ad, QEMUSGList *sglist, int offset)
         }
         if ((off_idx == -1) || (off_pos < 0) || (off_pos > tbl_entry_size)) {
             DPRINTF(ad->port_no, "%s: Incorrect offset! "
-                            "off_idx: %d, off_pos: %d\n",
+                            "off_idx: %d, off_pos: %"PRId64"\n",
                             __func__, off_idx, off_pos);
             r = -1;
             goto out;
@@ -700,6 +709,13 @@ static int ahci_populate_sglist(AHCIDevice *ad, QEMUSGList *sglist, int offset)
             /* flags_size is zero-based */
             qemu_sglist_add(sglist, le64_to_cpu(tbl[i].addr),
                             le32_to_cpu(tbl[i].flags_size) + 1);
+            if (sglist->size > INT32_MAX) {
+                error_report("AHCI Physical Region Descriptor Table describes "
+                             "more than 2 GiB.\n");
+                qemu_sglist_destroy(sglist);
+                r = -1;
+                goto out;
+            }
         }
     }
 
@@ -1050,16 +1066,19 @@ static void ahci_start_dma(IDEDMA *dma, IDEState *s,
     dma_cb(s, 0);
 }
 
-static int ahci_dma_prepare_buf(IDEDMA *dma, int is_write)
+static int32_t ahci_dma_prepare_buf(IDEDMA *dma, int is_write)
 {
     AHCIDevice *ad = DO_UPCAST(AHCIDevice, dma, dma);
     IDEState *s = &ad->port.ifs[0];
 
-    ahci_populate_sglist(ad, &s->sg, 0);
+    if (ahci_populate_sglist(ad, &s->sg, s->io_buffer_offset) == -1) {
+        DPRINTF(ad->port_no, "ahci_dma_prepare_buf failed.\n");
+        return -1;
+    }
     s->io_buffer_size = s->sg.size;
 
     DPRINTF(ad->port_no, "len=%#x\n", s->io_buffer_size);
-    return s->io_buffer_size != 0;
+    return s->io_buffer_size;
 }
 
 static int ahci_dma_rw_buf(IDEDMA *dma, int is_write)
