@@ -496,6 +496,11 @@ typedef struct RAMBlock {
 #endif
 } RAMBlock;
 
+static inline void *ramblock_ptr(RAMBlock *block, ram_addr_t offset)
+{
+    return (char *)block->host + offset;
+}
+
 typedef struct RAMList {
     QemuMutex mutex;
     /* Protected by the iothread lock.  */

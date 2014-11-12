@@ -1165,7 +1165,7 @@ void qemu_ram_remap(ram_addr_t addr, ram_addr_t length)
     QTAILQ_FOREACH(block, &ram_list.blocks, next) {
         offset = addr - block->offset;
         if (offset < block->length) {
-            vaddr = block->host + offset;
+            vaddr = ramblock_ptr(block, offset);
             if (block->flags & RAM_PREALLOC_MASK) {
                 ;
             } else {
@@ -1256,7 +1256,7 @@ found:
                 xen_map_cache(block->offset, block->length, 1);
         }
     }
-    return block->host + (addr - block->offset);
+    return ramblock_ptr(block, addr - block->offset);
 }
 
 /* Return a host pointer to ram allocated with qemu_ram_alloc.  Same as
@@ -1283,7 +1283,7 @@ static void *qemu_safe_ram_ptr(ram_addr_t addr)
                         xen_map_cache(block->offset, block->length, 1);
                 }
             }
-            return block->host + (addr - block->offset);
+            return ramblock_ptr(block, addr - block->offset);
         }
     }
 
@@ -1309,7 +1309,7 @@ static void *qemu_ram_ptr_length(ram_addr_t addr, ram_addr_t *size)
             if (addr - block->offset < block->length) {
                 if (addr - block->offset + *size > block->length)
                     *size = block->length - addr + block->offset;
-                return block->host + (addr - block->offset);
+                return ramblock_ptr(block, addr - block->offset);
             }
         }
 
