@@ -143,6 +143,7 @@ PropertyInfo qdev_prop_uint8 = {
 
 static int parse_hex8(DeviceState *dev, Property *prop, const char *str)
 {
+    unsigned long val;
     uint8_t *ptr = qdev_get_prop_ptr(dev, prop);
     char *end;
 
@@ -150,11 +151,18 @@ static int parse_hex8(DeviceState *dev, Property *prop, const char *str)
         return -EINVAL;
     }
 
-    *ptr = strtoul(str, &end, 16);
+    errno = 0;
+    val = strtoul(str, &end, 16);
+    if (errno) {
+        return -errno;
+    }
+    if (val > UINT8_MAX) {
+        return -ERANGE;
+    }
     if ((*end != '\0') || (end == str)) {
         return -EINVAL;
     }
-
+    *ptr = val;
     return 0;
 }
 
@@ -274,6 +282,7 @@ PropertyInfo qdev_prop_int32 = {
 
 static int parse_hex32(DeviceState *dev, Property *prop, const char *str)
 {
+    unsigned long val;
     uint32_t *ptr = qdev_get_prop_ptr(dev, prop);
     char *end;
 
@@ -281,11 +290,18 @@ static int parse_hex32(DeviceState *dev, Property *prop, const char *str)
         return -EINVAL;
     }
 
-    *ptr = strtoul(str, &end, 16);
+    errno = 0;
+    val = strtoul(str, &end, 16);
+    if (errno) {
+        return -errno;
+    }
+    if (val > UINT32_MAX) {
+        return -ERANGE;
+    }
     if ((*end != '\0') || (end == str)) {
         return -EINVAL;
     }
-
+    *ptr = val;
     return 0;
 }
 
@@ -341,6 +357,7 @@ PropertyInfo qdev_prop_uint64 = {
 
 static int parse_hex64(DeviceState *dev, Property *prop, const char *str)
 {
+    unsigned long long val;
     uint64_t *ptr = qdev_get_prop_ptr(dev, prop);
     char *end;
 
@@ -348,11 +365,18 @@ static int parse_hex64(DeviceState *dev, Property *prop, const char *str)
         return -EINVAL;
     }
 
-    *ptr = strtoull(str, &end, 16);
+    errno = 0;
+    val = strtoull(str, &end, 16);
+    if (errno) {
+        return -errno;
+    }
+    if (val > UINT64_MAX) {
+        return -ERANGE;
+    }
     if ((*end != '\0') || (end == str)) {
         return -EINVAL;
     }
-
+    *ptr = val;
     return 0;
 }
 
