@@ -752,7 +752,7 @@ static void *buffered_file_thread(void *opaque)
     }
 
 out:
-    if (ret < 0) {
+    if (ret < 0 && !s->complete) {
         migrate_fd_error(s);
     }
     g_free(s->buffer);
