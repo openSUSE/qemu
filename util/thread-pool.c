@@ -308,7 +308,12 @@ static void thread_pool_init_one(ThreadPool *pool, AioContext *ctx)
     qemu_mutex_init(&pool->lock);
     qemu_cond_init(&pool->worker_stopped);
     qemu_sem_init(&pool->sem, 0);
-    pool->max_threads = 64;
+    if (sizeof(pool) == 4) {
+        /* 32bit systems run out of virtual memory quickly */
+        pool->max_threads = 4;
+    } else {
+        pool->max_threads = 64;
+    }
     pool->new_thread_bh = aio_bh_new(ctx, spawn_thread_bh_fn, pool);
 
     QLIST_INIT(&pool->head);
