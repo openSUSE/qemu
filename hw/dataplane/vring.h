@@ -17,7 +17,7 @@
 #ifndef VRING_H
 #define VRING_H
 
-#include <linux/virtio_ring.h>
+#include "standard-headers/linux/virtio_ring.h"
 #include "qemu-common.h"
 #include "hw/dataplane/hostmem.h"
 #include "hw/virtio.h"

@@ -28,7 +28,7 @@
 #include <linux/kvm.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
-#include <linux/virtio_ring.h>
+#include "standard-headers/linux/virtio_ring.h"
 #include <netpacket/packet.h>
 #include <net/ethernet.h>
 #include <net/if.h>
