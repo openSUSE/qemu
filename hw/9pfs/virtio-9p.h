@@ -7,6 +7,7 @@
 #include <utime.h>
 #include <sys/resource.h>
 #include "hw/virtio.h"
+#include "hw/virtio/virtio-9p.h"
 #include "fsdev/file-op-9p.h"
 #include "fsdev/virtio-9p-marshal.h"
 #include "qemu/thread.h"

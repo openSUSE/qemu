@@ -149,7 +149,7 @@ static inline uint16_t vring_avail_ring(VirtQueue *vq, int i)
     return virtio_lduw_phys(vq->vdev, pa);
 }
 
-static inline uint16_t vring_used_event(VirtQueue *vq)
+static inline uint16_t vring_get_used_event(VirtQueue *vq)
 {
     return vring_avail_ring(vq, vq->vring.num);
 }
@@ -198,7 +198,7 @@ static inline void vring_used_flags_unset_bit(VirtQueue *vq, int mask)
     virtio_stw_phys(vdev, pa, virtio_lduw_phys(vdev, pa) & ~mask);
 }
 
-static inline void vring_avail_event(VirtQueue *vq, uint16_t val)
+static inline void vring_set_avail_event(VirtQueue *vq, uint16_t val)
 {
     hwaddr pa;
     if (!vq->notification) {
@@ -212,7 +212,7 @@ void virtio_queue_set_notification(VirtQueue *vq, int enable)
 {
     vq->notification = enable;
     if (vq->vdev->guest_features & (1 << VIRTIO_RING_F_EVENT_IDX)) {
-        vring_avail_event(vq, vring_avail_idx(vq));
+        vring_set_avail_event(vq, vring_avail_idx(vq));
     } else if (enable) {
         vring_used_flags_unset_bit(vq, VRING_USED_F_NO_NOTIFY);
     } else {
@@ -481,7 +481,7 @@ int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
 
     i = head = virtqueue_get_head(vq, vq->last_avail_idx++);
     if (vdev->guest_features & (1 << VIRTIO_RING_F_EVENT_IDX)) {
-        vring_avail_event(vq, vring_avail_idx(vq));
+        vring_set_avail_event(vq, vring_avail_idx(vq));
     }
 
     if (vring_desc_flags(vdev, desc_pa, i) & VRING_DESC_F_INDIRECT) {
@@ -797,19 +797,6 @@ void virtio_irq(VirtQueue *vq)
     virtio_notify_vector(vq->vdev, vq->vector);
 }
 
-/* Assuming a given event_idx value from the other size, if
- * we have just incremented index from old to new_idx,
- * should we trigger an event? */
-static inline int vring_need_event(uint16_t event, uint16_t new, uint16_t old)
-{
-	/* Note: Xen has similar logic for notification hold-off
-	 * in include/xen/interface/io/ring.h with req_event and req_prod
-	 * corresponding to event_idx + 1 and new respectively.
-	 * Note also that req_event and req_prod in Xen start at 1,
-	 * event indexes in virtio start at 0. */
-	return (uint16_t)(new - event - 1) < (uint16_t)(new - old);
-}
-
 static bool vring_notify(VirtIODevice *vdev, VirtQueue *vq)
 {
     uint16_t old, new;
@@ -830,7 +817,7 @@ static bool vring_notify(VirtIODevice *vdev, VirtQueue *vq)
     vq->signalled_used_valid = true;
     old = vq->signalled_used;
     new = vq->signalled_used = vring_used_idx(vq);
-    return !v || vring_need_event(vring_used_event(vq), new, old);
+    return !v || vring_need_event(vring_get_used_event(vq), new, old);
 }
 
 void virtio_notify(VirtIODevice *vdev, VirtQueue *vq)
