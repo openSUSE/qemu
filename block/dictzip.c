@@ -156,6 +156,7 @@ static int dictzip_open(BlockDriverState *bs, QDict *options, int flags, Error *
     uint8_t header_flags;
     uint16_t chunk_len16;
     uint16_t chunk_cnt16;
+    uint32_t chunk_len32;
     uint16_t header_ver;
     uint16_t tmp_short;
     uint64_t offset;
@@ -255,11 +256,11 @@ static int dictzip_open(BlockDriverState *bs, QDict *options, int flags, Error *
             break;
         case 99: /* Special Alex pigz version */
             /* number of chunks */
-            if (bdrv_pread(s->hd->file, GZ_99_CHUNKSIZE, &s->chunk_len, 4) != 4)
+            if (bdrv_pread(s->hd->file, GZ_99_CHUNKSIZE, &chunk_len32, 4) != 4)
                 goto fail;
 
-            dprintf("chunk len [%#x] = %d\n", GZ_99_CHUNKSIZE, s->chunk_len);
-            s->chunk_len = le32_to_cpu(s->chunk_len);
+            dprintf("chunk len [%#x] = %d\n", GZ_99_CHUNKSIZE, chunk_len32);
+            s->chunk_len = le32_to_cpu(chunk_len32);
 
             /* chunk count */
             if (bdrv_pread(s->hd->file, GZ_99_CHUNKCNT, &s->chunk_cnt, 4) != 4)
@@ -267,7 +268,7 @@ static int dictzip_open(BlockDriverState *bs, QDict *options, int flags, Error *
 
             s->chunk_cnt = le32_to_cpu(s->chunk_cnt);
 
-            dprintf("chunk len | count = %d | %d\n", s->chunk_len, s->chunk_cnt);
+            dprintf("chunk len | count = %"PRId64" | %d\n", s->chunk_len, s->chunk_cnt);
 
             /* file size */
             if (bdrv_pread(s->hd->file, GZ_99_FILESIZE, &s->file_len, 8) != 8)
@@ -338,14 +339,14 @@ static int dictzip_open(BlockDriverState *bs, QDict *options, int flags, Error *
         s->offsets[i] = offset;
         switch (header_ver) {
         case 1:
-            offset += s->chunks[i];
+            offset += le16_to_cpu(s->chunks[i]);
             break;
         case 99:
-            offset += s->chunks32[i];
+            offset += le32_to_cpu(s->chunks32[i]);
             break;
         }
 
-        dprintf("chunk %#x - %#x = offset %#x -> %#x\n", i * s->chunk_len, (i+1) * s->chunk_len, s->offsets[i], offset);
+        dprintf("chunk %#"PRIx64" - %#"PRIx64" = offset %#"PRIx64" -> %#"PRIx64"\n", i * s->chunk_len, (i+1) * s->chunk_len, s->offsets[i], offset);
     }
     qemu_opts_del(opts);
 
@@ -379,9 +380,25 @@ static void dictzip_read_cb(void *opaque, int ret)
     struct BDRVDictZipState *s = acb->s;
     uint8_t *buf;
     DictCache *cache;
-    int r;
+    int r, i;
 
     buf = g_malloc(acb->chunks_len);
+
+    /* try to find zlib stream for decoding */
+    do {
+        for (i = 0; i < Z_STREAM_COUNT; i++) {
+            if (!(s->stream_in_use & (1 << i))) {
+                s->stream_in_use |= (1 << i);
+                acb->zStream_id = i;
+                acb->zStream = &s->zStream[i];
+                break;
+            }
+        }
+    } while(!acb->zStream);
+
+    /* sure, we could handle more streams, but this callback should be single
+       threaded and when it's not, we really want to know! */
+    assert(i == 0);
 
     /* uncompress the chunk */
     acb->zStream->next_in   = acb->gzipped;
@@ -468,17 +485,6 @@ static BlockAIOCB *dictzip_aio_readv(BlockDriverState *bs,
     }
 
     /* No cache, so let's decode */
-    do {
-        for (i = 0; i < Z_STREAM_COUNT; i++) {
-            if (!(s->stream_in_use & (1 << i))) {
-                s->stream_in_use |= (1 << i);
-                acb->zStream_id = i;
-                acb->zStream = &s->zStream[i];
-                break;
-            }
-        }
-    } while(!acb->zStream);
-
     /* We need to read these chunks */
     first_chunk  = start / s->chunk_len;
     first_offset = start - first_chunk * s->chunk_len;
@@ -488,9 +494,9 @@ static BlockAIOCB *dictzip_aio_readv(BlockDriverState *bs,
     gz_len = 0;
     for (i = first_chunk; i <= last_chunk; i++) {
         if (s->chunks32)
-            gz_len += s->chunks32[i];
+            gz_len += le32_to_cpu(s->chunks32[i]);
         else
-            gz_len += s->chunks[i];
+            gz_len += le16_to_cpu(s->chunks[i]);
     }
 
     gz_sector_num = gz_start / SECTOR_SIZE;
@@ -511,7 +517,7 @@ static BlockAIOCB *dictzip_aio_readv(BlockDriverState *bs,
     iov->iov_len = gz_nb_sectors * 512;
     qemu_iovec_init_external(qiov_gz, iov, 1);
 
-    dprintf("read %d - %d => %d - %d\n", start, end, gz_start, gz_start + gz_len);
+    dprintf("read %zd - %zd => %zd - %zd\n", start, end, gz_start, gz_start + gz_len);
 
     acb->s = s;
     acb->qiov = qiov;
