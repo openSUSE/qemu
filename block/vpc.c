@@ -823,7 +823,9 @@ static int vpc_create(const char *filename, QemuOpts *opts, Error **errp)
         }
     } else {
         total_sectors = (int64_t)cyls * heads * secs_per_cyl;
-        total_size = total_sectors * BDRV_SECTOR_SIZE;
+        if (disk_type != VHD_FIXED) {
+            total_size = total_sectors * BDRV_SECTOR_SIZE;
+        }
     }
 
     /* Prepare the Hard Disk Footer */
