@@ -1439,6 +1439,7 @@ F: qom/
 X: qom/cpu.c
 F: tests/check-qom-interface.c
 F: tests/check-qom-proplist.c
+F: tests/check-qom-props.c
 F: tests/qom-test.c
 
 QMP
