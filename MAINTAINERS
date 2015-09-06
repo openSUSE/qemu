@@ -1889,6 +1889,7 @@ F: qom/
 X: qom/cpu.c
 F: tests/check-qom-interface.c
 F: tests/check-qom-proplist.c
+F: tests/check-qom-props.c
 
 QMP
 M: Markus Armbruster <armbru@redhat.com>
