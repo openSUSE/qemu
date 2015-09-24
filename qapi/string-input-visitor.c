@@ -44,7 +44,7 @@ static void free_range(void *range, void *dummy)
     g_free(range);
 }
 
-static void parse_str(StringInputVisitor *siv, Error **errp)
+static void parse_str(StringInputVisitor *siv, bool u64, Error **errp)
 {
     char *str = (char *) siv->string;
     long long start, end;
@@ -57,7 +57,11 @@ static void parse_str(StringInputVisitor *siv, Error **errp)
 
     do {
         errno = 0;
-        start = strtoll(str, &endptr, 0);
+        if (u64) {
+            start = strtoull(str, &endptr, 0);
+        } else {
+            start = strtoll(str, &endptr, 0);
+        }
         if (errno == 0 && endptr > str) {
             if (*endptr == '\0') {
                 cur = g_malloc0(sizeof(*cur));
@@ -70,7 +74,11 @@ static void parse_str(StringInputVisitor *siv, Error **errp)
             } else if (*endptr == '-') {
                 str = endptr + 1;
                 errno = 0;
-                end = strtoll(str, &endptr, 0);
+                if (u64) {
+                    end = strtoull(str, &endptr, 0);
+                } else {
+                    end = strtoll(str, &endptr, 0);
+                }
                 if (errno == 0 && endptr > str && start <= end &&
                     (start > INT64_MAX - 65536 ||
                      end < start + 65536)) {
@@ -129,7 +137,7 @@ start_list(Visitor *v, const char *name, Error **errp)
 {
     StringInputVisitor *siv = to_siv(v);
 
-    parse_str(siv, errp);
+    parse_str(siv, false, errp);
 
     siv->cur_range = g_list_first(siv->ranges);
     if (siv->cur_range) {
@@ -195,7 +203,7 @@ static void parse_type_int64(Visitor *v, const char *name, int64_t *obj,
         return;
     }
 
-    parse_str(siv, errp);
+    parse_str(siv, false, errp);
 
     if (!siv->ranges) {
         goto error;
@@ -229,15 +237,43 @@ error:
 static void parse_type_uint64(Visitor *v, const char *name, uint64_t *obj,
                               Error **errp)
 {
-    /* FIXME: parse_type_int64 mishandles values over INT64_MAX */
-    int64_t i;
-    Error *err = NULL;
-    parse_type_int64(v, name, &i, &err);
-    if (err) {
-        error_propagate(errp, err);
-    } else {
-        *obj = i;
+    StringInputVisitor *siv = to_siv(v);
+
+    if (!siv->string) {
+        error_setg(errp, QERR_INVALID_PARAMETER_TYPE, name ? name : "null",
+                   "integer");
+        return;
     }
+
+    parse_str(siv, true, errp);
+
+    if (!siv->ranges) {
+        goto error;
+    }
+
+    if (!siv->cur_range) {
+        Range *r;
+
+        siv->cur_range = g_list_first(siv->ranges);
+        if (!siv->cur_range) {
+            goto error;
+        }
+
+        r = siv->cur_range->data;
+        if (!r) {
+            goto error;
+        }
+
+        siv->cur = r->begin;
+    }
+
+    *obj = siv->cur;
+    siv->cur++;
+    return;
+
+error:
+    error_setg(errp, QERR_INVALID_PARAMETER_VALUE, name,
+               "a uint64 value or range");
 }
 
 static void parse_type_size(Visitor *v, const char *name, uint64_t *obj,
