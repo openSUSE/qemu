@@ -76,6 +76,27 @@ static void test_visitor_in_int(TestInputVisitorData *data,
     error_free_or_abort(&err);
 }
 
+static void test_visitor_in_uint64(TestInputVisitorData *data,
+                                   const void *unused)
+{
+    uint64_t res = 0, value = UINT64_MAX;
+    Error *err = NULL;
+    Visitor *v;
+
+    v = visitor_input_test_init(data, g_strdup_printf("%" PRIu64, value));
+
+    visit_type_uint64(v, NULL, &res, &err);
+    g_assert(!err);
+    g_assert_cmpint(res, ==, value);
+    visitor_input_teardown(data, unused);
+
+    v = visitor_input_test_init(data, g_strdup_printf("0x%" PRIx64, value));
+
+    visit_type_uint64(v, NULL, &res, &err);
+    g_assert(!err);
+    g_assert_cmpint(res, ==, value);
+}
+
 static void check_ilist(Visitor *v, int64_t *expected, size_t n)
 {
     int64List *res = NULL;
@@ -362,6 +383,8 @@ int main(int argc, char **argv)
 
     input_visitor_test_add("/string-visitor/input/int",
                            &in_visitor_data, test_visitor_in_int);
+    input_visitor_test_add("/string-visitor/input/uint64",
+                           &in_visitor_data, test_visitor_in_uint64);
     input_visitor_test_add("/string-visitor/input/intList",
                            &in_visitor_data, test_visitor_in_intList);
     input_visitor_test_add("/string-visitor/input/bool",
