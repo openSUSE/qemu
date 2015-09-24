@@ -56,6 +56,14 @@ static void test_visitor_in_int(TestInputVisitorData *data,
     visit_type_int(v, NULL, &res, &err);
     g_assert(!err);
     g_assert_cmpint(res, ==, value);
+    visitor_input_teardown(data, unused);
+
+    value = INT64_MAX;
+    v = visitor_input_test_init(data, g_strdup_printf("%" PRId64, value));
+
+    visit_type_int(v, NULL, &res, &err);
+    g_assert(!err);
+    g_assert_cmpint(res, ==, value);
 
     v = visitor_input_test_init(data, "not an int");
 
