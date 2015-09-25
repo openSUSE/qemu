@@ -1286,6 +1286,7 @@ R: Fam Zheng <famz@redhat.com>
 S: Supported
 F: include/hw/scsi/*
 F: hw/scsi/*
+F: tests/scsi-disk-test.c
 F: tests/virtio-scsi-test.c
 T: git https://github.com/bonzini/qemu.git scsi-next
 
