@@ -831,6 +831,7 @@ M: Paolo Bonzini <pbonzini@redhat.com>
 S: Supported
 F: include/hw/scsi*
 F: hw/scsi/*
+F: tests/scsi-disk-test.c
 T: git git://github.com/bonzini/qemu.git scsi-next
 
 LSI53C895A
