@@ -1,5 +1,5 @@
 /*
- * Virtio 9p Posix callback
+ * 9p Posix callback
  *
  * Copyright IBM, Corp. 2010
  *
@@ -11,7 +11,6 @@
  *
  */
 
-#include "hw/virtio.h"
 #include "virtio-9p.h"
 #include "virtio-9p-xattr.h"
 #include <arpa/inet.h>
