@@ -1,5 +1,5 @@
 /*
- * Virtio 9p Proxy callback
+ * 9p Proxy callback
  *
  * Copyright IBM, Corp. 2011
  *
@@ -11,10 +11,9 @@
  */
 #include <sys/socket.h>
 #include <sys/un.h>
-#include "hw/virtio.h"
 #include "virtio-9p.h"
 #include "fsdev/qemu-fsdev.h"
-#include "virtio-9p-proxy.h"
+#include "9p-proxy.h"
 
 typedef struct V9fsProxy {
     int sockfd;
