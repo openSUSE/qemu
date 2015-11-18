@@ -16,7 +16,7 @@
 #include "qemu/sockets.h"
 #include "virtio-9p.h"
 #include "fsdev/qemu-fsdev.h"
-#include "virtio-9p-xattr.h"
+#include "9p-xattr.h"
 #include "virtio-9p-coth.h"
 #include "trace.h"
 #include "migration/migration.h"

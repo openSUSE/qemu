@@ -14,7 +14,7 @@
 
 #include "hw/virtio.h"
 #include "virtio-9p.h"
-#include "virtio-9p-xattr.h"
+#include "9p-xattr.h"
 #include "fsdev/qemu-fsdev.h"
 #include "virtio-9p-synth.h"
 

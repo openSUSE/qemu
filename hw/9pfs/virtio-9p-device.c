@@ -17,7 +17,7 @@
 #include "qemu/sockets.h"
 #include "virtio-9p.h"
 #include "fsdev/qemu-fsdev.h"
-#include "virtio-9p-xattr.h"
+#include "9p-xattr.h"
 #include "virtio-9p-coth.h"
 
 static uint32_t virtio_9p_get_features(VirtIODevice *vdev, uint32_t features)
