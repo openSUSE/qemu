@@ -227,64 +227,13 @@ typedef struct V9fsState
     V9fsConf fsconf;
 } V9fsState;
 
-typedef struct V9fsStatState {
-    V9fsPDU *pdu;
-    size_t offset;
-    V9fsStat v9stat;
-    V9fsFidState *fidp;
-    struct stat stbuf;
-} V9fsStatState;
-
-typedef struct V9fsOpenState {
-    V9fsPDU *pdu;
-    size_t offset;
-    int32_t mode;
-    V9fsFidState *fidp;
-    V9fsQID qid;
-    struct stat stbuf;
-    int iounit;
-} V9fsOpenState;
-
-typedef struct V9fsReadState {
-    V9fsPDU *pdu;
-    size_t offset;
-    int32_t count;
-    int32_t total;
-    int64_t off;
-    V9fsFidState *fidp;
-    struct iovec iov[128]; /* FIXME: bad, bad, bad */
-    struct iovec *sg;
-    off_t dir_pos;
-    struct dirent *dent;
-    struct stat stbuf;
-    V9fsString name;
-    V9fsStat v9stat;
-    int32_t len;
-    int32_t cnt;
-    int32_t max_count;
-} V9fsReadState;
-
-typedef struct V9fsWriteState {
-    V9fsPDU *pdu;
-    size_t offset;
-    int32_t len;
-    int32_t count;
-    int32_t total;
-    int64_t off;
-    V9fsFidState *fidp;
-    struct iovec iov[128]; /* FIXME: bad, bad, bad */
-    struct iovec *sg;
-    int cnt;
-} V9fsWriteState;
-
-typedef struct V9fsMkState {
-    V9fsPDU *pdu;
-    size_t offset;
-    V9fsQID qid;
-    struct stat stbuf;
-    V9fsString name;
-    V9fsString fullname;
-} V9fsMkState;
+struct virtio_9p_config
+{
+    /* number of characters in tag */
+    uint16_t tag_len;
+    /* Variable size tag name */
+    uint8_t tag[0];
+} QEMU_PACKED;
 
 /* 9p2000.L open flags */
 #define P9_DOTL_RDONLY        00000000
@@ -344,15 +293,6 @@ typedef struct V9fsGetlock
 
 extern int open_fd_hw;
 extern int total_open_fd;
-
-size_t pdu_packunpack(void *addr, struct iovec *sg, int sg_count,
-                      size_t offset, size_t size, int pack);
-
-static inline size_t do_pdu_unpack(void *dst, struct iovec *sg, int sg_count,
-                        size_t offset, size_t size)
-{
-    return pdu_packunpack(dst, sg, sg_count, offset, size, 0);
-}
 
 static inline void v9fs_path_write_lock(V9fsState *s)
 {
