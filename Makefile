@@ -170,7 +170,7 @@ qemu-io$(EXESUF): qemu-io.o cmd.o $(block-obj-y) libqemuutil.a libqemustub.a
 
 qemu-bridge-helper$(EXESUF): qemu-bridge-helper.o
 
-fsdev/virtfs-proxy-helper$(EXESUF): fsdev/virtfs-proxy-helper.o fsdev/virtio-9p-marshal.o libqemuutil.a libqemustub.a
+fsdev/virtfs-proxy-helper$(EXESUF): fsdev/virtfs-proxy-helper.o fsdev/9p-marshal.o fsdev/virtio-9p-marshal.o libqemuutil.a libqemustub.a
 fsdev/virtfs-proxy-helper$(EXESUF): LIBS += -lcap
 
 qemu-img-cmds.h: $(SRC_PATH)/qemu-img-cmds.hx
