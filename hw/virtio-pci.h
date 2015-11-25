@@ -22,7 +22,6 @@
 #include "virtio-serial.h"
 #include "virtio-scsi.h"
 #include "virtio-bus.h"
-#include "hw/virtio-9p.h"
 #ifdef CONFIG_VIRTFS
 #include "hw/9pfs/virtio-9p.h"
 #endif
