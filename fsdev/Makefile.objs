@@ -1,5 +1,5 @@
 ifeq ($(CONFIG_REALLY_VIRTFS),y)
-common-obj-y = qemu-fsdev.o 9p-marshal.o virtio-9p-marshal.o
+common-obj-y = qemu-fsdev.o 9p-marshal.o 9p-iov-marshal.o
 else
 common-obj-y = qemu-fsdev-dummy.o
 endif
