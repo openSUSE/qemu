@@ -563,7 +563,7 @@ static int fid_to_qid(V9fsPDU *pdu, V9fsFidState *fidp, V9fsQID *qidp)
     return 0;
 }
 
-static V9fsPDU *alloc_pdu(V9fsState *s)
+static V9fsPDU *pdu_alloc(V9fsState *s)
 {
     V9fsPDU *pdu = NULL;
 
@@ -575,7 +575,7 @@ static V9fsPDU *alloc_pdu(V9fsState *s)
     return pdu;
 }
 
-static void free_pdu(V9fsPDU *pdu)
+static void pdu_free(V9fsPDU *pdu)
 {
     if (pdu) {
         V9fsState *s = pdu->s;
@@ -595,7 +595,7 @@ static void free_pdu(V9fsPDU *pdu)
  * because we always expect to have enough space to encode
  * error details
  */
-static void complete_pdu(V9fsPDU *pdu, ssize_t len)
+static void pdu_complete(V9fsPDU *pdu, ssize_t len)
 {
     int8_t id = pdu->id + 1; /* Response */
     V9fsState *s = pdu->s;
@@ -638,7 +638,7 @@ static void complete_pdu(V9fsPDU *pdu, ssize_t len)
     /* Now wakeup anybody waiting in flush for this request */
     qemu_co_queue_next(&pdu->complete);
 
-    free_pdu(pdu);
+    pdu_free(pdu);
 }
 
 static mode_t v9mode_to_mode(uint32_t mode, V9fsString *extension)
@@ -933,7 +933,7 @@ static void v9fs_version(void *opaque)
     offset += err;
     trace_v9fs_version_return(pdu->tag, pdu->id, s->msize, version.data);
 out:
-    complete_pdu(pdu, offset);
+    pdu_complete(pdu, offset);
     v9fs_string_free(&version);
 }
 
@@ -996,7 +996,7 @@ static void v9fs_attach(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     v9fs_string_free(&uname);
     v9fs_string_free(&aname);
 }
@@ -1042,7 +1042,7 @@ static void v9fs_stat(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
 }
 
 static void v9fs_getattr(void *opaque)
@@ -1097,7 +1097,7 @@ static void v9fs_getattr(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, retval);
+    pdu_complete(pdu, retval);
 }
 
 /* Attribute flags */
@@ -1194,7 +1194,7 @@ static void v9fs_setattr(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
 }
 
 static int v9fs_walk_marshal(V9fsPDU *pdu, uint16_t nwnames, V9fsQID *qids)
@@ -1236,7 +1236,7 @@ static void v9fs_walk(void *opaque)
 
     err = pdu_unmarshal(pdu, offset, "ddw", &fid, &newfid, &nwnames);
     if (err < 0) {
-        complete_pdu(pdu, err);
+        pdu_complete(pdu, err);
         return ;
     }
     offset += err;
@@ -1304,7 +1304,7 @@ out:
     v9fs_path_free(&dpath);
     v9fs_path_free(&path);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     if (nwnames && nwnames <= P9_MAXWELEM) {
         for (name_idx = 0; name_idx < nwnames; name_idx++) {
             v9fs_string_free(&wnames[name_idx]);
@@ -1421,7 +1421,7 @@ static void v9fs_open(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
 }
 
 static void v9fs_lcreate(void *opaque)
@@ -1478,7 +1478,7 @@ static void v9fs_lcreate(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     v9fs_string_free(&name);
 }
 
@@ -1508,7 +1508,7 @@ static void v9fs_fsync(void *opaque)
     }
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
 }
 
 static void v9fs_clunk(void *opaque)
@@ -1541,7 +1541,7 @@ static void v9fs_clunk(void *opaque)
         err = offset;
     }
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
 }
 
 static int v9fs_xattr_read(V9fsState *s, V9fsPDU *pdu, V9fsFidState *fidp,
@@ -1751,7 +1751,7 @@ static void v9fs_read(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
 }
 
 static size_t v9fs_readdir_data_size(V9fsString *name)
@@ -1874,7 +1874,7 @@ static void v9fs_readdir(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, retval);
+    pdu_complete(pdu, retval);
 }
 
 static int v9fs_xattr_write(V9fsState *s, V9fsPDU *pdu, V9fsFidState *fidp,
@@ -1941,7 +1941,7 @@ static void v9fs_write(void *opaque)
 
     err = pdu_unmarshal(pdu, offset, "dqd", &fid, &off, &count);
     if (err < 0) {
-        complete_pdu(pdu, err);
+        pdu_complete(pdu, err);
         return;
     }
     offset += err;
@@ -2004,7 +2004,7 @@ out:
     put_fid(pdu, fidp);
 out_nofid:
     qemu_iovec_destroy(&qiov_full);
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
 }
 
 static void v9fs_create(void *opaque)
@@ -2171,7 +2171,7 @@ static void v9fs_create(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-   complete_pdu(pdu, err);
+   pdu_complete(pdu, err);
    v9fs_string_free(&name);
    v9fs_string_free(&extension);
    v9fs_path_free(&path);
@@ -2218,7 +2218,7 @@ static void v9fs_symlink(void *opaque)
 out:
     put_fid(pdu, dfidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     v9fs_string_free(&name);
     v9fs_string_free(&symname);
 }
@@ -2234,7 +2234,7 @@ static void v9fs_flush(void *opaque)
 
     err = pdu_unmarshal(pdu, offset, "w", &tag);
     if (err < 0) {
-        complete_pdu(pdu, err);
+        pdu_complete(pdu, err);
         return;
     }
     trace_v9fs_flush(pdu->tag, pdu->id, tag);
@@ -2251,9 +2251,9 @@ static void v9fs_flush(void *opaque)
          */
         qemu_co_queue_wait(&cancel_pdu->complete);
         cancel_pdu->cancelled = 0;
-        free_pdu(cancel_pdu);
+        pdu_free(cancel_pdu);
     }
-    complete_pdu(pdu, 7);
+    pdu_complete(pdu, 7);
 }
 
 static void v9fs_link(void *opaque)
@@ -2291,7 +2291,7 @@ out:
     put_fid(pdu, dfidp);
 out_nofid:
     v9fs_string_free(&name);
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
 }
 
 /* Only works with path name based fid */
@@ -2336,7 +2336,7 @@ out_err:
     clunk_fid(pdu->s, fidp->fid);
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
 }
 
 static void v9fs_unlinkat(void *opaque)
@@ -2380,7 +2380,7 @@ out_err:
     put_fid(pdu, dfidp);
     v9fs_path_free(&path);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     v9fs_string_free(&name);
 }
 
@@ -2480,7 +2480,7 @@ static void v9fs_rename(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     v9fs_string_free(&name);
 }
 
@@ -2581,7 +2581,7 @@ static void v9fs_renameat(void *opaque)
     }
 
 out_err:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     v9fs_string_free(&old_name);
     v9fs_string_free(&new_name);
 }
@@ -2677,7 +2677,7 @@ out:
     put_fid(pdu, fidp);
 out_nofid:
     v9fs_stat_free(&v9stat);
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
 }
 
 static int v9fs_fill_statfs(V9fsState *s, V9fsPDU *pdu, struct statfs *stbuf)
@@ -2756,7 +2756,7 @@ static void v9fs_statfs(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, retval);
+    pdu_complete(pdu, retval);
 }
 
 static void v9fs_mknod(void *opaque)
@@ -2803,7 +2803,7 @@ static void v9fs_mknod(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     v9fs_string_free(&name);
 }
 
@@ -2860,7 +2860,7 @@ out_nofid:
         err += offset;
     }
     trace_v9fs_lock_return(pdu->tag, pdu->id, status);
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     v9fs_string_free(&flock.client_id);
 }
 
@@ -2909,7 +2909,7 @@ static void v9fs_getlock(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     v9fs_string_free(&glock.client_id);
 }
 
@@ -2953,7 +2953,7 @@ static void v9fs_mkdir(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     v9fs_string_free(&name);
 }
 
@@ -3059,7 +3059,7 @@ out:
         put_fid(pdu, xattr_fidp);
     }
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     v9fs_string_free(&name);
 }
 
@@ -3099,7 +3099,7 @@ static void v9fs_xattrcreate(void *opaque)
     err = offset;
     put_fid(pdu, file_fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
     v9fs_string_free(&name);
 }
 
@@ -3139,7 +3139,7 @@ static void v9fs_readlink(void *opaque)
 out:
     put_fid(pdu, fidp);
 out_nofid:
-    complete_pdu(pdu, err);
+    pdu_complete(pdu, err);
 }
 
 static CoroutineEntry *pdu_co_handlers[] = {
@@ -3182,13 +3182,13 @@ static CoroutineEntry *pdu_co_handlers[] = {
 static void v9fs_op_not_supp(void *opaque)
 {
     V9fsPDU *pdu = opaque;
-    complete_pdu(pdu, -EOPNOTSUPP);
+    pdu_complete(pdu, -EOPNOTSUPP);
 }
 
 static void v9fs_fs_ro(void *opaque)
 {
     V9fsPDU *pdu = opaque;
-    complete_pdu(pdu, -EROFS);
+    pdu_complete(pdu, -EROFS);
 }
 
 static inline bool is_read_only_op(V9fsPDU *pdu)
@@ -3218,7 +3218,7 @@ static inline bool is_read_only_op(V9fsPDU *pdu)
     }
 }
 
-static void submit_pdu(V9fsPDU *pdu)
+static void pdu_submit(V9fsPDU *pdu)
 {
     Coroutine *co;
     CoroutineEntry *handler;
@@ -3244,7 +3244,7 @@ void handle_9p_output(VirtIODevice *vdev, VirtQueue *vq)
     V9fsPDU *pdu;
     ssize_t len;
 
-    while ((pdu = alloc_pdu(s)) &&
+    while ((pdu = pdu_alloc(s)) &&
             (len = virtqueue_pop(vq, &pdu->elem)) != 0) {
         uint8_t *ptr;
         BUG_ON(pdu->elem.out_num == 0 || pdu->elem.in_num == 0);
@@ -3256,9 +3256,9 @@ void handle_9p_output(VirtIODevice *vdev, VirtQueue *vq)
         pdu->id = ptr[4];
         pdu->tag = le16_to_cpu(*(uint16_t *)(ptr + 5));
         qemu_co_queue_init(&pdu->complete);
-        submit_pdu(pdu);
+        pdu_submit(pdu);
     }
-    free_pdu(pdu);
+    pdu_free(pdu);
 }
 
 static void __attribute__((__constructor__)) virtio_9p_set_fd_limit(void)
