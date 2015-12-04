@@ -2025,6 +2025,12 @@ int qemu_loadvm_state(QEMUFile *f)
             if (ret < 0) {
                 fprintf(stderr, "qemu: warning: error while loading state for instance 0x%x of device '%s'\n",
                         instance_id, idstr);
+                if (strcmp(idstr, "ram") == 0) {
+                    // The above matches more than the issue in bsc#950590
+                    // so the TID will provide info to distinguishing other cases
+                    fprintf(stderr, "Please refer to TID 7017048 support document for details on this failure\n");
+                    fprintf(stderr, "You may find this TID at https://www.suse.com/support/kb/doc.php?id=7017048\n");
+                }
                 goto out;
             }
             break;
