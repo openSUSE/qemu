@@ -138,6 +138,16 @@ out:
     v9fs_path_free(&path);
 }
 
+static void virtio_9p_device_unrealize(DeviceState *dev, Error **errp)
+{
+    VirtIODevice *vdev = VIRTIO_DEVICE(dev);
+    V9fsState *s = VIRTIO_9P(dev);
+
+    virtio_cleanup(vdev);
+    g_free(s->ctx.fs_root);
+    g_free(s->tag);
+}
+
 /* virtio-9p device */
 
 static Property virtio_9p_properties[] = {
@@ -153,6 +163,7 @@ static void virtio_9p_class_init(ObjectClass *klass, void *data)
 
     dc->props = virtio_9p_properties;
     vdc->realize = virtio_9p_device_realize;
+    vdc->unrealize = virtio_9p_device_unrealize;
     vdc->get_features = virtio_9p_get_features;
     vdc->get_config = virtio_9p_get_config;
 }
