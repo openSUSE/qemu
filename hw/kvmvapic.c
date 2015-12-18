@@ -622,6 +622,9 @@ static void vapic_write(void *opaque, hwaddr addr, uint64_t data,
     hwaddr rom_paddr;
     VAPICROMState *s = opaque;
 
+    if (!cpu_single_env) {
+        return;
+    }
     cpu_synchronize_state(env);
 
     /*
