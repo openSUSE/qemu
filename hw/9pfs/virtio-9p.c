@@ -3257,29 +3257,6 @@ void pdu_submit(V9fsPDU *pdu)
     qemu_coroutine_enter(co, pdu);
 }
 
-void handle_9p_output(VirtIODevice *vdev, VirtQueue *vq)
-{
-    V9fsState *s = (V9fsState *)vdev;
-    V9fsPDU *pdu;
-    ssize_t len;
-
-    while ((pdu = pdu_alloc(s)) &&
-            (len = virtqueue_pop(vq, &pdu->elem)) != 0) {
-        uint8_t *ptr;
-        BUG_ON(pdu->elem.out_num == 0 || pdu->elem.in_num == 0);
-        BUG_ON(pdu->elem.out_sg[0].iov_len < 7);
-
-        ptr = pdu->elem.out_sg[0].iov_base;
-
-        pdu->size = le32_to_cpu(*(uint32_t *)ptr);
-        pdu->id = ptr[4];
-        pdu->tag = le16_to_cpu(*(uint16_t *)(ptr + 5));
-        qemu_co_queue_init(&pdu->complete);
-        pdu_submit(pdu);
-    }
-    pdu_free(pdu);
-}
-
 static void __attribute__((__constructor__)) virtio_9p_set_fd_limit(void)
 {
     struct rlimit rlim;
