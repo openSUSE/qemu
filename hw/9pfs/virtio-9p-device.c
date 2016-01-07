@@ -19,6 +19,17 @@
 #include "9p-xattr.h"
 #include "virtio-9p-coth.h"
 
+void virtio_9p_push_and_notify(V9fsPDU *pdu)
+{
+    V9fsState *s = pdu->s;
+
+    /* push onto queue and notify */
+    virtqueue_push(s->vq, &pdu->elem, pdu->size);
+
+    /* FIXME: we should batch these completions */
+    virtio_notify(VIRTIO_DEVICE(s), s->vq);
+}
+
 static uint32_t virtio_9p_get_features(VirtIODevice *vdev, uint32_t features)
 {
     features |= 1 << VIRTIO_9P_MOUNT_TAG;
