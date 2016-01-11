@@ -102,7 +102,7 @@ struct VirtIOPCIProxy {
 
 typedef struct V9fsPCIState {
     VirtIOPCIProxy parent_obj;
-    V9fsState vdev;
+    V9fsVirtioState vdev;
 } V9fsPCIState;
 
 #endif
