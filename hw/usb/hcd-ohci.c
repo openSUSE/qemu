@@ -1290,18 +1290,6 @@ static void ohci_frame_boundary(void *opaque)
  */
 static int ohci_bus_start(OHCIState *ohci)
 {
-    ohci->eof_timer = qemu_new_timer_ns(vm_clock,
-                    ohci_frame_boundary,
-                    ohci);
-
-    if (ohci->eof_timer == NULL) {
-        fprintf(stderr, "usb-ohci: %s: qemu_new_timer_ns failed\n", ohci->name);
-        /* TODO: Signal unrecoverable error */
-        return 0;
-    }
-
-    DPRINTF("usb-ohci: %s: USB Operational\n", ohci->name);
-
     ohci_sof(ohci);
 
     return 1;
@@ -1310,9 +1298,7 @@ static int ohci_bus_start(OHCIState *ohci)
 /* Stop sending SOF tokens on the bus */
 static void ohci_bus_stop(OHCIState *ohci)
 {
-    if (ohci->eof_timer)
-        qemu_del_timer(ohci->eof_timer);
-    ohci->eof_timer = NULL;
+    qemu_del_timer(ohci->eof_timer);
 }
 
 /* Sets a flag in a port status register but only set it if the port is
@@ -1838,6 +1824,9 @@ static int usb_ohci_init(OHCIState *ohci, DeviceState *dev,
 
     ohci->async_td = 0;
     qemu_register_reset(ohci_reset, ohci);
+    ohci->eof_timer = qemu_new_timer_ns(vm_clock,
+                    ohci_frame_boundary,
+                    ohci);
 
     return 0;
 }
