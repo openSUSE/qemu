@@ -1824,6 +1824,25 @@ static void do_key_event(VncState *vs, int down, int keycode, int sym)
         if (down)
             vs->modifiers_state[keycode] ^= 1;
         break;
+    default:
+        if (qemu_console_is_graphic(NULL)) {
+            /* record key 'down' info. Some client like tigervnc
+             * will send key down repeatedly if user pressing a
+             * a key for long time. In this case, we should add
+             * additional key up event before repeated key down,
+             * so that it can display the key multiple times.
+             */
+            if (down) {
+                if (vs->modifiers_state[keycode]) {
+                    /* add a key up event */
+                    do_key_event(vs, 0, keycode, sym);
+                }
+                vs->modifiers_state[keycode] = 1;
+            } else {
+                vs->modifiers_state[keycode] = 0;
+            }
+        }
+        break;
     }
 
     /* Turn off the lock state sync logic if the client support the led
