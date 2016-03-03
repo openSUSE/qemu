@@ -25,12 +25,22 @@
 #define RNG_BACKEND_CLASS(klass) \
     OBJECT_CLASS_CHECK(RngBackendClass, (klass), TYPE_RNG_BACKEND)
 
+typedef struct RngRequest RngRequest;
 typedef struct RngBackendClass RngBackendClass;
 typedef struct RngBackend RngBackend;
 
 typedef void (EntropyReceiveFunc)(void *opaque,
                                   const void *data,
                                   size_t size);
+
+struct RngRequest
+{
+    EntropyReceiveFunc *receive_entropy;
+    uint8_t *data;
+    void *opaque;
+    size_t offset;
+    size_t size;
+};
 
 struct RngBackendClass
 {
@@ -48,6 +58,7 @@ struct RngBackend
 
     /*< protected >*/
     bool opened;
+    GSList *requests;
 };
 
 /**
