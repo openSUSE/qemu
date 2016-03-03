@@ -81,6 +81,17 @@ void rng_backend_request_entropy(RngBackend *s, size_t size,
                                  void *opaque);
 
 /**
+ * rng_backend_free_request:
+ * @s: the backend that created the request
+ * @req: the request to finalize
+ *
+ * Used by child rng backend classes to finalize requests once they've been
+ * processed. The request is removed from the list of active requests and
+ * deleted.
+ */
+void rng_backend_finalize_request(RngBackend *s, RngRequest *req);
+
+/**
  * rng_backend_open:
  * @s: the backend to open
  * @errp: a pointer to return the #Error object if an error occurs.
