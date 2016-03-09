@@ -113,6 +113,7 @@ struct XenBlkDev {
     int                 requests_finished;
     unsigned int        max_requests;
 
+    gboolean            cache_unsafe;
     /* Persistent grants extension */
     gboolean            feature_discard;
     gboolean            feature_persistent;
@@ -947,6 +948,16 @@ static void blk_parse_discard(struct XenBlkDev *blkdev)
     }
 }
 
+static void blk_parse_cache_unsafe(struct XenBlkDev *blkdev)
+{
+    int enable;
+
+    blkdev->cache_unsafe = false;
+
+    if (xenstore_read_be_int(&blkdev->xendev, "suse-diskcache-disable-flush", &enable) == 0)
+	    blkdev->cache_unsafe = !!enable;
+}
+
 static int blk_init(struct XenDevice *xendev)
 {
     struct XenBlkDev *blkdev = container_of(xendev, struct XenBlkDev, xendev);
@@ -1028,6 +1039,7 @@ static int blk_init(struct XenDevice *xendev)
                           MAX_RING_PAGE_ORDER);
 
     blk_parse_discard(blkdev);
+    blk_parse_cache_unsafe(blkdev);
 
     g_free(directiosafe);
     return 0;
@@ -1082,6 +1094,9 @@ static int blk_connect(struct XenDevice *xendev)
     if (blkdev->feature_discard) {
         qflags |= BDRV_O_UNMAP;
     }
+
+    if (blkdev->cache_unsafe)
+        qflags |= BDRV_O_NO_FLUSH;
 
     /* init qemu block driver */
     index = (blkdev->xendev.dev - 202 * 256) / 16;
