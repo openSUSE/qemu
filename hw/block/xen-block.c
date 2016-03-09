@@ -874,6 +874,8 @@ static XenBlockDrive *xen_block_drive_create(const char *id,
     const char *mode = qdict_get_try_str(opts, "mode");
     const char *direct_io_safe = qdict_get_try_str(opts, "direct-io-safe");
     const char *discard_enable = qdict_get_try_str(opts, "discard-enable");
+    const char *suse_diskcache_disable_flush = qdict_get_try_str(opts,
+                                               "suse-diskcache-disable-flush");
     char *driver = NULL;
     char *filename = NULL;
     XenBlockDrive *drive = NULL;
@@ -951,6 +953,16 @@ static XenBlockDrive *xen_block_drive_create(const char *id,
         if (!qemu_strtoul(discard_enable, NULL, 2, &value) && !!value) {
             qdict_put_str(file_layer, "discard", "unmap");
             qdict_put_str(driver_layer, "discard", "unmap");
+        }
+    }
+
+    if (suse_diskcache_disable_flush) {
+        unsigned long value;
+        if (!qemu_strtoul(suse_diskcache_disable_flush, NULL, 2, &value) && !!value) {
+            QDict *cache_qdict = qdict_new();
+
+            qdict_put_bool(cache_qdict, "no-flush", true);
+            qdict_put_obj(file_layer, "cache", QOBJECT(cache_qdict));
         }
     }
 
