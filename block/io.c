@@ -2487,7 +2487,7 @@ static void coroutine_fn bdrv_discard_co_entry(void *opaque)
     rwco->ret = bdrv_co_discard(rwco->bs, rwco->sector_num, rwco->nb_sectors);
 }
 
-int coroutine_fn bdrv_co_discard(BlockDriverState *bs, int64_t sector_num,
+static int __bdrv_co_discard(BlockDriverState *bs, int64_t sector_num,
                                  int nb_sectors)
 {
     BdrvTrackedRequest req;
@@ -2566,6 +2566,26 @@ int coroutine_fn bdrv_co_discard(BlockDriverState *bs, int64_t sector_num,
     ret = 0;
 out:
     tracked_request_end(&req);
+    return ret;
+}
+
+int coroutine_fn bdrv_co_discard(BlockDriverState *bs, int64_t sector_num,
+                                 int nb_sectors)
+{
+    int num, ret;
+    int limit = BDRV_REQUEST_MAX_SECTORS;
+    int remaining = nb_sectors;
+    int64_t sector_offset = sector_num;
+
+    do {
+        num = remaining > limit ? limit : remaining;
+        ret = __bdrv_co_discard(bs, sector_offset, num);
+        if (ret < 0)
+            break;
+        remaining -= num;
+        sector_offset += num;
+    } while (remaining > 0);
+
     return ret;
 }
 
