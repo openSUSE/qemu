@@ -386,7 +386,7 @@ static void patch_instruction(VAPICROMState *s, CPUX86State *env, target_ulong i
 {
     VAPICHandlers *handlers;
     uint8_t opcode[2];
-    uint32_t imm32;
+    uint32_t imm32 = 0;
     target_ulong current_pc = 0;
     target_ulong current_cs_base = 0;
     int current_flags = 0;
