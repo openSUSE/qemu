@@ -55,6 +55,7 @@
 #include "exec/address-spaces.h"
 #include "hw/boards.h"
 #include "qemu/cutils.h"
+#include "hw/xen/xen.h"
 
 #include <zlib.h>
 
@@ -866,7 +867,10 @@ static void *rom_set_mr(Rom *rom, Object *owner, const char *name, bool ro)
     void *data;
 
     rom->mr = g_malloc(sizeof(*rom->mr));
-    memory_region_init_resizeable_ram(rom->mr, owner, name,
+    if (xen_enabled())
+        memory_region_init_ram(rom->mr, owner, name, rom->datasize, &error_fatal);
+    else
+        memory_region_init_resizeable_ram(rom->mr, owner, name,
                                       rom->datasize, rom->romsize,
                                       fw_cfg_resized,
                                       &error_fatal);
