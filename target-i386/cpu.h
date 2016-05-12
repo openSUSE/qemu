@@ -635,6 +635,11 @@ typedef uint32_t FeatureWordArray[FEATURE_WORDS];
 #define CPUID_MWAIT_IBE     (1U << 1) /* Interrupts can exit capability */
 #define CPUID_MWAIT_EMX     (1U << 0) /* enumeration supported */
 
+/* CPUID[0xB].ECX level types */
+#define CPUID_TOPOLOGY_LEVEL_INVALID  (0U << 8)
+#define CPUID_TOPOLOGY_LEVEL_SMT      (1U << 8)
+#define CPUID_TOPOLOGY_LEVEL_CORE     (2U << 8)
+
 #ifndef HYPERV_SPINLOCK_NEVER_RETRY
 #define HYPERV_SPINLOCK_NEVER_RETRY             0xFFFFFFFF
 #endif

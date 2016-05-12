@@ -115,6 +115,9 @@ typedef struct X86CPU {
      */
     bool enable_pmu;
 
+    /* Compatibility bits for old machine types: */
+    bool enable_cpuid_0xb;
+
     /* in order to simplify APIC support, we leave this pointer to the
        user */
     struct DeviceState *apic_state;
