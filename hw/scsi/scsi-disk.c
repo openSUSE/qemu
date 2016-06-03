@@ -349,7 +349,7 @@ static void scsi_do_read(SCSIDiskReq *r, int ret)
         n = scsi_init_iovec(r, SCSI_DMA_BUF_SIZE);
         block_acct_start(blk_get_stats(s->qdev.conf.blk), &r->acct,
                          n * BDRV_SECTOR_SIZE, BLOCK_ACCT_READ);
-        r->req.aiocb = sdc->dma_readv(r->sector, &r->qiov,
+        r->req.aiocb = sdc->dma_readv(r->sector << BDRV_SECTOR_BITS, &r->qiov,
                                       scsi_read_complete, r, r);
     }
 
