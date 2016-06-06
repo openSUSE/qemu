@@ -630,7 +630,7 @@ static int proxy_close(FsContext *ctx, V9fsFidOpenState *fs)
 
 static int proxy_closedir(FsContext *ctx, V9fsFidOpenState *fs)
 {
-    return closedir(fs->dir);
+    return closedir(fs->dir.stream);
 }
 
 static int proxy_open(FsContext *ctx, V9fsPath *fs_path,
@@ -649,14 +649,14 @@ static int proxy_opendir(FsContext *ctx,
 {
     int serrno, fd;
 
-    fs->dir = NULL;
+    fs->dir.stream = NULL;
     fd = v9fs_request(ctx->private, T_OPEN, NULL, "sd", fs_path, O_DIRECTORY);
     if (fd < 0) {
         errno = -fd;
         return -1;
     }
-    fs->dir = fdopendir(fd);
-    if (!fs->dir) {
+    fs->dir.stream = fdopendir(fd);
+    if (!fs->dir.stream) {
         serrno = errno;
         close(fd);
         errno = serrno;
@@ -667,24 +667,24 @@ static int proxy_opendir(FsContext *ctx,
 
 static void proxy_rewinddir(FsContext *ctx, V9fsFidOpenState *fs)
 {
-    return rewinddir(fs->dir);
+    rewinddir(fs->dir.stream);
 }
 
 static off_t proxy_telldir(FsContext *ctx, V9fsFidOpenState *fs)
 {
-    return telldir(fs->dir);
+    return telldir(fs->dir.stream);
 }
 
 static int proxy_readdir_r(FsContext *ctx, V9fsFidOpenState *fs,
                            struct dirent *entry,
                            struct dirent **result)
 {
-    return readdir_r(fs->dir, entry, result);
+    return readdir_r(fs->dir.stream, entry, result);
 }
 
 static void proxy_seekdir(FsContext *ctx, V9fsFidOpenState *fs, off_t off)
 {
-    return seekdir(fs->dir, off);
+    seekdir(fs->dir.stream, off);
 }
 
 static ssize_t proxy_preadv(FsContext *ctx, V9fsFidOpenState *fs,
@@ -790,7 +790,7 @@ static int proxy_fstat(FsContext *fs_ctx, int fid_type,
     int fd;
 
     if (fid_type == P9_FID_DIR) {
-        fd = dirfd(fs->dir);
+        fd = dirfd(fs->dir.stream);
     } else {
         fd = fs->fd;
     }
@@ -935,7 +935,7 @@ static int proxy_fsync(FsContext *ctx, int fid_type,
     int fd;
 
     if (fid_type == P9_FID_DIR) {
-        fd = dirfd(fs->dir);
+        fd = dirfd(fs->dir.stream);
     } else {
         fd = fs->fd;
     }
