@@ -314,6 +314,28 @@ static void xen_platform_ioport_writeb(void *opaque, hwaddr addr,
     case 0: /* Platform flags */
         platform_fixed_ioport_writeb(opaque, 0, (uint32_t)val);
         break;
+    case 4:
+        if (val == 1 && size == 1) {
+            /*
+             * SUSE unplug for Xenlinux
+             * xen-kmp used this since xen-3.0.4, instead the official protocol from xen-3.3+
+             * It did an unconditional "outl(1, (ioaddr + 4));"
+             * This approach was used until openSUSE 12.3, up to SLE11SP3 and in SLE10.
+             * Starting with openSUSE 13.1, SLE11SP4 and SLE12 the official protocol is used.
+             * pre VMDP 1.7 made use of 4 and 8 depending on how vmdp was configured.
+             * If VMDP was to control both disk and LAN it would use 4.
+             * If it controlled just disk or just LAN, it would use 8 below.
+             */
+            PCIDevice *pci_dev = PCI_DEVICE(s);
+            DPRINTF("unplug disks\n");
+            blk_drain_all();
+            blk_flush_all();
+            pci_unplug_disks(pci_dev->bus);
+            DPRINTF("unplug nics\n");
+            pci_unplug_nics(pci_dev->bus);
+            DPRINTF("done\n");
+        }
+        break;
     case 8:
         log_writeb(s, (uint32_t)val);
         break;
