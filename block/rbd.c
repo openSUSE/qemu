@@ -641,9 +641,9 @@ static int rbd_aio_flush_wrapper(rbd_image_t image,
 }
 
 static BlockAIOCB *rbd_start_aio(BlockDriverState *bs,
-                                 int64_t sector_num,
+                                 int64_t off,
                                  QEMUIOVector *qiov,
-                                 int nb_sectors,
+                                 int64_t size,
                                  BlockCompletionFunc *cb,
                                  void *opaque,
                                  RBDAIOCmd cmd)
@@ -651,7 +651,6 @@ static BlockAIOCB *rbd_start_aio(BlockDriverState *bs,
     RBDAIOCB *acb;
     RADOSCB *rcb = NULL;
     rbd_completion_t c;
-    int64_t off, size;
     char *buf;
     int r;
 
@@ -660,6 +659,7 @@ static BlockAIOCB *rbd_start_aio(BlockDriverState *bs,
     acb = qemu_aio_get(&rbd_aiocb_info, bs, cb, opaque);
     acb->cmd = cmd;
     acb->qiov = qiov;
+    assert(!qiov || qiov->size == size);
     if (cmd == RBD_AIO_DISCARD || cmd == RBD_AIO_FLUSH) {
         acb->bounce = NULL;
     } else {
@@ -678,9 +678,6 @@ static BlockAIOCB *rbd_start_aio(BlockDriverState *bs,
     }
 
     buf = acb->bounce;
-
-    off = sector_num * BDRV_SECTOR_SIZE;
-    size = nb_sectors * BDRV_SECTOR_SIZE;
 
     rcb = g_new(RADOSCB, 1);
     rcb->acb = acb;
@@ -731,7 +728,8 @@ static BlockAIOCB *qemu_rbd_aio_readv(BlockDriverState *bs,
                                       BlockCompletionFunc *cb,
                                       void *opaque)
 {
-    return rbd_start_aio(bs, sector_num, qiov, nb_sectors, cb, opaque,
+    return rbd_start_aio(bs, sector_num << BDRV_SECTOR_BITS, qiov,
+                         nb_sectors << BDRV_SECTOR_BITS, cb, opaque,
                          RBD_AIO_READ);
 }
 
@@ -742,7 +740,8 @@ static BlockAIOCB *qemu_rbd_aio_writev(BlockDriverState *bs,
                                        BlockCompletionFunc *cb,
                                        void *opaque)
 {
-    return rbd_start_aio(bs, sector_num, qiov, nb_sectors, cb, opaque,
+    return rbd_start_aio(bs, sector_num << BDRV_SECTOR_BITS, qiov,
+                         nb_sectors << BDRV_SECTOR_BITS, cb, opaque,
                          RBD_AIO_WRITE);
 }
 
@@ -931,7 +930,8 @@ static BlockAIOCB* qemu_rbd_aio_discard(BlockDriverState *bs,
                                         BlockCompletionFunc *cb,
                                         void *opaque)
 {
-    return rbd_start_aio(bs, sector_num, NULL, nb_sectors, cb, opaque,
+    return rbd_start_aio(bs, sector_num << BDRV_SECTOR_BITS, NULL,
+                         nb_sectors << BDRV_SECTOR_BITS, cb, opaque,
                          RBD_AIO_DISCARD);
 }
 #endif
