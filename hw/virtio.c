@@ -491,6 +491,11 @@ int virtqueue_pop(VirtQueue *vq, VirtQueueElement *elem)
     do {
         struct iovec *sg;
 
+        if (vring_desc_len(desc_pa, i) == 0) {
+            error_report("virtio: zero sized buffers are not allowed");
+            exit(1);
+        }
+
         if (vring_desc_flags(desc_pa, i) & VRING_DESC_F_WRITE) {
             if (elem->in_num >= ARRAY_SIZE(elem->in_sg)) {
                 error_report("Too many write descriptors in indirect table");
