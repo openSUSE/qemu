@@ -15,8 +15,6 @@
 
 #include "qemu/osdep.h"
 
-#include <glib.h>
-
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -111,7 +109,12 @@ static int parse_acl_file(const char *filename, ACLList *acl_list)
         *argend = 0;
 
         if (strcmp(cmd, "deny") == 0) {
-            acl_rule = g_malloc(sizeof(*acl_rule));
+            acl_rule = calloc(1, sizeof(*acl_rule));
+            if (!acl_rule) {
+                fclose(f);
+                errno = ENOMEM;
+                return -1;
+            }
             if (strcmp(arg, "all") == 0) {
                 acl_rule->type = ACL_DENY_ALL;
             } else {
@@ -120,7 +123,12 @@ static int parse_acl_file(const char *filename, ACLList *acl_list)
             }
             QSIMPLEQ_INSERT_TAIL(acl_list, acl_rule, entry);
         } else if (strcmp(cmd, "allow") == 0) {
-            acl_rule = g_malloc(sizeof(*acl_rule));
+            acl_rule = calloc(1, sizeof(*acl_rule));
+            if (!acl_rule) {
+                fclose(f);
+                errno = ENOMEM;
+                return -1;
+            }
             if (strcmp(arg, "all") == 0) {
                 acl_rule->type = ACL_ALLOW_ALL;
             } else {
@@ -414,6 +422,17 @@ int main(int argc, char **argv)
         goto cleanup;
     }
 
+#ifndef CONFIG_LIBCAP
+    /* avoid sending the fd as root user if running suid to not fool
+     * peer credentials to daemons that dont expect that
+     */
+    if (setuid(getuid()) < 0) {
+        fprintf(stderr, "Failed to drop privileges.\n");
+        ret = EXIT_FAILURE;
+        goto cleanup;
+    }
+#endif
+
     /* write fd to the domain socket */
     if (send_fd(unixfd, fd) == -1) {
         fprintf(stderr, "failed to write fd to unix socket: %s\n",
@@ -435,7 +454,7 @@ cleanup:
     }
     while ((acl_rule = QSIMPLEQ_FIRST(&acl_list)) != NULL) {
         QSIMPLEQ_REMOVE_HEAD(&acl_list, entry);
-        g_free(acl_rule);
+        free(acl_rule);
     }
 
     return ret;
