@@ -323,7 +323,7 @@ BINFMT_SET=qemu_register_interpreter
 SYSTEMDDIR="/etc/binfmt.d"
 DEBIANDIR="/usr/share/binfmts"
 
-QEMU_PATH=/usr/local/bin
+QEMU_PATH=/usr/bin
 CREDENTIAL=no
 PERSISTENT=no
 QEMU_SUFFIX=""
