@@ -264,7 +264,7 @@ BINFMT_SET=qemu_register_interpreter
 SYSTEMDDIR="/etc/binfmt.d"
 DEBIANDIR="/usr/share/binfmts"
 
-QEMU_PATH=/usr/local/bin
+QEMU_PATH=/usr/bin
 FLAGS=""
 
 options=$(getopt -o ds:Q:e:hc: -l debian,systemd:,qemu-path:,exportdir:,help,credential: -- "$@")
