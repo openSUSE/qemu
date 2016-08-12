@@ -206,7 +206,7 @@ qemu_check_systemd() {
 }
 
 qemu_generate_register() {
-    echo ":qemu-$cpu:M::$magic:$mask:$qemu:$FLAGS"
+    echo ":qemu-$cpu:M::$magic:$mask:$qemu:P$FLAGS"
 }
 
 qemu_register_interpreter() {
@@ -247,9 +247,9 @@ qemu_set_binfmts() {
             continue
         fi
 
-        qemu="$QEMU_PATH/qemu-$cpu"
+        qemu="$QEMU_PATH/qemu-$cpu-binfmt"
         if [ "$cpu" = "i486" ] ; then
-            qemu="$QEMU_PATH/qemu-i386"
+            qemu="$QEMU_PATH/qemu-i386-binfmt"
         fi
 
         if [ "$host_family" != "$family" ] ; then
