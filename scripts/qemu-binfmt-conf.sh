@@ -262,7 +262,7 @@ qemu_generate_register() {
         flags="${flags}F"
     fi
 
-    echo ":qemu-$cpu:M::$magic:$mask:$qemu:$flags"
+    echo ":qemu-$cpu:M::$magic:$mask:$qemu:P$flags"
 }
 
 qemu_register_interpreter() {
@@ -301,9 +301,9 @@ qemu_set_binfmts() {
             continue
         fi
 
-        qemu="$QEMU_PATH/qemu-$cpu"
+        qemu="$QEMU_PATH/qemu-$cpu-binfmt"
         if [ "$cpu" = "i486" ] ; then
-            qemu="$QEMU_PATH/qemu-i386"
+            qemu="$QEMU_PATH/qemu-i386-binfmt"
         fi
 
         qemu="$qemu$QEMU_SUFFIX"
