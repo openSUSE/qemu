@@ -957,6 +957,21 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f)
                 return -1;
 	}
         vdev->vq[i].used_idx = vring_used_idx(&vdev->vq[i]);
+
+        /*
+         * Some devices migrate VirtQueueElements that have been popped
+         * from the avail ring but not yet returned to the used ring.
+         */
+        vdev->vq[i].inuse = vdev->vq[i].last_avail_idx -
+                            vdev->vq[i].used_idx;
+        if (vdev->vq[i].inuse > vdev->vq[i].vring.num) {
+            error_report("VQ %d size 0x%x < last_avail_idx 0x%x - "
+                         "used_idx 0x%x",
+                         i, vdev->vq[i].vring.num,
+                         vdev->vq[i].last_avail_idx,
+                         vdev->vq[i].used_idx);
+            return -1;
+        }
         if (vdev->binding->load_queue) {
             ret = vdev->binding->load_queue(vdev->binding_opaque, i, f);
             if (ret)
