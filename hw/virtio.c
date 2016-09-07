@@ -632,6 +632,7 @@ void virtio_reset(void *opaque)
         vdev->vq[i].signalled_used = 0;
         vdev->vq[i].signalled_used_valid = false;
         vdev->vq[i].notification = true;
+        vdev->vq[i].inuse = 0;
     }
 }
 
