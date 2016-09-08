@@ -9301,7 +9301,7 @@ static abi_long do_syscall1(void *cpu_env, int num, abi_ulong arg1,
             {
                 struct timespec ts, *pts;
 
-                if (arg3 >= 0) {
+                if ((abi_long)arg3 >= 0) {
                     /* Convert ms to secs, ns */
                     ts.tv_sec = arg3 / 1000;
                     ts.tv_nsec = (arg3 % 1000) * 1000000LL;
