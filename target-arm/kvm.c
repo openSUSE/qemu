@@ -529,7 +529,6 @@ MemTxAttrs kvm_arch_post_run(CPUState *cs, struct kvm_run *run)
     return MEMTXATTRS_UNSPECIFIED;
 }
 
-
 int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
 {
     int ret = 0;
@@ -539,6 +538,23 @@ int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
         if (kvm_arm_handle_debug(cs, &run->debug.arch)) {
             ret = EXCP_DEBUG;
         } /* otherwise return to guest */
+        break;
+    case KVM_EXIT_ARM_TIMER:
+        /* We only support the vtimer today */
+        if (run->arm_timer.timesource != KVM_ARM_TIMER_VTIMER) {
+            return -EINVAL;
+        }
+
+        /*
+         * We ask the kernel to not tell us about pending virtual timer irqs,
+         * so that we can process the IRQ until we get an EOI for it. Once the
+         * EOI hits, we unset and unmask the interrupt again and if it is still
+         * pending, we set the line high again
+         */
+        run->request_interrupt_window = KVM_IRQWINDOW_VTIMER;
+
+        /* Internally trigger virtual timer IRQ */
+        qemu_set_irq(ARM_CPU(cs)->gt_timer_outputs[GTIMER_VIRT], 1);
         break;
     default:
         qemu_log_mask(LOG_UNIMP, "%s: un-handled exit reason %d\n",
@@ -625,4 +641,15 @@ int kvm_arch_fixup_msi_route(struct kvm_irq_routing_entry *route,
 int kvm_arch_msi_data_to_gsi(uint32_t data)
 {
     return (data - 32) & 0xffff;
+}
+
+void kvm_arm_eoi_notify(int cpu)
+{
+    CPUState *cs;
+
+    cs = qemu_get_cpu(cpu);
+
+    /* Disable vtimer - if it's still pending we get notified again */
+    cs->kvm_run->request_interrupt_window &= ~KVM_ARM_TIMER_VTIMER;
+    qemu_set_irq(ARM_CPU(cs)->gt_timer_outputs[GTIMER_VIRT], 0);
 }

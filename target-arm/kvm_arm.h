@@ -248,4 +248,15 @@ struct kvm_guest_debug_arch;
 
 void kvm_arm_copy_hw_debug_data(struct kvm_guest_debug_arch *ptr);
 
+/**
+ * kvm_arm_eoi_notify:
+ *
+ * @cpu: CPU index the EOI is for
+ *
+ * Notify KVM that we're done processing an interrupt. This is
+ * used to unmask any pending timer interrupts and potentially
+ * learn about the fact that the level is still high.
+ */
+void kvm_arm_eoi_notify(int cpu);
+
 #endif

@@ -514,6 +514,24 @@ static void create_gic(VirtBoardInfo *vbi, qemu_irq *pic, int type, bool secure)
     if (type == 2) {
         create_v2m(vbi, pic);
     }
+
+#ifdef CONFIG_KVM
+    if (kvm_enabled() && !kvm_irqchip_in_kernel()) {
+        for (i = 0; i < smp_cpus; i++) {
+            CPUState *cs = qemu_get_cpu(i);
+            int ret;
+
+            ret = kvm_vcpu_enable_cap(cs, KVM_CAP_ARM_TIMER, 0,
+                                      KVM_ARM_TIMER_VTIMER);
+
+            if (ret) {
+                error_report("KVM with user space irqchip only works when the "
+                             "host kernel supports KVM_CAP_ARM_TIMER");
+                exit(1);
+            }
+        }
+    }
+#endif
 }
 
 static void create_uart(const VirtBoardInfo *vbi, qemu_irq *pic, int uart,

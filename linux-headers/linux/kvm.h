@@ -205,6 +205,7 @@ struct kvm_hyperv_exit {
 #define KVM_EXIT_S390_STSI        25
 #define KVM_EXIT_IOAPIC_EOI       26
 #define KVM_EXIT_HYPERV           27
+#define KVM_EXIT_ARM_TIMER        28
 
 /* For KVM_EXIT_INTERNAL_ERROR */
 /* Emulate instruction failed. */
@@ -361,6 +362,10 @@ struct kvm_run {
 		} eoi;
 		/* KVM_EXIT_HYPERV */
 		struct kvm_hyperv_exit hyperv;
+		/* KVM_EXIT_ARM_TIMER */
+		struct {
+			__u8 timesource;
+		} arm_timer;
 		/* Fix the size of the union. */
 		char padding[256];
 	};
@@ -865,6 +870,7 @@ struct kvm_ppc_smmu_info {
 #define KVM_CAP_SPAPR_TCE_64 125
 #define KVM_CAP_ARM_PMU_V3 126
 #define KVM_CAP_VCPU_ATTRIBUTES 127
+#define KVM_CAP_ARM_TIMER 133
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
@@ -1311,5 +1317,13 @@ struct kvm_assigned_msix_entry {
 	__u16 entry; /* The index of entry in the MSI-X table */
 	__u16 padding[3];
 };
+
+/* Available with KVM_CAP_ARM_TIMER */
+
+/* Bits for run->request_interrupt_window */
+#define KVM_IRQWINDOW_VTIMER           (1 << 0)
+
+/* Bits for run->arm_timer.timesource */
+#define KVM_ARM_TIMER_VTIMER           (1 << 0)
 
 #endif /* __LINUX_KVM_H */
