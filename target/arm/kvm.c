@@ -174,6 +174,12 @@ int kvm_arch_init(MachineState *ms, KVMState *s)
      */
     kvm_async_interrupts_allowed = true;
 
+    /*
+     * PSCI wakes up secondary cores, so we always need to
+     * have vCPUs waiting in kernel space
+     */
+    kvm_halt_in_kernel_allowed = true;
+
     cap_has_mp_state = kvm_check_extension(s, KVM_CAP_MP_STATE);
 
     type_register_static(&host_arm_cpu_type_info);
@@ -528,9 +534,32 @@ void kvm_arch_pre_run(CPUState *cs, struct kvm_run *run)
 
 MemTxAttrs kvm_arch_post_run(CPUState *cs, struct kvm_run *run)
 {
+    ARMCPU *cpu;
+
+    if (kvm_irqchip_in_kernel()) {
+        /*
+         * We only need to sync timer states with user-space interrupt
+         * controllers, so return early and save cycles if we don't.
+         */
+        return MEMTXATTRS_UNSPECIFIED;
+    }
+
+    cpu = ARM_CPU(cs);
+
+    /* Synchronize our internal vtimer irq line with the kvm one */
+    if (run->s.regs.device_irq_level != cpu->device_irq_level) {
+        qemu_mutex_lock_iothread();
+        qemu_set_irq(cpu->gt_timer_outputs[GTIMER_VIRT],
+                      run->s.regs.device_irq_level & KVM_ARM_DEV_EL1_VTIMER);
+        qemu_set_irq(cpu->gt_timer_outputs[GTIMER_PHYS],
+                     run->s.regs.device_irq_level & KVM_ARM_DEV_EL1_PTIMER);
+        /* TODO: Handle changes in PMU as well */
+        cpu->device_irq_level = run->s.regs.device_irq_level;
+        qemu_mutex_unlock_iothread();
+    }
+
     return MEMTXATTRS_UNSPECIFIED;
 }
-
 
 int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
 {
