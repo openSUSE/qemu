@@ -17,6 +17,7 @@
 #include "qemu/cutils.h"
 #include "monitor/monitor.h"
 #include "sysemu/sysemu.h"
+#include "qemu/uuid.h"
 #include "qmp-commands.h"
 #include "sysemu/char.h"
 #include "ui/qemu-spice.h"

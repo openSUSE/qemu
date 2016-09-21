@@ -25,6 +25,7 @@
 #include "qemu/cutils.h"
 #include "qemu/help_option.h"
 #include <sys/resource.h>
+#include "qemu/uuid.h"
 
 #ifdef CONFIG_SECCOMP
 #include "sysemu/seccomp.h"
