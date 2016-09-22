@@ -21,6 +21,7 @@ do { printf("mcf_fec: " fmt , ## __VA_ARGS__); } while (0)
 #define DPRINTF(fmt, ...) do {} while(0)
 #endif
 
+#define FEC_MAX_DESC 1024
 #define FEC_MAX_FRAME_SIZE 2032
 
 typedef struct {
@@ -147,7 +148,7 @@ static void mcf_fec_do_tx(mcf_fec_state *s)
     uint32_t addr;
     mcf_fec_bd bd;
     int frame_size;
-    int len;
+    int len, descnt = 0;
     uint8_t frame[FEC_MAX_FRAME_SIZE];
     uint8_t *ptr;
 
@@ -155,7 +156,7 @@ static void mcf_fec_do_tx(mcf_fec_state *s)
     ptr = frame;
     frame_size = 0;
     addr = s->tx_descriptor;
-    while (1) {
+    while (descnt++ < FEC_MAX_DESC) {
         mcf_fec_read_bd(&bd, addr);
         DPRINTF("tx_bd %x flags %04x len %d data %08x\n",
                 addr, bd.flags, bd.length, bd.data);
