@@ -126,7 +126,6 @@ BlockAIOCB *blk_aio_ioctl(BlockBackend *blk, unsigned long int req, void *buf,
 int blk_co_discard(BlockBackend *blk, int64_t sector_num, int nb_sectors);
 int blk_co_flush(BlockBackend *blk);
 int blk_flush(BlockBackend *blk);
-int blk_flush_all(void);
 int blk_commit_all(void);
 void blk_drain(BlockBackend *blk);
 void blk_drain_all(void);

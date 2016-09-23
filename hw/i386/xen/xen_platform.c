@@ -139,8 +139,6 @@ static void platform_fixed_ioport_writew(void *opaque, uint32_t addr, uint32_t v
            devices, and bit 2 the non-primary-master IDE devices. */
         if (val & UNPLUG_ALL_IDE_DISKS) {
             DPRINTF("unplug disks\n");
-            blk_drain_all();
-            blk_flush_all();
             pci_unplug_disks(pci_dev->bus);
         }
         if (val & UNPLUG_ALL_NICS) {
@@ -333,8 +331,6 @@ static void xen_platform_ioport_writeb(void *opaque, hwaddr addr,
              */
             PCIDevice *pci_dev = PCI_DEVICE(s);
             DPRINTF("unplug disks\n");
-            blk_drain_all();
-            blk_flush_all();
             pci_unplug_disks(pci_dev->bus);
             DPRINTF("unplug nics\n");
             pci_unplug_nics(pci_dev->bus);
