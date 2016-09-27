@@ -7014,7 +7014,7 @@ int host_to_target_waitstatus(int status)
 static int open_self_cmdline(void *cpu_env, int fd)
 {
     int fd_orig = -1;
-    bool word_skipped = false;
+    int skip_words = 3;
 
     fd_orig = open("/proc/self/cmdline", O_RDONLY);
     if (fd_orig < 0) {
@@ -7036,19 +7036,29 @@ static int open_self_cmdline(void *cpu_env, int fd)
             break;
         }
 
-        if (!word_skipped) {
+        while (skip_words) {
             /* Skip the first string, which is the path to qemu-*-static
                instead of the actual command. */
-            cp_buf = memchr(buf, 0, nb_read);
+            char *p = cp_buf;
+            cp_buf = memchr(p, 0, nb_read);
             if (cp_buf) {
                 /* Null byte found, skip one string */
                 cp_buf++;
-                nb_read -= cp_buf - buf;
-                word_skipped = true;
+                nb_read -= cp_buf - p;
+                skip_words--;
+                if (skip_words == 2) {
+                    /* Check for presence of -0 flag.  */
+                    if (nb_read > 0 && cp_buf[0] != '-' ||
+                        nb_read > 1 && cp_buf[1] != '0') {
+                        skip_words = 0;
+                    }
+                }
+            } else {
+                break;
             }
         }
 
-        if (word_skipped) {
+        if (skip_words == 0) {
             if (write(fd, cp_buf, nb_read) != nb_read) {
                 int e = errno;
                 close(fd_orig);
