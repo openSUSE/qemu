@@ -1864,6 +1864,7 @@ static void pci_nic_uninit(PCIDevice *pci_dev)
     memory_region_destroy(&s->io_bar);
     memory_region_destroy(&s->flash_bar);
     vmstate_unregister(&pci_dev->qdev, s->vmstate, s);
+    g_free(s->vmstate);
     eeprom93xx_free(&pci_dev->qdev, s->eeprom);
     qemu_del_nic(s->nic);
 }
