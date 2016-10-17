@@ -3252,6 +3252,7 @@ static void v9fs_xattrcreate(void *opaque)
     xattr_fidp->fs.xattr.flags = flags;
     v9fs_string_init(&xattr_fidp->fs.xattr.name);
     v9fs_string_copy(&xattr_fidp->fs.xattr.name, &name);
+    g_free(xattr_fidp->fs.xattr.value);
     xattr_fidp->fs.xattr.value = g_malloc0(size);
     err = offset;
     put_fid(pdu, file_fidp);
