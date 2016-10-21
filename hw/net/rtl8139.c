@@ -2379,7 +2379,7 @@ static void rtl8139_cplus_transmit(RTL8139State *s)
 {
     int txcount = 0;
 
-    while (rtl8139_cplus_transmit_one(s))
+    while (txcount < 64 && rtl8139_cplus_transmit_one(s))
     {
         ++txcount;
     }
