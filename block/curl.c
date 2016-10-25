@@ -99,12 +99,17 @@ typedef struct CURLAIOCB {
     size_t end;
 } CURLAIOCB;
 
+typedef struct CURLSocket {
+    int fd;
+    QLIST_ENTRY(CURLSocket) next;
+} CURLSocket;
+
 typedef struct CURLState
 {
     struct BDRVCURLState *s;
     CURLAIOCB *acb[CURL_NUM_ACB];
     CURL *curl;
-    curl_socket_t sock_fd;
+    QLIST_HEAD(, CURLSocket) sockets;
     char *orig_buf;
     size_t buf_start;
     size_t buf_off;
@@ -158,11 +163,28 @@ static int curl_sock_cb(CURL *curl, curl_socket_t fd, int action,
 {
     BDRVCURLState *s;
     CURLState *state = NULL;
+    CURLSocket *socket;
+
     curl_easy_getinfo(curl, CURLINFO_PRIVATE, (char **)&state);
-    state->sock_fd = fd;
     s = state->s;
 
-    DPRINTF("CURL (AIO): Sock action %d on fd %d\n", action, fd);
+    QLIST_FOREACH(socket, &state->sockets, next) {
+        if (socket->fd == fd) {
+            if (action == CURL_POLL_REMOVE) {
+                QLIST_REMOVE(socket, next);
+                g_free(socket);
+            }
+            break;
+        }
+    }
+    if (!socket) {
+        socket = g_new0(CURLSocket, 1);
+        socket->fd = fd;
+        QLIST_INSERT_HEAD(&state->sockets, socket, next);
+    }
+    socket = NULL;
+
+    DPRINTF("CURL (AIO): Sock action %d on fd %d\n", action, (int)fd);
     switch (action) {
         case CURL_POLL_IN:
             aio_set_fd_handler(s->aio_context, fd, false,
@@ -349,6 +371,7 @@ static void curl_multi_check_completion(BDRVCURLState *s)
 static void curl_multi_do(void *arg)
 {
     CURLState *s = (CURLState *)arg;
+    CURLSocket *socket, *next_socket;
     int running;
     int r;
 
@@ -356,10 +379,13 @@ static void curl_multi_do(void *arg)
         return;
     }
 
-    do {
-        r = curl_multi_socket_action(s->s->multi, s->sock_fd, 0, &running);
-    } while(r == CURLM_CALL_MULTI_PERFORM);
-
+    /* Need to use _SAFE because curl_multi_socket_action() may trigger
+     * curl_sock_cb() which might modify this list */
+    QLIST_FOREACH_SAFE(socket, &s->sockets, next, next_socket) {
+        do {
+            r = curl_multi_socket_action(s->s->multi, socket->fd, 0, &running);
+        } while (r == CURLM_CALL_MULTI_PERFORM);
+    }
 }
 
 static void curl_multi_read(void *arg)
@@ -463,6 +489,7 @@ static CURLState *curl_init_state(BlockDriverState *bs, BDRVCURLState *s)
 #endif
     }
 
+    QLIST_INIT(&state->sockets);
     state->s = s;
 
     return state;
@@ -472,6 +499,14 @@ static void curl_clean_state(CURLState *s)
 {
     if (s->s->multi)
         curl_multi_remove_handle(s->s->multi, s->curl);
+
+    while (!QLIST_EMPTY(&s->sockets)) {
+        CURLSocket *socket = QLIST_FIRST(&s->sockets);
+
+        QLIST_REMOVE(socket, next);
+        g_free(socket);
+    }
+
     s->in_use = 0;
 }
 
