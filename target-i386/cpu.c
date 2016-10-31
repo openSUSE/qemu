@@ -149,6 +149,17 @@ static const char *cpuid_7_0_ebx_feature_name[] = {
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 };
 
+static const char *cpuid_7_0_edx_feature_name[] = {
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+};
+
 typedef struct FeatureWordInfo {
     const char **feat_names;
     uint32_t cpuid_eax; /* Input EAX for CPUID */
@@ -187,6 +198,10 @@ static FeatureWordInfo feature_word_info[FEATURE_WORDS] = {
     [FEAT_7_0_EBX] = {
         .feat_names = cpuid_7_0_ebx_feature_name,
         .cpuid_eax = 7, .cpuid_reg = R_EBX,
+    },
+    [FEAT_7_0_EDX] = {
+        .feat_names = cpuid_7_0_edx_feature_name,
+        .cpuid_eax = 7, .cpuid_reg = R_EDX,
     },
 };
 
@@ -373,6 +388,8 @@ typedef struct x86_def_t {
     uint32_t xlevel2;
     /* The feature bits on CPUID[EAX=7,ECX=0].EBX */
     uint32_t cpuid_7_0_ebx_features;
+    /* The feature bits on CPUID[EAX=7,ECX=0].EDX */
+    uint32_t cpuid_7_0_edx_features;
 } x86_def_t;
 
 #define I486_FEATURES (CPUID_FP87 | CPUID_VME | CPUID_PSE)
@@ -412,6 +429,7 @@ typedef struct x86_def_t {
           CPUID_EXT3_CR8LEG | CPUID_EXT3_ABM | CPUID_EXT3_SSE4A)
 #define TCG_SVM_FEATURES 0
 #define TCG_7_0_EBX_FEATURES (CPUID_7_0_EBX_SMEP | CPUID_7_0_EBX_SMAP)
+#define TCG_7_0_EDX_FEATURES 0
 
 /* built-in CPU model definitions
  */
@@ -924,8 +942,11 @@ static void kvm_cpu_fill_host(x86_def_t *x86_cpu_def)
     if (x86_cpu_def->level >= 7) {
         x86_cpu_def->cpuid_7_0_ebx_features =
                     kvm_arch_get_supported_cpuid(s, 0x7, 0, R_EBX);
+        x86_cpu_def->cpuid_7_0_edx_features =
+                    kvm_arch_get_supported_cpuid(s, 0x7, 0, R_EDX);
     } else {
         x86_cpu_def->cpuid_7_0_ebx_features = 0;
+        x86_cpu_def->cpuid_7_0_edx_features = 0;
     }
 
     x86_cpu_def->xlevel = kvm_arch_get_supported_cpuid(s, 0x80000000, 0, R_EAX);
@@ -1001,6 +1022,8 @@ static int kvm_check_features_against_host(X86CPU *cpu)
             FEAT_C000_0001_EDX },
         {&env->cpuid_7_0_ebx_features, &host_def.cpuid_7_0_ebx_features,
             FEAT_7_0_EBX },
+        {&env->cpuid_7_0_edx_features, &host_def.cpuid_7_0_edx_features,
+            FEAT_7_0_EDX },
         {&env->cpuid_svm_features, &host_def.svm_features,
             FEAT_SVM },
         {&env->cpuid_kvm_features, &host_def.kvm_features,
@@ -1408,6 +1431,7 @@ static void cpu_x86_parse_featurestr(X86CPU *cpu, char *features, Error **errp)
     env->cpuid_kvm_features |= plus_features[FEAT_KVM];
     env->cpuid_svm_features |= plus_features[FEAT_SVM];
     env->cpuid_7_0_ebx_features |= plus_features[FEAT_7_0_EBX];
+    env->cpuid_7_0_edx_features |= plus_features[FEAT_7_0_EDX];
     env->cpuid_features &= ~minus_features[FEAT_1_EDX];
     env->cpuid_ext_features &= ~minus_features[FEAT_1_ECX];
     env->cpuid_ext2_features &= ~minus_features[FEAT_8000_0001_EDX];
@@ -1416,6 +1440,7 @@ static void cpu_x86_parse_featurestr(X86CPU *cpu, char *features, Error **errp)
     env->cpuid_kvm_features &= ~minus_features[FEAT_KVM];
     env->cpuid_svm_features &= ~minus_features[FEAT_SVM];
     env->cpuid_7_0_ebx_features &= ~minus_features[FEAT_7_0_EBX];
+    env->cpuid_7_0_edx_features &= ~minus_features[FEAT_7_0_EDX];
 
 out:
     return;
@@ -1519,6 +1544,8 @@ static void filter_features_for_kvm(X86CPU *cpu)
         kvm_arch_get_supported_cpuid(s, 0x8000000A, 0, R_EDX);
     env->cpuid_7_0_ebx_features &=
         kvm_arch_get_supported_cpuid(s, 7, 0, R_EBX);
+    env->cpuid_7_0_edx_features &=
+        kvm_arch_get_supported_cpuid(s, 7, 0, R_EDX);
     env->cpuid_kvm_features &=
         kvm_arch_get_supported_cpuid(s, KVM_CPUID_FEATURES, 0, R_EAX);
     env->cpuid_ext4_features &=
@@ -1569,6 +1596,7 @@ int cpu_x86_register(X86CPU *cpu, const char *cpu_model)
     env->cpuid_svm_features = def->svm_features;
     env->cpuid_ext4_features = def->ext4_features;
     env->cpuid_7_0_ebx_features = def->cpuid_7_0_ebx_features;
+    env->cpuid_7_0_edx_features = def->cpuid_7_0_edx_features;
     env->cpuid_xlevel2 = def->xlevel2;
 
     object_property_set_str(OBJECT(cpu), def->model_id, "model-id", &error);
@@ -1737,7 +1765,7 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
             *eax = 0; /* Maximum ECX value for sub-leaves */
             *ebx = env->cpuid_7_0_ebx_features; /* Feature flags */
             *ecx = 0; /* Reserved */
-            *edx = 0; /* Reserved */
+            *edx = env->cpuid_7_0_edx_features; /* Feature flags */
         } else {
             *eax = 0;
             *ebx = 0;
@@ -2091,6 +2119,9 @@ void x86_cpu_realize(Object *obj, Error **errp)
     if (env->cpuid_7_0_ebx_features && env->cpuid_level < 7) {
         env->cpuid_level = 7;
     }
+    if (env->cpuid_7_0_edx_features && env->cpuid_level < 7) {
+        env->cpuid_level = 7;
+    }
 
     /* On AMD CPUs, some CPUID[8000_0001].EDX bits must match the bits on
      * CPUID[1].EDX.
@@ -2113,6 +2144,7 @@ void x86_cpu_realize(Object *obj, Error **errp)
             );
         env->cpuid_ext3_features &= TCG_EXT3_FEATURES;
         env->cpuid_svm_features &= TCG_SVM_FEATURES;
+        env->cpuid_7_0_edx_features &= TCG_7_0_EDX_FEATURES;
     } else {
         if (check_cpuid && kvm_check_features_against_host(cpu)
             && enforce_cpuid) {
