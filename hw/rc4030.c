@@ -377,7 +377,7 @@ static void rc4030_writel(void *opaque, hwaddr addr, uint32_t val)
         break;
     /* Interval timer reload */
     case 0x0228:
-        s->itr = val;
+        s->itr = val & 0x01FF;
         qemu_irq_lower(s->timer_irq);
         set_next_tick(s);
         break;
