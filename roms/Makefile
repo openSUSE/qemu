@@ -51,6 +51,12 @@ SEABIOS_EXTRAVERSION="-prebuilt.qemu.org"
 #
 EDK2_EFIROM = edk2/BaseTools/Source/C/bin/EfiRom
 
+# NB: Certain SUSE qemu subpackages use date information, but we want
+#  reproducible builds, so we use a pre-determined timestamp, rather
+#  than the current timestamp to acheive consistent results build to
+#  build.
+PACKAGING_TIMESTAMP = $(shell date -r ../VERSION +%s)
+
 default help:
 	@echo "nothing is build by default"
 	@echo "available build targets:"
@@ -101,7 +107,7 @@ build-seabios-config-%: config.%
 
 .PHONY: sgabios skiboot
 sgabios:
-	$(MAKE) -C sgabios
+	$(MAKE) -C sgabios PACKAGING_TIMESTAMP=$(PACKAGING_TIMESTAMP)
 	cp sgabios/sgabios.bin ../pc-bios
 
 
@@ -121,11 +127,13 @@ efi-rom-%: build-pxe-roms build-efi-roms edk2-basetools
 
 build-pxe-roms:
 	$(MAKE) -C ipxe/src CONFIG=qemu \
+		PACKAGING_TIMESTAMP=$(PACKAGING_TIMESTAMP) \
 		CROSS_COMPILE=$(x86_64_cross_prefix) \
 		$(patsubst %,bin/%.rom,$(pxerom_targets))
 
 build-efi-roms: build-pxe-roms
 	$(MAKE) -C ipxe/src CONFIG=qemu \
+		PACKAGING_TIMESTAMP=$(PACKAGING_TIMESTAMP) \
 		CROSS_COMPILE=$(x86_64_cross_prefix) \
 		$(patsubst %,bin-i386-efi/%.efidrv,$(pxerom_targets)) \
 		$(patsubst %,bin-x86_64-efi/%.efidrv,$(pxerom_targets))
@@ -148,7 +156,9 @@ edk2-basetools:
 		EXTRA_LDFLAGS='$(EDK2_BASETOOLS_LDFLAGS)'
 
 slof:
-	$(MAKE) -C SLOF CROSS=$(powerpc64_cross_prefix) qemu
+	$(MAKE) -C SLOF CROSS=$(powerpc64_cross_prefix) \
+		PACKAGING_TIMESTAMP=$(PACKAGING_TIMESTAMP) \
+		qemu
 	cp SLOF/boot_rom.bin ../pc-bios/slof.bin
 
 u-boot.e500:
