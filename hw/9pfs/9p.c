@@ -3368,6 +3368,9 @@ int v9fs_device_realize_common(V9fsState *s, Error **errp)
     rc = 0;
 out:
     if (rc) {
+        if (s->ops->cleanup && s->ctx.private) {
+            s->ops->cleanup(&s->ctx);
+        }
         g_free(s->ctx.fs_root);
         g_free(s->tag);
         v9fs_path_free(&path);
@@ -3377,6 +3380,9 @@ out:
 
 void v9fs_device_unrealize_common(V9fsState *s, Error **errp)
 {
+    if (s->ops->cleanup) {
+        s->ops->cleanup(&s->ctx);
+    }
     g_free(s->ctx.fs_root);
     g_free(s->tag);
 }
