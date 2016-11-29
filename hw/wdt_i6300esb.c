@@ -416,6 +416,8 @@ static void i6300esb_exit(PCIDevice *dev)
     I6300State *d = DO_UPCAST(I6300State, dev, dev);
 
     memory_region_destroy(&d->io_mem);
+    qemu_del_timer(d->timer);
+    qemu_free_timer(d->timer);
 }
 
 static WatchdogTimerModel model = {
