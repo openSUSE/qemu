@@ -3,6 +3,8 @@
 include pci.mak
 include sound.mak
 include usb.mak
+CONFIG_QXL=$(CONFIG_SPICE)
+CONFIG_VIRTIO_VGA=y
 CONFIG_ISA_MMIO=y
 CONFIG_ESCC=y
 CONFIG_M48T59=y
