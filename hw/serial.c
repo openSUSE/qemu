@@ -696,6 +696,13 @@ void serial_init_core(SerialState *s)
 void serial_exit_core(SerialState *s)
 {
     qemu_chr_add_handlers(s->chr, NULL, NULL, NULL, NULL);
+
+    qemu_del_timer(s->modem_status_poll);
+    qemu_free_timer(s->modem_status_poll);
+
+    qemu_del_timer(s->fifo_timeout_timer);
+    qemu_free_timer(s->fifo_timeout_timer);
+
     qemu_unregister_reset(serial_reset, s);
 }
 
