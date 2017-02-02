@@ -385,6 +385,7 @@ typedef struct XHCIEPContext {
     dma_addr_t pctx;
     unsigned int max_psize;
     uint32_t state;
+    uint32_t kick_active;
 
     /* iso xfer scheduling */
     unsigned int interval;
@@ -1744,7 +1745,6 @@ static void xhci_kick_ep(XHCIState *xhci, unsigned int slotid, unsigned int epid
     int length;
     int i;
 
-    trace_usb_xhci_ep_kick(slotid, epid);
     assert(slotid >= 1 && slotid <= xhci->numslots);
     assert(epid >= 1 && epid <= 31);
 
@@ -1759,6 +1759,11 @@ static void xhci_kick_ep(XHCIState *xhci, unsigned int slotid, unsigned int epid
         return;
     }
 
+    if (epctx->kick_active) {
+        return;
+    }
+    trace_usb_xhci_ep_kick(slotid, epid);
+    assert(!epctx->kick_active);
     if (epctx->retry) {
         XHCITransfer *xfer = epctx->retry;
 
@@ -1799,6 +1804,7 @@ static void xhci_kick_ep(XHCIState *xhci, unsigned int slotid, unsigned int epid
 
     xhci_set_ep_state(xhci, epctx, EP_RUNNING);
 
+    epctx->kick_active++;
     while (1) {
         XHCITransfer *xfer = &epctx->transfers[epctx->next_xfer];
         if (xfer->running_async || xfer->running_retry) {
@@ -1860,6 +1866,7 @@ static void xhci_kick_ep(XHCIState *xhci, unsigned int slotid, unsigned int epid
             break;
         }
     }
+    epctx->kick_active--;
     if (ep) {
         usb_device_flush_ep_queue(ep->dev, ep);
     }
