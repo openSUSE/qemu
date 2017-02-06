@@ -54,6 +54,8 @@
 #define ER_FULL_HACK
 
 #define TRB_LINK_LIMIT  4
+#define COMMAND_LIMIT   256
+#define TRANSFER_LIMIT  256
 
 #define LEN_CAP         0x40
 #define LEN_OPER        (0x400 + 0x10 * MAXPORTS)
@@ -1029,6 +1031,7 @@ static TRBType xhci_ring_fetch(XHCIState *xhci, XHCIRing *ring, XHCITRB *trb,
             return type;
         } else {
             if (++link_cnt > TRB_LINK_LIMIT) {
+                trace_usb_xhci_enforced_limit("trb-link");
                 return 0;
             }
             ring->dequeue = xhci_mask64(trb->parameter);
@@ -2101,6 +2104,7 @@ static void xhci_kick_ep(XHCIState *xhci, unsigned int slotid,
     XHCIRing *ring;
     USBEndpoint *ep = NULL;
     uint64_t mfindex;
+    unsigned int count = 0;
     int length;
     int i;
 
@@ -2236,6 +2240,10 @@ static void xhci_kick_ep(XHCIState *xhci, unsigned int slotid,
         if (xfer->running_retry) {
             DPRINTF("xhci: xfer nacked, stopping schedule\n");
             epctx->retry = xfer;
+            break;
+        }
+        if (count++ > TRANSFER_LIMIT) {
+            trace_usb_xhci_enforced_limit("transfers");
             break;
         }
     }
@@ -2708,7 +2716,7 @@ static void xhci_process_commands(XHCIState *xhci)
     TRBType type;
     XHCIEvent event = {ER_COMMAND_COMPLETE, CC_SUCCESS};
     dma_addr_t addr;
-    unsigned int i, slotid = 0;
+    unsigned int i, slotid = 0, count = 0;
 
     DPRINTF("xhci_process_commands()\n");
     if (!xhci_running(xhci)) {
@@ -2822,6 +2830,11 @@ static void xhci_process_commands(XHCIState *xhci)
         }
         event.slotid = slotid;
         xhci_event(xhci, &event, 0);
+
+        if (count++ > COMMAND_LIMIT) {
+            trace_usb_xhci_enforced_limit("commands");
+            return;
+        }
     }
 }
 
