@@ -700,9 +700,9 @@ static int ohci_service_iso_td(OHCIState *ohci, struct ohci_ed *ed,
 
     addr = ed->head & OHCI_DPTR_MASK;
 
-    if (!ohci_read_iso_td(ohci, addr, &iso_td)) {
+    if (ohci_read_iso_td(ohci, addr, &iso_td)) {
         printf("usb-ohci: ISO_TD read error at %x\n", addr);
-        return 0;
+        return 1;
     }
 
     starting_frame = OHCI_BM(iso_td.flags, TD_SF);
