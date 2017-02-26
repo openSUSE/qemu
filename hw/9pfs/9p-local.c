@@ -874,10 +874,21 @@ static int local_chown(FsContext *fs_ctx, V9fsPath *fs_path, FsCred *credp)
 static int local_utimensat(FsContext *s, V9fsPath *fs_path,
                            const struct timespec *buf)
 {
-    char buffer[PATH_MAX];
-    char *path = fs_path->data;
+    char *dirpath = g_path_get_dirname(fs_path->data);
+    char *name = g_path_get_basename(fs_path->data);
+    int dirfd, ret = -1;
 
-    return qemu_utimens(rpath(s, path, buffer), buf);
+    dirfd = local_opendir_nofollow(s, dirpath);
+    if (dirfd == -1) {
+        goto out;
+    }
+
+    ret = utimensat(dirfd, name, buf, AT_SYMLINK_NOFOLLOW);
+    close_preserve_errno(dirfd);
+out:
+    g_free(dirpath);
+    g_free(name);
+    return ret;
 }
 
 static int local_unlinkat_common(FsContext *ctx, int dirfd, const char *name,
