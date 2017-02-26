@@ -80,23 +80,6 @@ static void unlinkat_preserve_errno(int dirfd, const char *path, int flags)
 
 #define VIRTFS_META_DIR ".virtfs_metadata"
 
-static const char *local_mapped_attr_path(FsContext *ctx,
-                                          const char *path, char *buffer)
-{
-    char *dir_name;
-    char *tmp_path = g_strdup(path);
-    char *base_name = basename(tmp_path);
-
-    /* NULL terminate the directory */
-    dir_name = tmp_path;
-    *(base_name - 1) = '\0';
-
-    snprintf(buffer, PATH_MAX, "%s/%s/%s/%s",
-             ctx->fs_root, dir_name, VIRTFS_META_DIR, base_name);
-    g_free(tmp_path);
-    return buffer;
-}
-
 static FILE *local_fopenat(int dirfd, const char *name, const char *mode)
 {
     int fd, o_mode = 0;
@@ -207,132 +190,6 @@ out:
     g_free(name);
     g_free(dirpath);
     return err;
-}
-
-static int local_create_mapped_attr_dir(FsContext *ctx, const char *path)
-{
-    int err;
-    char attr_dir[PATH_MAX];
-    char *tmp_path = g_strdup(path);
-
-    snprintf(attr_dir, PATH_MAX, "%s/%s/%s",
-             ctx->fs_root, dirname(tmp_path), VIRTFS_META_DIR);
-
-    err = mkdir(attr_dir, 0700);
-    if (err < 0 && errno == EEXIST) {
-        err = 0;
-    }
-    g_free(tmp_path);
-    return err;
-}
-
-static int local_set_mapped_file_attr(FsContext *ctx,
-                                      const char *path, FsCred *credp)
-{
-    FILE *fp;
-    int ret = 0;
-    char buf[ATTR_MAX];
-    char attr_path[PATH_MAX];
-    int uid = -1, gid = -1, mode = -1, rdev = -1;
-
-    fp = fopen(local_mapped_attr_path(ctx, path, attr_path), "r");
-    if (!fp) {
-        goto create_map_file;
-    }
-    memset(buf, 0, ATTR_MAX);
-    while (fgets(buf, ATTR_MAX, fp)) {
-        if (!strncmp(buf, "virtfs.uid", 10)) {
-            uid = atoi(buf+11);
-        } else if (!strncmp(buf, "virtfs.gid", 10)) {
-            gid = atoi(buf+11);
-        } else if (!strncmp(buf, "virtfs.mode", 11)) {
-            mode = atoi(buf+12);
-        } else if (!strncmp(buf, "virtfs.rdev", 11)) {
-            rdev = atoi(buf+12);
-        }
-        memset(buf, 0, ATTR_MAX);
-    }
-    fclose(fp);
-    goto update_map_file;
-
-create_map_file:
-    ret = local_create_mapped_attr_dir(ctx, path);
-    if (ret < 0) {
-        goto err_out;
-    }
-
-update_map_file:
-    fp = fopen(attr_path, "w");
-    if (!fp) {
-        ret = -1;
-        goto err_out;
-    }
-
-    if (credp->fc_uid != -1) {
-        uid = credp->fc_uid;
-    }
-    if (credp->fc_gid != -1) {
-        gid = credp->fc_gid;
-    }
-    if (credp->fc_mode != -1) {
-        mode = credp->fc_mode;
-    }
-    if (credp->fc_rdev != -1) {
-        rdev = credp->fc_rdev;
-    }
-
-
-    if (uid != -1) {
-        fprintf(fp, "virtfs.uid=%d\n", uid);
-    }
-    if (gid != -1) {
-        fprintf(fp, "virtfs.gid=%d\n", gid);
-    }
-    if (mode != -1) {
-        fprintf(fp, "virtfs.mode=%d\n", mode);
-    }
-    if (rdev != -1) {
-        fprintf(fp, "virtfs.rdev=%d\n", rdev);
-    }
-    fclose(fp);
-
-err_out:
-    return ret;
-}
-
-static int local_set_xattr(const char *path, FsCred *credp)
-{
-    int err;
-
-    if (credp->fc_uid != -1) {
-        err = setxattr(path, "user.virtfs.uid", &credp->fc_uid, sizeof(uid_t),
-                0);
-        if (err) {
-            return err;
-        }
-    }
-    if (credp->fc_gid != -1) {
-        err = setxattr(path, "user.virtfs.gid", &credp->fc_gid, sizeof(gid_t),
-                0);
-        if (err) {
-            return err;
-        }
-    }
-    if (credp->fc_mode != -1) {
-        err = setxattr(path, "user.virtfs.mode", &credp->fc_mode,
-                sizeof(mode_t), 0);
-        if (err) {
-            return err;
-        }
-    }
-    if (credp->fc_rdev != -1) {
-        err = setxattr(path, "user.virtfs.rdev", &credp->fc_rdev,
-                sizeof(dev_t), 0);
-        if (err) {
-            return err;
-        }
-    }
-    return 0;
 }
 
 static int local_set_mapped_file_attrat(int dirfd, const char *name,
@@ -480,28 +337,6 @@ static int local_set_xattrat(int dirfd, const char *path, FsCred *credp)
         if (err) {
             return err;
         }
-    }
-    return 0;
-}
-
-static int local_post_create_passthrough(FsContext *fs_ctx, const char *path,
-                                         FsCred *credp)
-{
-    char buffer[PATH_MAX];
-
-    if (lchown(rpath(fs_ctx, path, buffer), credp->fc_uid,
-                credp->fc_gid) < 0) {
-        /*
-         * If we fail to change ownership and if we are
-         * using security model none. Ignore the error
-         */
-        if ((fs_ctx->export_flags & V9FS_SEC_MASK) != V9FS_SM_NONE) {
-            return -1;
-        }
-    }
-
-    if (chmod(rpath(fs_ctx, path, buffer), credp->fc_mode & 07777) < 0) {
-        return -1;
     }
     return 0;
 }
