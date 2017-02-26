@@ -82,16 +82,49 @@ static const char *local_mapped_attr_path(FsContext *ctx,
     return buffer;
 }
 
+static FILE *local_fopenat(int dirfd, const char *name, const char *mode)
+{
+    int fd, o_mode = 0;
+    FILE *fp;
+    int flags;
+    /*
+     * only supports two modes
+     */
+    if (mode[0] == 'r') {
+        flags = O_RDONLY;
+    } else if (mode[0] == 'w') {
+        flags = O_WRONLY | O_TRUNC | O_CREAT;
+        o_mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH;
+    } else {
+        return NULL;
+    }
+    fd = openat_file(dirfd, name, flags, o_mode);
+    if (fd == -1) {
+        return NULL;
+    }
+    fp = fdopen(fd, mode);
+    if (!fp) {
+        close(fd);
+    }
+    return fp;
+}
+
 #define ATTR_MAX 100
-static void local_mapped_file_attr(FsContext *ctx, const char *path,
+static void local_mapped_file_attr(int dirfd, const char *name,
                                    struct stat *stbuf)
 {
     FILE *fp;
     char buf[ATTR_MAX];
-    char attr_path[PATH_MAX];
+    int map_dirfd;
 
-    local_mapped_attr_path(ctx, path, attr_path);
-    fp = fopen(attr_path, "r");
+    map_dirfd = openat(dirfd, VIRTFS_META_DIR,
+                       O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    if (map_dirfd == -1) {
+        return;
+    }
+
+    fp = local_fopenat(map_dirfd, name, "r");
+    close_preserve_errno(map_dirfd);
     if (!fp) {
         return;
     }
@@ -113,13 +146,19 @@ static void local_mapped_file_attr(FsContext *ctx, const char *path,
 
 static int local_lstat(FsContext *fs_ctx, V9fsPath *fs_path, struct stat *stbuf)
 {
-    int err;
-    char buffer[PATH_MAX];
-    char *path = fs_path->data;
+    int err = -1;
+    char *dirpath = g_path_get_dirname(fs_path->data);
+    char *name = g_path_get_basename(fs_path->data);
+    int dirfd;
 
-    err =  lstat(rpath(fs_ctx, path, buffer), stbuf);
+    dirfd = local_opendir_nofollow(fs_ctx, dirpath);
+    if (dirfd == -1) {
+        goto out;
+    }
+
+    err = fstatat(dirfd, name, stbuf, AT_SYMLINK_NOFOLLOW);
     if (err) {
-        return err;
+        goto err_out;
     }
     if (fs_ctx->export_flags & V9FS_SM_MAPPED) {
         /* Actual credentials are part of extended attrs */
@@ -127,25 +166,32 @@ static int local_lstat(FsContext *fs_ctx, V9fsPath *fs_path, struct stat *stbuf)
         gid_t tmp_gid;
         mode_t tmp_mode;
         dev_t tmp_dev;
-        if (getxattr(rpath(fs_ctx, path, buffer), "user.virtfs.uid", &tmp_uid,
-                    sizeof(uid_t)) > 0) {
-            stbuf->st_uid = tmp_uid;
+
+        if (fgetxattrat_nofollow(dirfd, name, "user.virtfs.uid", &tmp_uid,
+                                 sizeof(uid_t)) > 0) {
+            stbuf->st_uid = le32_to_cpu(tmp_uid);
         }
-        if (getxattr(rpath(fs_ctx, path, buffer), "user.virtfs.gid", &tmp_gid,
-                    sizeof(gid_t)) > 0) {
-            stbuf->st_gid = tmp_gid;
+        if (fgetxattrat_nofollow(dirfd, name, "user.virtfs.gid", &tmp_gid,
+                                 sizeof(gid_t)) > 0) {
+            stbuf->st_gid = le32_to_cpu(tmp_gid);
         }
-        if (getxattr(rpath(fs_ctx, path, buffer), "user.virtfs.mode",
-                    &tmp_mode, sizeof(mode_t)) > 0) {
-            stbuf->st_mode = tmp_mode;
+        if (fgetxattrat_nofollow(dirfd, name, "user.virtfs.mode", &tmp_mode,
+                                 sizeof(mode_t)) > 0) {
+            stbuf->st_mode = le32_to_cpu(tmp_mode);
         }
-        if (getxattr(rpath(fs_ctx, path, buffer), "user.virtfs.rdev", &tmp_dev,
-                        sizeof(dev_t)) > 0) {
-                stbuf->st_rdev = tmp_dev;
+        if (fgetxattrat_nofollow(dirfd, name, "user.virtfs.rdev", &tmp_dev,
+                                 sizeof(dev_t)) > 0) {
+            stbuf->st_rdev = le64_to_cpu(tmp_dev);
         }
     } else if (fs_ctx->export_flags & V9FS_SM_MAPPED_FILE) {
-        local_mapped_file_attr(fs_ctx, path, stbuf);
+        local_mapped_file_attr(dirfd, name, stbuf);
     }
+
+err_out:
+    close_preserve_errno(dirfd);
+out:
+    g_free(name);
+    g_free(dirpath);
     return err;
 }
 
