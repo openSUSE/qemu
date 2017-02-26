@@ -312,23 +312,34 @@ static int local_closedir(FsContext *ctx, V9fsFidOpenState *fs)
 static int local_open(FsContext *ctx, V9fsPath *fs_path,
                       int flags, V9fsFidOpenState *fs)
 {
-    char buffer[PATH_MAX];
+    char *buffer;
     char *path = fs_path->data;
+    int fd;
 
-    fs->fd = open(rpath(ctx, path, buffer), flags);
+    buffer = rpath(ctx, path);
+    fd = open(buffer, flags | O_NOFOLLOW);
+    g_free(buffer);
+    if (fd == -1) {
+        return -1;
+    }
+    fs->fd = fd;
     return fs->fd;
 }
 
 static int local_opendir(FsContext *ctx,
                          V9fsPath *fs_path, V9fsFidOpenState *fs)
 {
-    char buffer[PATH_MAX];
+    char *buffer;
     char *path = fs_path->data;
+    DIR *stream;
 
-    fs->dir.stream = opendir(buffer);
-    if (!fs->dir.stream) {
+    buffer = rpath(ctx, path);
+    stream = opendir(buffer);
+    g_free(buffer);
+    if (!stream) {
         return -1;
     }
+    fs->dir.stream = stream;
     return 0;
 }
 
