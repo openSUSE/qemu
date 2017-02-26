@@ -901,27 +901,6 @@ static int local_truncate(FsContext *ctx, V9fsPath *fs_path, off_t size)
     return ret;
 }
 
-static int local_rename(FsContext *ctx, const char *oldpath,
-                        const char *newpath)
-{
-    int err;
-    char buffer[PATH_MAX], buffer1[PATH_MAX];
-
-    if (ctx->export_flags & V9FS_SM_MAPPED_FILE) {
-        err = local_create_mapped_attr_dir(ctx, newpath);
-        if (err < 0) {
-            return err;
-        }
-        /* rename the .virtfs_metadata files */
-        err = rename(local_mapped_attr_path(ctx, oldpath, buffer),
-                     local_mapped_attr_path(ctx, newpath, buffer1));
-        if (err < 0 && errno != ENOENT) {
-            return err;
-        }
-    }
-    return rename(rpath(ctx, oldpath, buffer), rpath(ctx, newpath, buffer1));
-}
-
 static int local_chown(FsContext *fs_ctx, V9fsPath *fs_path, FsCred *credp)
 {
     char buffer[PATH_MAX];
@@ -1176,6 +1155,33 @@ out:
     close_preserve_errno(ndirfd);
     close_preserve_errno(odirfd);
     return ret;
+}
+
+static void v9fs_path_init_dirname(V9fsPath *path, const char *str)
+{
+    path->data = g_path_get_dirname(str);
+    path->size = strlen(path->data) + 1;
+}
+
+static int local_rename(FsContext *ctx, const char *oldpath,
+                        const char *newpath)
+{
+    int err;
+    char *oname = g_path_get_basename(oldpath);
+    char *nname = g_path_get_basename(newpath);
+    V9fsPath olddir, newdir;
+
+    v9fs_path_init_dirname(&olddir, oldpath);
+    v9fs_path_init_dirname(&newdir, newpath);
+
+    err = local_renameat(ctx, &olddir, oname, &newdir, nname);
+
+    v9fs_path_free(&newdir);
+    v9fs_path_free(&olddir);
+    g_free(nname);
+    g_free(oname);
+
+    return err;
 }
 
 static int local_unlinkat(FsContext *ctx, V9fsPath *dir,
