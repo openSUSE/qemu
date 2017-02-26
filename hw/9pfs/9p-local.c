@@ -992,10 +992,12 @@ static int local_fsync(FsContext *ctx, int fid_type,
 
 static int local_statfs(FsContext *s, V9fsPath *fs_path, struct statfs *stbuf)
 {
-    char buffer[PATH_MAX];
-    char *path = fs_path->data;
+    int fd, ret;
 
-    return statfs(rpath(s, path, buffer), stbuf);
+    fd = local_open_nofollow(s, fs_path->data, O_RDONLY, 0);
+    ret = fstatfs(fd, stbuf);
+    close_preserve_errno(fd);
+    return ret;
 }
 
 static ssize_t local_lgetxattr(FsContext *ctx, V9fsPath *fs_path,
