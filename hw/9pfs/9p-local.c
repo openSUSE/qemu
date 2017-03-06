@@ -431,6 +431,7 @@ static int local_opendir(FsContext *ctx,
 
     stream = fdopendir(dirfd);
     if (!stream) {
+        close(dirfd);
         return -1;
     }
     fs->dir.stream = stream;
