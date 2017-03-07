@@ -32,6 +32,9 @@ void xen_blk_resize_cb(void *dev)
     xen_blk_resize_update(dev);
 }
 
+xc_interface *xen_xc;
+xenforeignmemory_handle *xen_fmem;
+
 static int store_dev_info(int domid, Chardev *cs, const char *string)
 {
     struct xs_handle *xs = NULL;
