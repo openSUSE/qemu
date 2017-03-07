@@ -34,6 +34,7 @@ void xen_blk_resize_cb(void *dev)
 
 xc_interface *xen_xc;
 xenforeignmemory_handle *xen_fmem;
+xendevicemodel_handle *xen_dmod;
 
 static int store_dev_info(int domid, Chardev *cs, const char *string)
 {
@@ -132,6 +133,13 @@ static int xen_init(MachineState *ms)
     xen_fmem = xenforeignmemory_open(0, 0);
     if (xen_fmem == NULL) {
         xen_pv_printf(NULL, 0, "can't open xen fmem interface\n");
+        xc_interface_close(xen_xc);
+        return -1;
+    }
+    xen_dmod = xendevicemodel_open(0, 0);
+    if (xen_dmod == NULL) {
+        xen_pv_printf(NULL, 0, "can't open xen devicemodel interface\n");
+        xenforeignmemory_close(xen_fmem);
         xc_interface_close(xen_xc);
         return -1;
     }
