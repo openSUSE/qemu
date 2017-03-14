@@ -1597,14 +1597,6 @@ void qemu_console_resize(DisplayState *ds, int width, int height)
     }
 }
 
-void qemu_console_copy(DisplayState *ds, int src_x, int src_y,
-                       int dst_x, int dst_y, int w, int h)
-{
-    if (is_graphic_console()) {
-        dpy_gfx_copy(ds, src_x, src_y, dst_x, dst_y, w, h);
-    }
-}
-
 PixelFormat qemu_different_endianness_pixelformat(int bpp)
 {
     PixelFormat pf;
