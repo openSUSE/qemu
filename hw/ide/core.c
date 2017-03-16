@@ -2196,8 +2196,8 @@ void ide_init2_with_non_qdev_drives(IDEBus *bus, DriveInfo *hd0,
 
 void ide_exit(IDEState *s)
 {
-    timer_del(s->sector_write_timer);
-    timer_free(s->sector_write_timer);
+    qemu_del_timer(s->sector_write_timer);
+    qemu_free_timer(s->sector_write_timer);
     qemu_vfree(s->smart_selftest_data);
     qemu_vfree(s->io_buffer);
 }
