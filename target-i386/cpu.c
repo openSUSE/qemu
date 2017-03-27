@@ -2026,7 +2026,7 @@ void x86_cpu_list(FILE *f, fprintf_function cpu_fprintf)
                    "(only available in KVM mode)");
 #endif
 
-    (*cpu_fprintf)(f, "\nRecognized CPUID flags:\n");
+    (*cpu_fprintf)(f, "\nRecognized CPUID flags (=on|=off|=force):\n");
     for (i = 0; i < ARRAY_SIZE(feature_word_info); i++) {
         FeatureWordInfo *fw = &feature_word_info[i];
 
@@ -2096,6 +2096,7 @@ static int x86_cpu_filter_features(X86CPU *cpu)
             x86_cpu_get_supported_feature_word(w, cpu->migratable);
         uint32_t requested_features = env->features[w];
         env->features[w] &= host_feat;
+        env->features[w] |= cpu->forced_features[w];
         cpu->filtered_features[w] = requested_features & ~env->features[w];
         if (cpu->filtered_features[w]) {
             if (cpu->check_cpuid || cpu->enforce_cpuid) {
@@ -3058,6 +3059,7 @@ out:
 
 typedef struct BitProperty {
     uint32_t *ptr;
+    uint32_t *force_ptr;
     uint32_t mask;
 } BitProperty;
 
@@ -3066,7 +3068,15 @@ static void x86_cpu_get_bit_prop(Object *obj, Visitor *v, const char *name,
 {
     BitProperty *fp = opaque;
     bool value = (*fp->ptr & fp->mask) == fp->mask;
-    visit_type_bool(v, name, &value, errp);
+    bool forced = (*fp->force_ptr & fp->mask) == fp->mask;
+    char str[] = "force";
+    char *strval = str;
+
+    if (!forced) {
+        strcpy(str, value ? "on" : "off");
+    }
+
+    visit_type_str(v, name, &strval, errp);
 }
 
 static void x86_cpu_set_bit_prop(Object *obj, Visitor *v, const char *name,
@@ -3075,6 +3085,7 @@ static void x86_cpu_set_bit_prop(Object *obj, Visitor *v, const char *name,
     DeviceState *dev = DEVICE(obj);
     BitProperty *fp = opaque;
     Error *local_err = NULL;
+    char *strval = NULL;
     bool value;
 
     if (dev->realized) {
@@ -3082,7 +3093,15 @@ static void x86_cpu_set_bit_prop(Object *obj, Visitor *v, const char *name,
         return;
     }
 
-    visit_type_bool(v, name, &value, &local_err);
+    visit_type_str(v, name, &strval, &local_err);
+    if (!local_err && !strcmp(strval, "force")) {
+        value = true;
+        *fp->force_ptr |= fp->mask;
+    } else {
+        local_err = NULL;
+        visit_type_bool(v, name, &value, &local_err);
+    }
+
     if (local_err) {
         error_propagate(errp, local_err);
         return;
@@ -3111,6 +3130,7 @@ static void x86_cpu_release_bit_prop(Object *obj, const char *name,
 static void x86_cpu_register_bit_prop(X86CPU *cpu,
                                       const char *prop_name,
                                       uint32_t *field,
+                                      uint32_t *force_field,
                                       int bitnr)
 {
     BitProperty *fp;
@@ -3125,6 +3145,7 @@ static void x86_cpu_register_bit_prop(X86CPU *cpu,
     } else {
         fp = g_new0(BitProperty, 1);
         fp->ptr = field;
+        fp->force_ptr = force_field;
         fp->mask = mask;
         object_property_add(OBJECT(cpu), prop_name, "bool",
                             x86_cpu_get_bit_prop,
@@ -3152,7 +3173,8 @@ static void x86_cpu_register_feature_bit_props(X86CPU *cpu,
     names = g_strsplit(fi->feat_names[bitnr], "|", 0);
 
     feat2prop(names[0]);
-    x86_cpu_register_bit_prop(cpu, names[0], &cpu->env.features[w], bitnr);
+    x86_cpu_register_bit_prop(cpu, names[0], &cpu->env.features[w],
+                              &cpu->forced_features[w], bitnr);
 
     for (i = 1; names[i]; i++) {
         feat2prop(names[i]);
