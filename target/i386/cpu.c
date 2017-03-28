@@ -2229,7 +2229,7 @@ void x86_cpu_list(FILE *f, fprintf_function cpu_fprintf)
     g_slist_foreach(list, x86_cpu_list_entry, &s);
     g_slist_free(list);
 
-    (*cpu_fprintf)(f, "\nRecognized CPUID flags:\n");
+    (*cpu_fprintf)(f, "\nRecognized CPUID flags (=on|=off|=force):\n");
     for (i = 0; i < ARRAY_SIZE(feature_word_info); i++) {
         FeatureWordInfo *fw = &feature_word_info[i];
 
@@ -3464,6 +3464,7 @@ static int x86_cpu_filter_features(X86CPU *cpu)
             x86_cpu_get_supported_feature_word(w, false);
         uint32_t requested_features = env->features[w];
         env->features[w] &= host_feat;
+        env->features[w] |= cpu->forced_features[w];
         cpu->filtered_features[w] = requested_features & ~env->features[w];
         if (cpu->filtered_features[w]) {
             rv = 1;
@@ -3706,8 +3707,17 @@ static void x86_cpu_get_bit_prop(Object *obj, Visitor *v, const char *name,
     X86CPU *cpu = X86_CPU(obj);
     BitProperty *fp = opaque;
     uint32_t f = cpu->env.features[fp->w];
+    uint32_t ff = cpu->forced_features[fp->w];
     bool value = (f & fp->mask) == fp->mask;
-    visit_type_bool(v, name, &value, errp);
+    bool forced = (ff & fp->mask) == fp->mask;
+    char str[] = "force";
+    char *strval = str;
+
+    if (forced) {
+        visit_type_str(v, name, &strval, errp);
+    } else {
+        visit_type_bool(v, name, &value, errp);
+    }
 }
 
 static void x86_cpu_set_bit_prop(Object *obj, Visitor *v, const char *name,
@@ -3717,6 +3727,7 @@ static void x86_cpu_set_bit_prop(Object *obj, Visitor *v, const char *name,
     X86CPU *cpu = X86_CPU(obj);
     BitProperty *fp = opaque;
     Error *local_err = NULL;
+    char *strval = NULL;
     bool value;
 
     if (dev->realized) {
@@ -3724,7 +3735,15 @@ static void x86_cpu_set_bit_prop(Object *obj, Visitor *v, const char *name,
         return;
     }
 
-    visit_type_bool(v, name, &value, &local_err);
+    visit_type_str(v, name, &strval, &local_err);
+    if (!local_err && !strcmp(strval, "force")) {
+        value = true;
+        cpu->forced_features[fp->w] |= fp->mask;
+    } else {
+        local_err = NULL;
+        visit_type_bool(v, name, &value, &local_err);
+    }
+
     if (local_err) {
         error_propagate(errp, local_err);
         return;
