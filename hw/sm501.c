@@ -2,6 +2,7 @@
  * QEMU SM501 Device
  *
  * Copyright (c) 2008 Shin-ichiro KAWASAKI
+ * Copyright (c) 2016 BALATON Zoltan
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -37,8 +38,11 @@
  *   - Minimum implementation for Linux console : mmio regs and CRT layer.
  *   - 2D grapihcs acceleration partially supported : only fill rectangle.
  *
- * TODO:
+ * Status: 2016/12/04
+ *   - Misc fixes: endianness, hardware cursor
  *   - Panel support
+ *
+ * TODO:
  *   - Touch panel support
  *   - USB support
  *   - UART support
@@ -1285,17 +1289,14 @@ static inline int get_depth_index(DisplayState *s)
     }
 }
 
-static void sm501_draw_crt(SM501State * s)
+static void sm501_update_display(void *opaque)
 {
     int y, c_x = 0, c_y = 0;
-    uint8_t *hwc_src = NULL, *src = s->local_mem;
-    int width = get_width(s, 1);
-    int height = get_height(s, 1);
-    int src_bpp = get_bpp(s, 1);
+    int crt = (s->dc_crt_control & SM501_DC_CRT_CONTROL_SEL) ? 1 : 0;
+    int width = get_width(s, crt);
+    int height = get_height(s, crt);
+    int src_bpp = get_bpp(s, crt);
     int dst_bpp = ds_get_bytes_per_pixel(s->ds) + (ds_get_bits_per_pixel(s->ds) % 8 ? 1 : 0);
-    uint32_t * palette = (uint32_t *)&s->dc_palette[SM501_DC_CRT_PALETTE
-						    - SM501_DC_PANEL_PALETTE];
-    uint8_t hwc_palette[3 * 3];
     int ds_depth_index = get_depth_index(s->ds);
     draw_line_func * draw_line = NULL;
     draw_hwc_line_func * draw_hwc_line = NULL;
@@ -1303,7 +1304,19 @@ static void sm501_draw_crt(SM501State * s)
     int y_start = -1;
     ram_addr_t page_min = ~0l;
     ram_addr_t page_max = 0l;
-    ram_addr_t offset = 0;
+    ram_addr_t offset;
+    uint32_t *palette;
+    uint8_t hwc_palette[3 * 3];
+    uint8_t *hwc_src = NULL;
+
+    if (!((crt ? s->dc_crt_control : s->dc_panel_control)
+          & SM501_DC_CRT_CONTROL_ENABLE)) {
+        return;
+    }
+
+    palette = (uint32_t *)(crt ? &s->dc_palette[SM501_DC_CRT_PALETTE -
+                                                SM501_DC_PANEL_PALETTE]
+                               : &s->dc_palette[0]);
 
     /* choose draw_line function */
     switch (src_bpp) {
@@ -1317,20 +1330,19 @@ static void sm501_draw_crt(SM501State * s)
         draw_line = draw_line32_funcs[ds_depth_index];
         break;
     default:
-	printf("sm501 draw crt : invalid DC_CRT_CONTROL=%x.\n",
-	       s->dc_crt_control);
+        printf("sm501 update display : invalid control register value.\n");
         abort();
 	break;
     }
 
     /* set up to draw hardware cursor */
-    if (is_hwc_enabled(s, 1)) {
+    if (is_hwc_enabled(s, crt)) {
         /* choose cursor draw line function */
         draw_hwc_line = draw_hwc_line_funcs[ds_depth_index];
-        hwc_src = get_hwc_address(s, 1);
-        c_x = get_hwc_x(s, 1);
-        c_y = get_hwc_y(s, 1);
-        get_hwc_palette(s, 1, hwc_palette);
+        hwc_src = get_hwc_address(s, crt);
+        c_x = get_hwc_x(s, crt);
+        c_y = get_hwc_y(s, crt);
+        get_hwc_palette(s, crt, hwc_palette);
     }
 
     /* adjust console size */
@@ -1342,7 +1354,7 @@ static void sm501_draw_crt(SM501State * s)
     }
 
     /* draw each line according to conditions */
-    for (y = 0; y < height; y++) {
+    for (y = 0, offset = 0; y < height; y++, offset += width * src_bpp) {
         int update, update_hwc;
         ram_addr_t page0 = offset;
         ram_addr_t page1 = offset + width * src_bpp - 1;
@@ -1359,7 +1371,7 @@ static void sm501_draw_crt(SM501State * s)
             uint8_t * d = &(ds_get_data(s->ds)[y * width * dst_bpp]);
 
             /* draw graphics layer */
-            draw_line(d, src, width, palette);
+            draw_line(d, s->local_mem + offset, width, palette);
 
             /* draw haredware cursor */
             if (update_hwc) {
@@ -1379,9 +1391,6 @@ static void sm501_draw_crt(SM501State * s)
 		y_start = -1;
 	    }
 	}
-
-	src += width * src_bpp;
-	offset += width * src_bpp;
     }
 
     /* complete flush to display */
@@ -1394,14 +1403,6 @@ static void sm501_draw_crt(SM501State * s)
                                   page_min, page_max + TARGET_PAGE_SIZE,
                                   DIRTY_MEMORY_VGA);
     }
-}
-
-static void sm501_update_display(void *opaque)
-{
-    SM501State * s = (SM501State *)opaque;
-
-    if (s->dc_crt_control & SM501_DC_CRT_CONTROL_ENABLE)
-	sm501_draw_crt(s);
 }
 
 void sm501_init(MemoryRegion *address_space_mem, uint32_t base,
