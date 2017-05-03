@@ -63,6 +63,7 @@ typedef struct MapCacheRev {
     hwaddr paddr_index;
     hwaddr size;
     QTAILQ_ENTRY(MapCacheRev) next;
+    bool dma;
 } MapCacheRev;
 
 typedef struct MapCache {
@@ -201,7 +202,7 @@ static void xen_remap_bucket(MapCacheEntry *entry,
 }
 
 static uint8_t *xen_map_cache_unlocked(hwaddr phys_addr, hwaddr size,
-                                       uint8_t lock)
+                                       uint8_t lock, bool dma)
 {
     MapCacheEntry *entry, *pentry = NULL;
     hwaddr address_index;
@@ -288,6 +289,7 @@ tryagain:
     if (lock) {
         MapCacheRev *reventry = g_malloc0(sizeof(MapCacheRev));
         entry->lock++;
+        reventry->dma = dma;
         reventry->vaddr_req = mapcache->last_entry->vaddr_base + address_offset;
         reventry->paddr_index = mapcache->last_entry->paddr_index;
         reventry->size = entry->size;
@@ -299,12 +301,12 @@ tryagain:
 }
 
 uint8_t *xen_map_cache(hwaddr phys_addr, hwaddr size,
-                       uint8_t lock)
+                       uint8_t lock, bool dma)
 {
     uint8_t *p;
 
     mapcache_lock();
-    p = xen_map_cache_unlocked(phys_addr, size, lock);
+    p = xen_map_cache_unlocked(phys_addr, size, lock, dma);
     mapcache_unlock();
     return p;
 }
@@ -424,8 +426,11 @@ void xen_invalidate_map_cache(void)
     mapcache_lock();
 
     QTAILQ_FOREACH(reventry, &mapcache->locked_entries, next) {
-        DPRINTF("There should be no locked mappings at this time, "
-                "but "TARGET_FMT_plx" -> %p is present\n",
+        if (!reventry->dma) {
+            continue;
+        }
+        fprintf(stderr, "Locked DMA mapping while invalidating mapcache!"
+                " "TARGET_FMT_plx" -> %p is present\n",
                 reventry->paddr_index, reventry->vaddr_req);
     }
 
