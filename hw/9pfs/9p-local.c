@@ -448,6 +448,11 @@ static off_t local_telldir(FsContext *ctx, V9fsFidOpenState *fs)
     return telldir(fs->dir.stream);
 }
 
+static bool local_is_mapped_file_metadata(FsContext *fs_ctx, const char *name)
+{
+    return !strcmp(name, VIRTFS_META_DIR);
+}
+
 static int local_readdir_r(FsContext *ctx, V9fsFidOpenState *fs,
                            struct dirent *entry,
                            struct dirent **result)
@@ -458,8 +463,8 @@ again:
     ret = readdir_r(fs->dir.stream, entry, result);
     if (ctx->export_flags & V9FS_SM_MAPPED_FILE) {
         if (!ret && *result != NULL &&
-            !strcmp(entry->d_name, VIRTFS_META_DIR)) {
-            /* skp the meta data directory */
+            local_is_mapped_file_metadata(ctx, entry->d_name)) {
+            /* skip the meta data directory */
             goto again;
         }
     }
@@ -551,6 +556,12 @@ static int local_mknod(FsContext *fs_ctx, V9fsPath *dir_path,
     int err = -1;
     int dirfd;
 
+    if (fs_ctx->export_flags & V9FS_SM_MAPPED_FILE &&
+        local_is_mapped_file_metadata(fs_ctx, name)) {
+        errno = EINVAL;
+        return -1;
+    }
+
     dirfd = local_opendir_nofollow(fs_ctx, dir_path->data);
     if (dirfd == -1) {
         return -1;
@@ -596,6 +607,12 @@ static int local_mkdir(FsContext *fs_ctx, V9fsPath *dir_path,
 {
     int err = -1;
     int dirfd;
+
+    if (fs_ctx->export_flags & V9FS_SM_MAPPED_FILE &&
+        local_is_mapped_file_metadata(fs_ctx, name)) {
+        errno = EINVAL;
+        return -1;
+    }
 
     dirfd = local_opendir_nofollow(fs_ctx, dir_path->data);
     if (dirfd == -1) {
@@ -690,6 +707,12 @@ static int local_open2(FsContext *fs_ctx, V9fsPath *dir_path, const char *name,
     int err = -1;
     int dirfd;
 
+    if (fs_ctx->export_flags & V9FS_SM_MAPPED_FILE &&
+        local_is_mapped_file_metadata(fs_ctx, name)) {
+        errno = EINVAL;
+        return -1;
+    }
+
     /*
      * Mark all the open to not follow symlinks
      */
@@ -747,6 +770,12 @@ static int local_symlink(FsContext *fs_ctx, const char *oldpath,
 {
     int err = -1;
     int dirfd;
+
+    if (fs_ctx->export_flags & V9FS_SM_MAPPED_FILE &&
+        local_is_mapped_file_metadata(fs_ctx, name)) {
+        errno = EINVAL;
+        return -1;
+    }
 
     dirfd = local_opendir_nofollow(fs_ctx, dir_path->data);
     if (dirfd == -1) {
@@ -821,6 +850,12 @@ static int local_link(FsContext *ctx, V9fsPath *oldpath,
     char *oname = g_path_get_basename(oldpath->data);
     int ret = -1;
     int odirfd, ndirfd;
+
+    if (ctx->export_flags & V9FS_SM_MAPPED_FILE &&
+        local_is_mapped_file_metadata(ctx, name)) {
+        errno = EINVAL;
+        return -1;
+    }
 
     odirfd = local_opendir_nofollow(ctx, odirpath);
     if (odirfd == -1) {
@@ -1092,6 +1127,12 @@ static int local_lremovexattr(FsContext *ctx, V9fsPath *fs_path,
 static int local_name_to_path(FsContext *ctx, V9fsPath *dir_path,
                               const char *name, V9fsPath *target)
 {
+    if (ctx->export_flags & V9FS_SM_MAPPED_FILE &&
+        local_is_mapped_file_metadata(ctx, name)) {
+        errno = EINVAL;
+        return -1;
+    }
+
     if (dir_path) {
         v9fs_path_sprintf(target, "%s/%s", dir_path->data, name);
     } else if (strcmp(name, "/")) {
@@ -1111,6 +1152,13 @@ static int local_renameat(FsContext *ctx, V9fsPath *olddir,
 {
     int ret;
     int odirfd, ndirfd;
+
+    if (ctx->export_flags & V9FS_SM_MAPPED_FILE &&
+        (local_is_mapped_file_metadata(ctx, old_name) ||
+         local_is_mapped_file_metadata(ctx, new_name))) {
+        errno = EINVAL;
+        return -1;
+    }
 
     odirfd = local_opendir_nofollow(ctx, olddir->data);
     if (odirfd == -1) {
@@ -1201,6 +1249,12 @@ static int local_unlinkat(FsContext *ctx, V9fsPath *dir,
 {
     int ret;
     int dirfd;
+
+    if (ctx->export_flags & V9FS_SM_MAPPED_FILE &&
+        local_is_mapped_file_metadata(ctx, name)) {
+        errno = EINVAL;
+        return -1;
+    }
 
     dirfd = local_opendir_nofollow(ctx, dir->data);
     if (dirfd == -1) {
