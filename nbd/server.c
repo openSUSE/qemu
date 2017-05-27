@@ -1257,17 +1257,17 @@ static coroutine_fn void nbd_co_client_start(void *opaque)
 
     if (exp) {
         nbd_export_get(exp);
+        QTAILQ_INSERT_TAIL(&exp->clients, client, next);
     }
+    qemu_co_mutex_init(&client->send_lock);
+
     if (nbd_negotiate(data)) {
         client_close(client);
         goto out;
     }
-    qemu_co_mutex_init(&client->send_lock);
+
     nbd_set_handlers(client);
 
-    if (exp) {
-        QTAILQ_INSERT_TAIL(&exp->clients, client, next);
-    }
 out:
     g_free(data);
 }
