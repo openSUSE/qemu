@@ -28,6 +28,10 @@ typedef struct NBDServerData {
 
 static NBDServerData *nbd_server;
 
+static void nbd_blockdev_client_closed(NBDClient *client, bool ignored)
+{
+    nbd_client_put(client);
+}
 
 static gboolean nbd_accept(QIOChannel *ioc, GIOCondition condition,
                            gpointer opaque)
@@ -46,7 +50,7 @@ static gboolean nbd_accept(QIOChannel *ioc, GIOCondition condition,
 
     nbd_client_new(NULL, cioc,
                    nbd_server->tlscreds, NULL,
-                   nbd_client_put);
+                   nbd_blockdev_client_closed);
     object_unref(OBJECT(cioc));
     return TRUE;
 }
