@@ -521,6 +521,10 @@ int main(int argc, char **argv)
     sa_sigterm.sa_handler = termsig_handler;
     sigaction(SIGTERM, &sa_sigterm, NULL);
 
+#ifdef CONFIG_POSIX
+    signal(SIGPIPE, SIG_IGN);
+#endif
+
     if (qcrypto_init(&local_err) < 0) {
         error_reportf_err(local_err, "cannot initialize crypto: ");
         exit(1);
