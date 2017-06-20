@@ -97,6 +97,7 @@ struct SCSIDevice
     int blocksize;
     int type;
     uint64_t max_lba;
+    uint32_t timeout;
 };
 
 extern const VMStateDescription vmstate_scsi_device;

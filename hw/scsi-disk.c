@@ -2371,6 +2371,7 @@ static Property scsi_hd_properties[] = {
     DEFINE_PROP_BIT("dpofua", SCSIDiskState, features,
                     SCSI_DISK_F_DPOFUA, false),
     DEFINE_PROP_HEX64("wwn", SCSIDiskState, wwn, 0),
+    DEFINE_PROP_UINT32("timeout", SCSIDevice, timeout, 0),
     DEFINE_BLOCK_CHS_PROPERTIES(SCSIDiskState, qdev.conf),
     DEFINE_PROP_END_OF_LIST(),
 };
@@ -2447,6 +2448,7 @@ static const TypeInfo scsi_cd_info = {
 static Property scsi_block_properties[] = {
     DEFINE_PROP_DRIVE("drive", SCSIDiskState, qdev.conf.bs),
     DEFINE_PROP_INT32("bootindex", SCSIDiskState, qdev.conf.bootindex, -1),
+    DEFINE_PROP_UINT32("timeout", SCSIDevice, timeout, 0),
     DEFINE_PROP_END_OF_LIST(),
 };
 
@@ -2480,6 +2482,7 @@ static Property scsi_disk_properties[] = {
     DEFINE_PROP_BIT("dpofua", SCSIDiskState, features,
                     SCSI_DISK_F_DPOFUA, false),
     DEFINE_PROP_HEX64("wwn", SCSIDiskState, wwn, 0),
+    DEFINE_PROP_UINT32("timeout", SCSIDevice, timeout, 0),
     DEFINE_PROP_END_OF_LIST(),
 };
 
