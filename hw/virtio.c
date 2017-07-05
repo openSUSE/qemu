@@ -848,6 +848,24 @@ void virtio_notify_config(VirtIODevice *vdev)
     virtio_notify_vector(vdev, vdev->config_vector);
 }
 
+static bool virtio_device_endian_needed(void *opaque)
+{
+    VirtIODevice *vdev = opaque;
+
+    assert(vdev->device_endian != VIRTIO_DEVICE_ENDIAN_UNKNOWN);
+    return vdev->device_endian != virtio_default_endian();
+}
+
+static const VMStateDescription vmstate_virtio_device_endian = {
+    .name = "virtio/device_endian",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .fields = (VMStateField[]) {
+        VMSTATE_UINT8(device_endian, VirtIODevice),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 static const VMStateDescription vmstate_virtio = {
     .name = "virtio",
     .version_id = 1,
@@ -855,6 +873,13 @@ static const VMStateDescription vmstate_virtio = {
     .minimum_version_id_old = 1,
     .fields = (VMStateField[]) {
         VMSTATE_END_OF_LIST()
+   },
+    .subsections = (VMStateSubsection[]) {
+        {
+            .vmsd = &vmstate_virtio_device_endian,
+            .needed = &virtio_device_endian_needed
+        },
+        { 0 }
     }
 };
 
@@ -972,29 +997,18 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f)
                          i, vdev->vq[i].last_avail_idx);
                 return -1;
 	}
-        vdev->vq[i].used_idx = vring_used_idx(&vdev->vq[i]);
-
-        /*
-         * Some devices migrate VirtQueueElements that have been popped
-         * from the avail ring but not yet returned to the used ring.
-	 * Since max ring size < UINT16_MAX it's safe to use modulo
-	 * UINT16_MAX + 1 subtraction.
-         */
-        vdev->vq[i].inuse = (uint16_t)(vdev->vq[i].last_avail_idx -
-                            vdev->vq[i].used_idx);
-        if (vdev->vq[i].inuse > vdev->vq[i].vring.num) {
-            error_report("VQ %d size 0x%x < last_avail_idx 0x%x - "
-                         "used_idx 0x%x",
-                         i, vdev->vq[i].vring.num,
-                         vdev->vq[i].last_avail_idx,
-                         vdev->vq[i].used_idx);
-            return -1;
-        }
         if (vdev->binding->load_queue) {
             ret = vdev->binding->load_queue(vdev->binding_opaque, i, f);
             if (ret)
                 return ret;
         }
+    }
+
+    virtio_notify_vector(vdev, VIRTIO_NO_VECTOR);
+    /* Subsections */
+    ret = vmstate_load_state(f, &vmstate_virtio, vdev, 1);
+    if (ret) {
+        return ret;
     }
 
     if (vdev->device_endian == VIRTIO_DEVICE_ENDIAN_UNKNOWN) {
@@ -1014,12 +1028,27 @@ int virtio_load(VirtIODevice *vdev, QEMUFile *f)
                              vdev->vq[i].last_avail_idx, nheads);
                 return -1;
             }
+            vdev->vq[i].used_idx = vring_used_idx(&vdev->vq[i]);
+            /*
+             * Some devices migrate VirtQueueElements that have been popped
+             * from the avail ring but not yet returned to the used ring.
+             * Since max ring size < UINT16_MAX it's safe to use modulo
+             * UINT16_MAX + 1 subtraction.
+             */
+            vdev->vq[i].inuse = (uint16_t)(vdev->vq[i].last_avail_idx -
+                                vdev->vq[i].used_idx);
+            if (vdev->vq[i].inuse > vdev->vq[i].vring.num) {
+                error_report("VQ %d size 0x%x < last_avail_idx 0x%x - "
+                             "used_idx 0x%x",
+                             i, vdev->vq[i].vring.num,
+                             vdev->vq[i].last_avail_idx,
+                             vdev->vq[i].used_idx);
+                return -1;
+            }
         }
     }
 
-    virtio_notify_vector(vdev, VIRTIO_NO_VECTOR);
-
-    return vmstate_load_state(f, &vmstate_virtio, vdev, 1);
+    return 0;
 }
 
 void virtio_common_cleanup(VirtIODevice *vdev)
