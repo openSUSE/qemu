@@ -3637,7 +3637,7 @@ void vnc_display_open(const char *id, Error **errp)
 
     reverse = qemu_opt_get_bool(opts, "reverse", false);
     lock_key_sync = qemu_opt_get_bool(opts, "lock-key-sync", true);
-    key_delay_ms = qemu_opt_get_number(opts, "key-delay-ms", 1);
+    key_delay_ms = qemu_opt_get_number(opts, "key-delay-ms", 10);
     sasl = qemu_opt_get_bool(opts, "sasl", false);
 #ifndef CONFIG_VNC_SASL
     if (sasl) {
