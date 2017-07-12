@@ -2628,7 +2628,7 @@ static MemTxResult address_space_write_continue(AddressSpace *as, hwaddr addr,
         } else {
             addr1 += memory_region_get_ram_addr(mr);
             /* RAM case */
-            ptr = qemu_get_ram_ptr(mr->ram_block, addr1);
+            ptr = qemu_ram_ptr_length(mr->ram_block, addr1, &l);
             memcpy(ptr, buf, l);
             invalidate_and_set_dirty(mr, addr1, l);
         }
@@ -2719,8 +2719,9 @@ MemTxResult address_space_read_continue(AddressSpace *as, hwaddr addr,
             }
         } else {
             /* RAM case */
-            ptr = qemu_get_ram_ptr(mr->ram_block,
-                                   memory_region_get_ram_addr(mr) + addr1);
+            ptr = qemu_ram_ptr_length(mr->ram_block,
+                                      memory_region_get_ram_addr(mr) + addr1,
+                                      &l);
             memcpy(buf, ptr, l);
         }
 
