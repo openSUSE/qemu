@@ -1870,7 +1870,7 @@ void address_space_rw(AddressSpace *as, hwaddr addr, uint8_t *buf,
                       int len, bool is_write)
 {
     AddressSpaceDispatch *d = as->dispatch;
-    int l;
+    ram_addr_t l;
     uint8_t *ptr;
     uint32_t val;
     hwaddr page;
@@ -1910,7 +1910,7 @@ void address_space_rw(AddressSpace *as, hwaddr addr, uint8_t *buf,
                 addr1 = memory_region_get_ram_addr(section->mr)
                     + memory_region_section_addr(section, addr);
                 /* RAM case */
-                ptr = qemu_get_ram_ptr(addr1);
+                ptr = qemu_ram_ptr_length(addr1, &l);
                 memcpy(ptr, buf, l);
                 invalidate_and_set_dirty(addr1, l);
                 qemu_put_ram_ptr(ptr);
@@ -1939,9 +1939,10 @@ void address_space_rw(AddressSpace *as, hwaddr addr, uint8_t *buf,
                 }
             } else {
                 /* RAM case */
-                ptr = qemu_get_ram_ptr(section->mr->ram_addr
-                                       + memory_region_section_addr(section,
-                                                                    addr));
+                ptr = qemu_ram_ptr_length(section->mr->ram_addr +
+                                          memory_region_section_addr(section,
+                                                                     addr),
+                                          &l);
                 memcpy(buf, ptr, l);
                 qemu_put_ram_ptr(ptr);
             }
