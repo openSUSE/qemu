@@ -1908,7 +1908,7 @@ void *qemu_get_ram_ptr(RAMBlock *ram_block, ram_addr_t addr)
  * Called within RCU critical section.
  */
 static void *qemu_ram_ptr_length(RAMBlock *ram_block, ram_addr_t addr,
-                                 hwaddr *size)
+                                 hwaddr *size, bool lock)
 {
     RAMBlock *block = ram_block;
     ram_addr_t offset_inside_block;
@@ -1928,10 +1928,10 @@ static void *qemu_ram_ptr_length(RAMBlock *ram_block, ram_addr_t addr,
          * In that case just map the requested area.
          */
         if (block->offset == 0) {
-            return xen_map_cache(addr, *size, 1, true);
+            return xen_map_cache(addr, *size, lock, lock);
         }
 
-        block->host = xen_map_cache(block->offset, block->max_length, 1, true);
+        block->host = xen_map_cache(block->offset, block->max_length, 1, lock);
     }
 
     return ramblock_ptr(block, offset_inside_block);
@@ -2628,7 +2628,7 @@ static MemTxResult address_space_write_continue(AddressSpace *as, hwaddr addr,
         } else {
             addr1 += memory_region_get_ram_addr(mr);
             /* RAM case */
-            ptr = qemu_ram_ptr_length(mr->ram_block, addr1, &l);
+            ptr = qemu_ram_ptr_length(mr->ram_block, addr1, &l, false);
             memcpy(ptr, buf, l);
             invalidate_and_set_dirty(mr, addr1, l);
         }
@@ -2721,7 +2721,7 @@ MemTxResult address_space_read_continue(AddressSpace *as, hwaddr addr,
             /* RAM case */
             ptr = qemu_ram_ptr_length(mr->ram_block,
                                       memory_region_get_ram_addr(mr) + addr1,
-                                      &l);
+                                      &l, false);
             memcpy(buf, ptr, l);
         }
 
@@ -3018,7 +3018,7 @@ void *address_space_map(AddressSpace *as,
 
     memory_region_ref(mr);
     *plen = done;
-    ptr = qemu_ram_ptr_length(mr->ram_block, raddr + base, plen);
+    ptr = qemu_ram_ptr_length(mr->ram_block, raddr + base, plen, true);
     rcu_read_unlock();
 
     return ptr;
