@@ -1057,7 +1057,7 @@ typedef void vga_draw_glyph9_func(uint8_t *d, int linesize,
                                   const uint8_t *font_ptr, int h,
                                   uint32_t fgcol, uint32_t bgcol, int dup9);
 typedef void vga_draw_line_func(VGACommonState *s1, uint8_t *d,
-                                const uint8_t *s, int width);
+                                uint32_t srcaddr, int width);
 
 #define DEPTH 8
 #include "vga_template.h"
@@ -1886,7 +1886,7 @@ static void vga_draw_graphic(VGACommonState *s, int full_update)
             if (page1 > page_max)
                 page_max = page1;
             if (!(is_buffer_shared(s->ds->surface))) {
-                vga_draw_line(s, d, s->vram_ptr + addr, width);
+                vga_draw_line(s, d, addr, width);
                 if (s->cursor_draw_line)
                     s->cursor_draw_line(s, d, y);
             }
@@ -2358,6 +2358,7 @@ void vga_common_init(VGACommonState *s)
     if (!s->vbe_size) {
         s->vbe_size = s->vram_size;
     }
+    s->vbe_size_mask = s->vbe_size - 1;
 
     s->is_vbe_vmstate = 1;
     memory_region_init_ram(&s->vram, "vga.vram", s->vram_size);
