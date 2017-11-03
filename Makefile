@@ -551,7 +551,7 @@ fsdev/virtfs-proxy-helper$(EXESUF): LIBS += -lcap
 
 scsi/qemu-pr-helper$(EXESUF): scsi/qemu-pr-helper.o scsi/utils.o $(crypto-obj-y) $(io-obj-y) $(qom-obj-y) $(COMMON_LDADDS)
 ifdef CONFIG_MPATH
-scsi/qemu-pr-helper$(EXESUF): LIBS += -ludev -lmultipath -lmpathpersist
+scsi/qemu-pr-helper$(EXESUF): LIBS += -ludev -lmpathpersist -lmultipath
 endif
 
 qemu-img-cmds.h: $(SRC_PATH)/qemu-img-cmds.hx $(SRC_PATH)/scripts/hxtool
