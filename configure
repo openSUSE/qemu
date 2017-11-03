@@ -3385,7 +3385,7 @@ int main(void) {
     return 0;
 }
 EOF
-  if compile_prog "" "-ludev -lmultipath -lmpathpersist" ; then
+  if compile_prog "" "-ludev -lmpathpersist -lmultipath" ; then
     mpathpersist=yes
   else
     mpathpersist=no
