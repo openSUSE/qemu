@@ -431,6 +431,12 @@ static int nbd_negotiate_options(NBDClient *client)
         }
         length = be32_to_cpu(length);
 
+        if (length > NBD_MAX_BUFFER_SIZE) {
+            LOG("len (%" PRIu32" ) is larger than max len (%u)",
+                       length, NBD_MAX_BUFFER_SIZE);
+            return -EINVAL;
+        }
+
         TRACE("Checking option 0x%" PRIx32, clientflags);
         if (client->tlscreds &&
             client->ioc == (QIOChannel *)client->sioc) {
