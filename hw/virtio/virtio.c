@@ -183,7 +183,7 @@ void virtio_queue_update_rings(VirtIODevice *vdev, int n)
 {
     VRing *vring = &vdev->vq[n].vring;
 
-    if (!vring->desc) {
+    if (!vring->num || !vring->desc || !vring->align) {
         /* not yet setup -> nothing to do */
         return;
     }
@@ -1416,6 +1416,9 @@ void virtio_config_modern_writel(VirtIODevice *vdev,
 
 void virtio_queue_set_addr(VirtIODevice *vdev, int n, hwaddr addr)
 {
+    if (!vdev->vq[n].vring.num) {
+        return;
+    }
     vdev->vq[n].vring.desc = addr;
     virtio_queue_update_rings(vdev, n);
 }
@@ -1428,6 +1431,9 @@ hwaddr virtio_queue_get_addr(VirtIODevice *vdev, int n)
 void virtio_queue_set_rings(VirtIODevice *vdev, int n, hwaddr desc,
                             hwaddr avail, hwaddr used)
 {
+    if (!vdev->vq[n].vring.num) {
+        return;
+    }
     vdev->vq[n].vring.desc = desc;
     vdev->vq[n].vring.avail = avail;
     vdev->vq[n].vring.used = used;
@@ -1496,8 +1502,10 @@ void virtio_queue_set_align(VirtIODevice *vdev, int n, int align)
      */
     assert(k->has_variable_vring_alignment);
 
-    vdev->vq[n].vring.align = align;
-    virtio_queue_update_rings(vdev, n);
+    if (align) {
+        vdev->vq[n].vring.align = align;
+        virtio_queue_update_rings(vdev, n);
+    }
 }
 
 static bool virtio_queue_notify_aio_vq(VirtQueue *vq)
