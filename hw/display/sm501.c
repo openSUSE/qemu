@@ -776,6 +776,8 @@ static uint64_t sm501_system_config_read(void *opaque, hwaddr addr,
     case SM501_DRAM_CONTROL:
 	ret = (s->dram_control & 0x07F107C0) | s->local_mem_size_index << 13;
 	break;
+    case SM501_COMMAND_LIST_STATUS:
+        ret = 0x00180002; /* FIFOs are empty, everything idle */
     case SM501_IRQ_MASK:
 	ret = s->irq_mask;
 	break;
@@ -793,6 +795,9 @@ static uint64_t sm501_system_config_read(void *opaque, hwaddr addr,
     case SM501_POWER_MODE_CONTROL:
 	ret = s->power_mode_control;
 	break;
+    case SM501_ENDIAN_CONTROL:
+        ret = 0; /* Only default little endian mode is supported */
+        break;
 
     default:
 	printf("sm501 system config : not implemented register read."
@@ -843,6 +848,12 @@ static void sm501_system_config_write(void *opaque, hwaddr addr,
     case SM501_POWER_MODE_CONTROL:
 	s->power_mode_control = value & 0x00000003;
 	break;
+    case SM501_ENDIAN_CONTROL:
+        if (value & 0x00000001) {
+            printf("sm501 system config : big endian mode not implemented.\n");
+            abort();
+        }
+        break;
 
     default:
 	printf("sm501 system config : not implemented register write."
@@ -902,6 +913,9 @@ static uint64_t sm501_disp_ctrl_read(void *opaque, hwaddr addr,
     case SM501_DC_PANEL_PANNING_CONTROL:
 	ret = s->dc_panel_panning_control;
 	break;
+    case SM501_DC_PANEL_COLOR_KEY:
+        /* Not implemented yet */
+        break;
     case SM501_DC_PANEL_FB_ADDR:
 	ret = s->dc_panel_fb_addr;
 	break;
@@ -996,6 +1010,9 @@ static void sm501_disp_ctrl_write(void *opaque, hwaddr addr,
     case SM501_DC_PANEL_PANNING_CONTROL:
 	s->dc_panel_panning_control = value & 0xFF3FFF3F;
 	break;
+    case SM501_DC_PANEL_COLOR_KEY:
+        /* Not implemented yet */
+        break;
     case SM501_DC_PANEL_FB_ADDR:
 	s->dc_panel_fb_addr = value & 0x8FFFFFF0;
 	break;
