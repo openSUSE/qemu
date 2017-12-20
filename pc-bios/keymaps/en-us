@@ -343,12 +343,6 @@ KP_Decimal 0x53 numlock
 
 # evdev 85 (0x55): no evdev -> QKeyCode mapping (xkb keysym NoSymbol)
 
-# evdev 86 (0x56), QKeyCode "less", number 0x56
-less 0x56
-greater 0x56 shift
-bar 0x56 altgr
-brokenbar 0x56 shift altgr
-
 # evdev 87 (0x57), QKeyCode "f11", number 0x57
 F11 0x57
 
