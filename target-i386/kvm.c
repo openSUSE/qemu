@@ -69,6 +69,7 @@ static bool has_msr_async_pf_en;
 static bool has_msr_pv_eoi_en;
 static bool has_msr_misc_enable;
 static int lm_capable_kernel;
+static bool has_msr_spec_ctrl;
 
 bool kvm_allows_irq0_override(void)
 {
@@ -726,6 +727,10 @@ static int kvm_get_supported_msrs(KVMState *s)
                     has_msr_misc_enable = true;
                     continue;
                 }
+                if (kvm_msr_list->indices[i] == MSR_IA32_SPEC_CTRL) {
+                    has_msr_spec_ctrl = true;
+                    continue;
+                }
             }
         }
 
@@ -1071,6 +1076,9 @@ static int kvm_put_msrs(X86CPU *cpu, int level)
         kvm_msr_entry_set(&msrs[n++], MSR_IA32_MISC_ENABLE,
                           env->msr_ia32_misc_enable);
     }
+    if (has_msr_spec_ctrl) {
+        kvm_msr_entry_set(&msrs[n++], MSR_IA32_SPEC_CTRL, env->spec_ctrl);
+    }
 #ifdef TARGET_X86_64
     if (lm_capable_kernel) {
         kvm_msr_entry_set(&msrs[n++], MSR_CSTAR, env->cstar);
@@ -1338,6 +1346,9 @@ static int kvm_get_msrs(X86CPU *cpu)
     if (has_msr_misc_enable) {
         msrs[n++].index = MSR_IA32_MISC_ENABLE;
     }
+    if (has_msr_spec_ctrl) {
+        msrs[n++].index = MSR_IA32_SPEC_CTRL;
+    }
 
     if (!env->tsc_valid) {
         msrs[n++].index = MSR_IA32_TSC;
@@ -1444,6 +1455,9 @@ static int kvm_get_msrs(X86CPU *cpu)
             break;
         case MSR_KVM_PV_EOI_EN:
             env->pv_eoi_en_msr = msrs[i].data;
+            break;
+        case MSR_IA32_SPEC_CTRL:
+            env->spec_ctrl = msrs[i].data;
             break;
         }
     }
