@@ -303,6 +303,17 @@ static const char *cpuid_apm_edx_feature_name[] = {
     NULL, NULL, NULL, NULL,
 };
 
+static const char *cpuid_ibpb_ebx_feature_name[] = {
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    "ibpb", NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+};
+
 static const char *cpuid_xsave_feature_name[] = {
     "xsaveopt", "xsavec", "xgetbv1", "xsaves",
     NULL, NULL, NULL, NULL,
@@ -462,6 +473,13 @@ static FeatureWordInfo feature_word_info[FEATURE_WORDS] = {
         .cpuid_reg = R_EDX,
         .tcg_features = TCG_APM_FEATURES,
         .unmigratable_flags = CPUID_APM_INVTSC,
+    },
+    [FEAT_8000_0008_EBX] = {
+        .feat_names = cpuid_ibpb_ebx_feature_name,
+        .cpuid_eax = 0x80000008,
+        .cpuid_reg = R_EBX,
+        .tcg_features = 0,
+        .unmigratable_flags = 0,
     },
     [FEAT_XSAVE] = {
         .feat_names = cpuid_xsave_feature_name,
@@ -2686,7 +2704,7 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
                 *eax = 0x00000020; /* 32 bits physical */
             }
         }
-        *ebx = 0;
+        *ebx = env->features[FEAT_8000_0008_EBX];
         *ecx = 0;
         *edx = 0;
         if (cs->nr_cores * cs->nr_threads > 1) {
