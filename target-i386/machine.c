@@ -890,6 +890,25 @@ static const VMStateDescription vmstate_tsc_khz = {
     }
 };
 
+static bool spec_ctrl_needed(void *opaque)
+{
+    X86CPU *cpu = opaque;
+    CPUX86State *env = &cpu->env;
+
+    return env->spec_ctrl != 0;
+}
+
+static const VMStateDescription vmstate_spec_ctrl = {
+    .name = "cpu/spec_ctrl",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .needed = spec_ctrl_needed,
+    .fields = (VMStateField[]){
+        VMSTATE_UINT64(env.spec_ctrl, X86CPU),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 VMStateDescription vmstate_x86_cpu = {
     .name = "cpu",
     .version_id = 12,
@@ -1016,6 +1035,7 @@ VMStateDescription vmstate_x86_cpu = {
 #ifdef TARGET_X86_64
         &vmstate_pkru,
 #endif
+        &vmstate_spec_ctrl,
         NULL
     }
 };
