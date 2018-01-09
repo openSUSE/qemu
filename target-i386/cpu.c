@@ -160,6 +160,17 @@ static const char *cpuid_7_0_edx_feature_name[] = {
     NULL, NULL, NULL, NULL,
 };
 
+static const char *cpuid_ibpb_ebx_feature_name[] = {
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    "ibpb", NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+    NULL, NULL, NULL, NULL,
+};
+
 typedef struct FeatureWordInfo {
     const char **feat_names;
     uint32_t cpuid_eax; /* Input EAX for CPUID */
@@ -202,6 +213,11 @@ static FeatureWordInfo feature_word_info[FEATURE_WORDS] = {
     [FEAT_7_0_EDX] = {
         .feat_names = cpuid_7_0_edx_feature_name,
         .cpuid_eax = 7, .cpuid_reg = R_EDX,
+    },
+    [FEAT_8000_0008_EBX] = {
+        .feat_names = cpuid_ibpb_ebx_feature_name,
+        .cpuid_eax = 0x80000008,
+        .cpuid_reg = R_EBX,
     },
 };
 
@@ -390,6 +406,7 @@ typedef struct x86_def_t {
     uint32_t cpuid_7_0_ebx_features;
     /* The feature bits on CPUID[EAX=7,ECX=0].EDX */
     uint32_t cpuid_7_0_edx_features;
+    uint32_t cpuid_8000_0008_ebx_features;
 } x86_def_t;
 
 #define I486_FEATURES (CPUID_FP87 | CPUID_VME | CPUID_PSE)
@@ -947,7 +964,9 @@ static void kvm_cpu_fill_host(x86_def_t *x86_cpu_def)
     } else {
         x86_cpu_def->cpuid_7_0_ebx_features = 0;
         x86_cpu_def->cpuid_7_0_edx_features = 0;
-    }
+    }  
+    x86_cpu_def->cpuid_8000_0008_ebx_features =
+                    kvm_arch_get_supported_cpuid(s, 0x80000008, 0, R_EBX);
 
     x86_cpu_def->xlevel = kvm_arch_get_supported_cpuid(s, 0x80000000, 0, R_EAX);
     x86_cpu_def->ext2_features =
@@ -1024,6 +1043,8 @@ static int kvm_check_features_against_host(X86CPU *cpu)
             FEAT_7_0_EBX },
         {&env->cpuid_7_0_edx_features, &host_def.cpuid_7_0_edx_features,
             FEAT_7_0_EDX },
+        {&env->cpuid_8000_0008_ebx_features, &host_def.cpuid_8000_0008_ebx_features,
+            FEAT_8000_0008_EBX },
         {&env->cpuid_svm_features, &host_def.svm_features,
             FEAT_SVM },
         {&env->cpuid_kvm_features, &host_def.kvm_features,
@@ -1441,6 +1462,7 @@ static void cpu_x86_parse_featurestr(X86CPU *cpu, char *features, Error **errp)
     env->cpuid_svm_features &= ~minus_features[FEAT_SVM];
     env->cpuid_7_0_ebx_features &= ~minus_features[FEAT_7_0_EBX];
     env->cpuid_7_0_edx_features &= ~minus_features[FEAT_7_0_EDX];
+    env->cpuid_8000_0008_ebx_features &= ~minus_features[FEAT_8000_0008_EBX];
 
 out:
     return;
@@ -1550,6 +1572,8 @@ static void filter_features_for_kvm(X86CPU *cpu)
         kvm_arch_get_supported_cpuid(s, KVM_CPUID_FEATURES, 0, R_EAX);
     env->cpuid_ext4_features &=
         kvm_arch_get_supported_cpuid(s, 0xC0000001, 0, R_EDX);
+    env->cpuid_8000_0008_ebx_features &= 
+        kvm_arch_get_supported_cpuid(s, 0x80000008, 0, R_EBX);
 
 }
 #endif
@@ -1598,6 +1622,7 @@ int cpu_x86_register(X86CPU *cpu, const char *cpu_model)
     env->cpuid_7_0_ebx_features = def->cpuid_7_0_ebx_features;
     env->cpuid_7_0_edx_features = def->cpuid_7_0_edx_features;
     env->cpuid_xlevel2 = def->xlevel2;
+    env->cpuid_8000_0008_ebx_features = def->cpuid_8000_0008_ebx_features;
 
     object_property_set_str(OBJECT(cpu), def->model_id, "model-id", &error);
     if (error) {
@@ -1893,7 +1918,7 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
             else
                 *eax = 0x00000020; /* 32 bits physical */
         }
-        *ebx = 0;
+        *ebx = env->cpuid_8000_0008_ebx_features;
         *ecx = 0;
         *edx = 0;
         if (cs->nr_cores * cs->nr_threads > 1) {
@@ -2145,6 +2170,7 @@ void x86_cpu_realize(Object *obj, Error **errp)
         env->cpuid_ext3_features &= TCG_EXT3_FEATURES;
         env->cpuid_svm_features &= TCG_SVM_FEATURES;
         env->cpuid_7_0_edx_features &= TCG_7_0_EDX_FEATURES;
+        env->cpuid_8000_0008_ebx_features &= 0;
     } else {
         if (check_cpuid && kvm_check_features_against_host(cpu)
             && enforce_cpuid) {

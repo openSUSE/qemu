@@ -383,6 +383,7 @@ typedef enum FeatureWord {
     FEAT_7_0_EDX,       /* CPUID[EAX=7,ECX=0].EDX */
     FEAT_8000_0001_EDX, /* CPUID[8000_0001].EDX */
     FEAT_8000_0001_ECX, /* CPUID[8000_0001].ECX */
+    FEAT_8000_0008_EBX, /* CPUID[8000_0008].EBX */
     FEAT_C000_0001_EDX, /* CPUID[C000_0001].EDX */
     FEAT_KVM,           /* CPUID[4000_0001].EAX (KVM_CPUID_FEATURES) */
     FEAT_SVM,           /* CPUID[8000_000A].EDX */
@@ -541,6 +542,8 @@ typedef uint32_t FeatureWordArray[FEATURE_WORDS];
 #define CPUID_7_0_EBX_ADX      (1 << 19)
 #define CPUID_7_0_EBX_SMAP     (1 << 20)
 #define CPUID_7_0_EDX_SPEC_CTRL     (1U << 26) /* Speculation Control */
+
+#define CPUID_8000_0008_EBX_IBPB    (1U << 12) /* Indirect Branch Prediction Barrier */
 
 #define CPUID_VENDOR_SZ      12
 
@@ -853,6 +856,7 @@ typedef struct CPUX86State {
     uint32_t cpuid_7_0_ebx_features;
     /* Flags from CPUID[EAX=7,ECX=0].EDX */
     uint32_t cpuid_7_0_edx_features;
+    uint32_t cpuid_8000_0008_ebx_features;
 
     /* MTRRs */
     uint64_t mtrr_fixed[11];
