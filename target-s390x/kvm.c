@@ -426,6 +426,11 @@ int kvm_arch_put_registers(CPUState *cs, int level)
         }
     }
 
+    if (can_sync_regs(cs, KVM_SYNC_BPBC)) {
+        cs->kvm_run->s.regs.bpbc = env->bpbc;
+        cs->kvm_run->kvm_dirty_regs |= KVM_SYNC_BPBC;
+    }
+
     /* Finally the prefix */
     if (can_sync_regs(cs, KVM_SYNC_PREFIX)) {
         cs->kvm_run->s.regs.prefix = env->psa;
@@ -526,6 +531,10 @@ int kvm_arch_get_registers(CPUState *cs)
         kvm_get_one_reg(cs, KVM_REG_S390_TODPR, &env->todpr);
         kvm_get_one_reg(cs, KVM_REG_S390_GBEA, &env->gbea);
         kvm_get_one_reg(cs, KVM_REG_S390_PP, &env->pp);
+    }
+
+    if (can_sync_regs(cs, KVM_SYNC_BPBC)) {
+        env->bpbc = cs->kvm_run->s.regs.bpbc;
     }
 
     /* pfault parameters */
