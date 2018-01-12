@@ -156,6 +156,22 @@ const VMStateDescription vmstate_riccb = {
     }
 };
 
+static bool bpbc_needed(void *opaque)
+{
+    return s390_has_feat(S390_FEAT_BPB);
+}
+
+const VMStateDescription vmstate_bpbc = {
+    .name = "cpu/bpbc",
+    .version_id = 1,
+    .minimum_version_id = 1,
+    .needed = bpbc_needed,
+    .fields = (VMStateField[]) {
+        VMSTATE_BOOL(env.bpbc, S390CPU),
+        VMSTATE_END_OF_LIST()
+    }
+};
+
 const VMStateDescription vmstate_s390_cpu = {
     .name = "cpu",
     .post_load = cpu_post_load,
@@ -188,6 +204,7 @@ const VMStateDescription vmstate_s390_cpu = {
         &vmstate_fpu,
         &vmstate_vregs,
         &vmstate_riccb,
+        &vmstate_bpbc,
         NULL
     },
 };
