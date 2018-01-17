@@ -288,6 +288,7 @@ static uint16_t base_GEN13_GA1[] = {
 
 /* full features differing to the base in order of release */
 static uint16_t full_GEN7_GA1[] = {
+    S390_FEAT_PPA15,
     S390_FEAT_BPB,
     S390_FEAT_SIE_F2,
     S390_FEAT_SIE_SKEY,
