@@ -457,8 +457,10 @@ static void *acpi_set_bsel(PCIBus *bus, void *opaque)
 {
     unsigned *bsel_alloc = opaque;
     unsigned *bus_bsel;
+    int64_t bsel = object_property_get_int(OBJECT(bus),
+                                           ACPI_PCIHP_PROP_BSEL, NULL);
 
-    if (qbus_is_hotpluggable(BUS(bus))) {
+    if (qbus_is_hotpluggable(BUS(bus)) && bsel < 0) {
         bus_bsel = g_malloc(sizeof *bus_bsel);
 
         *bus_bsel = (*bsel_alloc)++;
