@@ -157,6 +157,8 @@ int main(int argc, char **argv)
 #include "qemu-option.h"
 #include "qemu-config.h"
 #include "qemu-objects.h"
+#include "qemu-kvm.h"
+#include "hw/device-assignment.h"
 
 #include "disas.h"
 
@@ -179,6 +181,7 @@ const char *bios_name = NULL;
    to store the VM snapshots */
 struct drivelist drives = QTAILQ_HEAD_INITIALIZER(drives);
 struct driveoptlist driveopts = QTAILQ_HEAD_INITIALIZER(driveopts);
+DriveInfo *extboot_drive = NULL;
 enum vga_retrace_method vga_retrace_method = VGA_RETRACE_DUMB;
 static DisplayState *display_state;
 DisplayType display_type = DT_DEFAULT;
@@ -215,13 +218,17 @@ int rtc_td_hack = 0;
 #endif
 int usb_enabled = 0;
 int singlestep = 0;
+const char *assigned_devices[MAX_DEV_ASSIGN_CMDLINE];
+int assigned_devices_index;
 int smp_cpus = 1;
 int max_cpus = 0;
 int smp_cores = 1;
 int smp_threads = 1;
 const char *vnc_display;
 int acpi_enabled = 1;
+#ifdef TARGET_I386
 int no_hpet = 0;
+#endif
 int fd_bootchk = 1;
 int no_reboot = 0;
 int no_shutdown = 0;
@@ -235,6 +242,12 @@ const char *watchdog;
 const char *option_rom[MAX_OPTION_ROMS];
 int nb_option_roms;
 int semihosting_enabled = 0;
+int time_drift_fix = 0;
+unsigned int kvm_shadow_memory = 0;
+const char *mem_path = NULL;
+#ifdef MAP_POPULATE
+int mem_prealloc = 1;	/* force preallocation of physical target memory */
+#endif
 #ifdef TARGET_ARM
 int old_param = 0;
 #endif
@@ -245,6 +258,7 @@ int ctrl_grab = 0;
 unsigned int nb_prom_envs = 0;
 const char *prom_envs[MAX_PROM_ENVS];
 #endif
+const char *nvram = NULL;
 int boot_menu;
 
 int nb_numa_nodes;
@@ -2109,6 +2123,7 @@ DriveInfo *drive_init(QemuOpts *opts, void *opaque,
     int on_read_error, on_write_error;
     const char *devaddr;
     DriveInfo *dinfo;
+    int is_extboot = 0;
     int snapshot = 0;
 
     *fatal_error = 1;
@@ -2267,6 +2282,12 @@ DriveInfo *drive_init(QemuOpts *opts, void *opaque,
         }
     }
 
+    is_extboot = qemu_opt_get_bool(opts, "boot", 0);
+    if (is_extboot && extboot_drive) {
+        fprintf(stderr, "qemu: two bootable drives specified\n");
+        return NULL;
+    }
+
     on_write_error = BLOCK_ERR_STOP_ENOSPC;
     if ((buf = qemu_opt_get(opts, "werror")) != NULL) {
         if (type != IF_IDE && type != IF_SCSI && type != IF_VIRTIO) {
@@ -2378,6 +2399,9 @@ DriveInfo *drive_init(QemuOpts *opts, void *opaque,
     if (serial)
         strncpy(dinfo->serial, serial, sizeof(serial));
     QTAILQ_INSERT_TAIL(&drives, dinfo, next);
+    if (is_extboot) {
+        extboot_drive = dinfo;
+    }
 
     switch(type) {
     case IF_IDE:
@@ -2851,6 +2875,7 @@ int qemu_set_fd_handler2(int fd,
         ioh->opaque = opaque;
         ioh->deleted = 0;
     }
+    qemu_notify_event();
     return 0;
 }
 
@@ -2973,6 +2998,15 @@ static int ram_save_block(QEMUFile *f)
     int found = 0;
 
     while (addr < last_ram_offset) {
+        if (kvm_enabled() && current_addr == 0) {
+            int r;
+            r = kvm_update_dirty_pages_log();
+            if (r) {
+                fprintf(stderr, "%s: update dirty pages log failed %d\n", __FUNCTION__, r);
+                qemu_file_set_error(f);
+                return 0;
+            }
+        }
         if (cpu_physical_memory_get_dirty(current_addr, MIGRATION_DIRTY_FLAG)) {
             uint8_t *p;
 
@@ -3277,6 +3311,13 @@ static int powerdown_requested;
 static int debug_requested;
 static int vmstop_requested;
 
+int qemu_no_shutdown(void)
+{
+    int r = no_shutdown;
+    no_shutdown = 0;
+    return r;
+}
+
 int qemu_shutdown_requested(void)
 {
     int r = shutdown_requested;
@@ -3360,6 +3401,9 @@ void qemu_system_reset_request(void)
         shutdown_requested = 1;
     } else {
         reset_requested = 1;
+    }
+    if (cpu_single_env) {
+        cpu_single_env->stopped = 1;
     }
     qemu_notify_event();
 }
@@ -3515,13 +3559,19 @@ void qemu_notify_event(void)
 {
     CPUState *env = cpu_single_env;
 
+    if (kvm_enabled()) {
+        qemu_kvm_notify_work();
+        return;
+    }
     if (env) {
         cpu_exit(env);
     }
 }
 
+#if defined(KVM_UPSTREAM) || !defined(CONFIG_KVM)
 void qemu_mutex_lock_iothread(void) {}
 void qemu_mutex_unlock_iothread(void) {}
+#endif
 
 void vm_stop(int reason)
 {
@@ -3949,6 +3999,8 @@ void main_loop_wait(int timeout)
         for(ioh = first_io_handler; ioh != NULL; ioh = ioh->next) {
             if (!ioh->deleted && ioh->fd_read && FD_ISSET(ioh->fd, &rfds)) {
                 ioh->fd_read(ioh->opaque);
+                if (!(ioh->fd_read_poll && ioh->fd_read_poll(ioh->opaque)))
+                    FD_CLR(ioh->fd, &rfds);
             }
             if (!ioh->deleted && ioh->fd_write && FD_ISSET(ioh->fd, &wfds)) {
                 ioh->fd_write(ioh->opaque);
@@ -4155,6 +4207,12 @@ qemu_irq qemu_system_powerdown;
 static void main_loop(void)
 {
     int r;
+
+    if (kvm_enabled()) {
+        kvm_main_loop();
+        cpu_disable_ticks();
+        return;
+    }
 
 #ifdef CONFIG_IOTHREAD
     qemu_system_ready = 1;
@@ -4933,6 +4991,8 @@ int main(int argc, char **argv, char **envp)
         node_cpumask[i] = 0;
     }
 
+    assigned_devices_index = 0;
+
     nb_numa_nodes = 0;
     nb_nics = 0;
 
@@ -5449,9 +5509,41 @@ int main(int argc, char **argv, char **envp)
                 break;
 #endif
 #ifdef CONFIG_KVM
+#ifdef KVM_UPSTREAM
             case QEMU_OPTION_enable_kvm:
                 kvm_allowed = 1;
+#endif
                 break;
+	    case QEMU_OPTION_no_kvm:
+		kvm_allowed = 0;
+		break;
+	    case QEMU_OPTION_no_kvm_irqchip: {
+		kvm_irqchip = 0;
+		kvm_pit = 0;
+		break;
+	    }
+	    case QEMU_OPTION_no_kvm_pit: {
+		kvm_pit = 0;
+		break;
+	    }
+            case QEMU_OPTION_no_kvm_pit_reinjection: {
+                kvm_pit_reinject = 0;
+                break;
+            }
+	    case QEMU_OPTION_enable_nesting: {
+		kvm_nested = 1;
+		break;
+	    }
+#if defined(TARGET_I386) || defined(TARGET_X86_64) || defined(TARGET_IA64) || defined(__linux__)
+            case QEMU_OPTION_pcidevice:
+		if (assigned_devices_index >= MAX_DEV_ASSIGN_CMDLINE) {
+                    fprintf(stderr, "Too many assigned devices\n");
+                    exit(1);
+		}
+		assigned_devices[assigned_devices_index] = optarg;
+		assigned_devices_index++;
+                break;
+#endif
 #endif
             case QEMU_OPTION_usb:
                 usb_enabled = 1;
@@ -5533,6 +5625,20 @@ int main(int argc, char **argv, char **envp)
                 semihosting_enabled = 1;
                 break;
 #endif
+            case QEMU_OPTION_tdf:
+                time_drift_fix = 1;
+		break;
+            case QEMU_OPTION_kvm_shadow_memory:
+                kvm_shadow_memory = (int64_t)atoi(optarg) * 1024 * 1024 / 4096;
+                break;
+            case QEMU_OPTION_mempath:
+		mem_path = optarg;
+		break;
+#ifdef MAP_POPULATE
+            case QEMU_OPTION_mem_prealloc:
+		mem_prealloc = !mem_prealloc;
+		break;
+#endif
             case QEMU_OPTION_name:
                 qemu_name = qemu_strdup(optarg);
 		 {
@@ -5610,6 +5716,9 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_runas:
                 run_as = optarg;
+                break;
+            case QEMU_OPTION_nvram:
+                nvram = optarg;
                 break;
 #endif
 #ifdef CONFIG_XEN
@@ -5800,8 +5909,12 @@ int main(int argc, char **argv, char **envp)
 
         ret = kvm_init(smp_cpus);
         if (ret < 0) {
+#if defined(KVM_UPSTREAM) || defined(CONFIG_NO_CPU_EMULATION)
             fprintf(stderr, "failed to initialize KVM\n");
             exit(1);
+#endif
+            fprintf(stderr, "Could not initialize KVM, will disable KVM support\n");
+            kvm_allowed = 0;
         }
     } else {
         /* without kvm enabled, we can only support 4095 MB RAM */

@@ -27,6 +27,8 @@
 #include "qemu-log.h"
 #include "block_int.h"
 #include "module.h"
+#include "compatfd.h"
+#include <assert.h>
 #include "block/raw-posix-aio.h"
 
 #ifdef CONFIG_COCOA

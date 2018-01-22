@@ -25,6 +25,7 @@
 #include "gdbstub.h"
 #include "host-utils.h"
 
+#ifdef KVM_UPSTREAM
 //#define DEBUG_KVM
 
 #ifdef DEBUG_KVM
@@ -225,6 +226,7 @@ int kvm_arch_init_vcpu(CPUState *env)
     return kvm_vcpu_ioctl(env, KVM_SET_CPUID2, &cpuid_data);
 }
 
+#endif
 void kvm_arch_reset_vcpu(CPUState *env)
 {
     env->exception_injected = -1;
@@ -232,6 +234,7 @@ void kvm_arch_reset_vcpu(CPUState *env)
     env->nmi_injected = 0;
     env->nmi_pending = 0;
 }
+#ifdef KVM_UPSTREAM
 
 static int kvm_has_msr_star(CPUState *env)
 {
@@ -491,6 +494,7 @@ static int kvm_put_msrs(CPUState *env)
     if (kvm_has_msr_star(env))
 	kvm_msr_entry_set(&msrs[n++], MSR_STAR, env->star);
     kvm_msr_entry_set(&msrs[n++], MSR_IA32_TSC, env->tsc);
+    kvm_msr_entry_set(&msrs[n++], MSR_VM_HSAVE_PA, env->vm_hsave);
 #ifdef TARGET_X86_64
     /* FIXME if lm capable */
     kvm_msr_entry_set(&msrs[n++], MSR_CSTAR, env->cstar);
@@ -634,6 +638,7 @@ static int kvm_get_msrs(CPUState *env)
     if (kvm_has_msr_star(env))
 	msrs[n++].index = MSR_STAR;
     msrs[n++].index = MSR_IA32_TSC;
+    msrs[n++].index = MSR_VM_HSAVE_PA;
 #ifdef TARGET_X86_64
     /* FIXME lm_capable_kernel */
     msrs[n++].index = MSR_CSTAR;
@@ -686,6 +691,9 @@ static int kvm_get_msrs(CPUState *env)
         case MSR_KVM_WALL_CLOCK:
             env->wall_clock_msr = msrs[i].data;
             break;
+        case MSR_VM_HSAVE_PA:
+            env->vm_hsave = msrs[i].data;
+            break;
         }
     }
 
@@ -711,8 +719,9 @@ static int kvm_get_mp_state(CPUState *env)
     env->mp_state = mp_state.mp_state;
     return 0;
 }
+#endif
 
-static int kvm_put_vcpu_events(CPUState *env)
+int kvm_put_vcpu_events(CPUState *env)
 {
 #ifdef KVM_CAP_VCPU_EVENTS
     struct kvm_vcpu_events events;
@@ -736,13 +745,16 @@ static int kvm_put_vcpu_events(CPUState *env)
 
     events.sipi_vector = env->sipi_vector;
 
+    events.flags =
+        KVM_VCPUEVENT_VALID_NMI_PENDING | KVM_VCPUEVENT_VALID_SIPI_VECTOR;
+
     return kvm_vcpu_ioctl(env, KVM_SET_VCPU_EVENTS, &events);
 #else
     return 0;
 #endif
 }
 
-static int kvm_get_vcpu_events(CPUState *env)
+int kvm_get_vcpu_events(CPUState *env)
 {
 #ifdef KVM_CAP_VCPU_EVENTS
     struct kvm_vcpu_events events;
@@ -779,6 +791,7 @@ static int kvm_get_vcpu_events(CPUState *env)
     return 0;
 }
 
+#ifdef KVM_UPSTREAM
 int kvm_arch_put_registers(CPUState *env)
 {
     int ret;
@@ -874,6 +887,7 @@ int kvm_arch_pre_run(CPUState *env, struct kvm_run *run)
 
     return 0;
 }
+#endif
 
 int kvm_arch_post_run(CPUState *env, struct kvm_run *run)
 {
@@ -888,6 +902,7 @@ int kvm_arch_post_run(CPUState *env, struct kvm_run *run)
     return 0;
 }
 
+#ifdef KVM_UPSTREAM
 static int kvm_handle_halt(CPUState *env)
 {
     if (!((env->interrupt_request & CPU_INTERRUPT_HARD) &&
@@ -1085,3 +1100,6 @@ void kvm_arch_update_guest_debug(CPUState *env, struct kvm_guest_debug *dbg)
     }
 }
 #endif /* KVM_CAP_SET_GUEST_DEBUG */
+#endif
+
+#include "qemu-kvm-x86.c"

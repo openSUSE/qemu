@@ -56,6 +56,9 @@
 #include "json-streamer.h"
 #include "json-parser.h"
 #include "osdep.h"
+#include "exec-all.h"
+
+#include "qemu-kvm.h"
 
 //#define DEBUG
 //#define DEBUG_COMPLETION
@@ -729,6 +732,9 @@ static void print_cpu_iter(QObject *obj, void *opaque)
         monitor_printf(mon, " (halted)");
     }
 
+    monitor_printf(mon, " thread_id=%" PRId64 " ",
+					qdict_get_int(cpu, "thread_id"));
+
     monitor_printf(mon, "\n");
 }
 
@@ -793,6 +799,7 @@ static void do_info_cpus(Monitor *mon, QObject **ret_data)
 #elif defined(TARGET_MIPS)
         qdict_put(cpu, "PC", qint_from_int(env->active_tc.PC));
 #endif
+        qdict_put(cpu, "thread_id", qint_from_int(env->thread_id));
 
         qlist_append(cpu_list, cpu);
     }
@@ -805,6 +812,27 @@ static void do_cpu_set(Monitor *mon, const QDict *qdict)
     int index = qdict_get_int(qdict, "index");
     if (mon_set_cpu(index) < 0)
         monitor_printf(mon, "Invalid CPU index\n");
+}
+
+static void do_cpu_set_nr(Monitor *mon, const QDict *qdict)
+{
+    int state, value;
+    const char *status;
+
+    status = qdict_get_str(qdict, "state");
+    value = qdict_get_int(qdict, "cpu");
+
+    if (!strcmp(status, "online"))
+       state = 1;
+    else if (!strcmp(status, "offline"))
+       state = 0;
+    else {
+        monitor_printf(mon, "invalid status: %s\n", status);
+        return;
+    }
+#if defined(TARGET_I386) || defined(TARGET_X86_64)
+    qemu_system_cpu_hot_add(value, state);
+#endif
 }
 
 static void do_info_jit(Monitor *mon)
@@ -2017,7 +2045,10 @@ static void do_inject_nmi(Monitor *mon, const QDict *qdict)
 
     for (env = first_cpu; env != NULL; env = env->next_cpu)
         if (env->cpu_index == cpu_index) {
-            cpu_interrupt(env, CPU_INTERRUPT_NMI);
+            if (kvm_enabled())
+                kvm_inject_interrupt(env, CPU_INTERRUPT_NMI);
+            else
+                cpu_interrupt(env, CPU_INTERRUPT_NMI);
             break;
         }
 }

@@ -78,6 +78,10 @@ QemuOptsList qemu_drive_opts = {
         },{
             .name = "readonly",
             .type = QEMU_OPT_BOOL,
+        },{
+            .name = "boot",
+            .type = QEMU_OPT_BOOL,
+            .help = "make this a boot drive",
         },
         { /* end if list */ }
     },

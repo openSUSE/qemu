@@ -807,7 +807,7 @@ ETEXI
     {
         .name       = "pci_add",
         .args_type  = "pci_addr:s,type:s,opts:s?",
-        .params     = "auto|[[<domain>:]<bus>:]<slot> nic|storage [[vlan=n][,macaddr=addr][,model=type]] [file=file][,if=type][,bus=nr]...",
+        .params     = "auto|[[<domain>:]<bus>:]<slot> nic|storage|host [[vlan=n][,macaddr=addr][,model=type]] [file=file][,if=type][,bus=nr]... [host=02:00.0[,name=string][,dma=none]",
         .help       = "hot-add PCI device",
         .user_print = pci_device_hot_add_print,
         .mhandler.cmd_new = pci_device_hot_add,
@@ -1060,6 +1060,19 @@ ETEXI
 STEXI
 @item block_passwd @var{device} @var{password}
 Set the encrypted device @var{device} password to @var{password}
+ETEXI
+
+    {
+        .name       = "cpu_set",
+        .args_type  = "cpu:i,state:s",
+        .params     = "cpu [online|offline]",
+        .help       = "change cpu state",
+        .mhandler.cmd  = do_cpu_set_nr,
+    },
+
+STEXI
+@item cpu_set @var{cpu} [online|offline]
+Set CPU @var{cpu} online or offline.
 ETEXI
 
 STEXI

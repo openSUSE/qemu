@@ -63,6 +63,18 @@ config-host.h-timestamp: config-host.mak
 
 SUBDIR_RULES=$(patsubst %,subdir-%, $(TARGET_DIRS))
 
+ifeq ($(KVM_KMOD),yes)
+
+.PHONEY: kvm-kmod
+
+all: kvm-kmod
+
+kvm-kmod:
+	$(call quiet-command,$(MAKE) $(SUBDIR_MAKEFLAGS) -C kvm/kernel V="$(V)" )
+
+
+endif
+
 subdir-%: $(GENERATED_HEADERS)
 	$(call quiet-command,$(MAKE) $(SUBDIR_MAKEFLAGS) -C $* V="$(V)" TARGET_DIR="$*/" all,)
 
@@ -94,6 +106,7 @@ block-obj-y = cutils.o cache-utils.o qemu-malloc.o qemu-option.o module.o
 block-obj-y += nbd.o block.o aio.o aes.o osdep.o
 block-obj-$(CONFIG_POSIX) += posix-aio-compat.o
 block-obj-$(CONFIG_LINUX_AIO) += linux-aio.o
+block-obj-$(CONFIG_POSIX) += compatfd.o
 
 block-nested-y += cow.o qcow.o vdi.o vmdk.o cloop.o dmg.o bochs.o vpc.o vvfat.o
 block-nested-y += qcow2.o qcow2-refcount.o qcow2-cluster.o qcow2-snapshot.o
@@ -283,6 +296,8 @@ pxe-ne2k_pci.bin pxe-pcnet.bin \
 pxe-rtl8139.bin pxe-virtio.bin \
 bamboo.dtb petalogix-s3adsp1800.dtb \
 multiboot.bin linuxboot.bin
+BLOBS += extboot.bin
+BLOBS += vapic.bin
 else
 BLOBS=
 endif
@@ -305,7 +320,12 @@ endif
 ifneq ($(BLOBS),)
 	$(INSTALL_DIR) "$(DESTDIR)$(datadir)"
 	set -e; for x in $(BLOBS); do \
+	    if [ -f $(SRC_PATH)/pc-bios/$$x ];then \
 		$(INSTALL_DATA) $(SRC_PATH)/pc-bios/$$x "$(DESTDIR)$(datadir)"; \
+	    fi \
+	    ; if [ -f pc-bios/optionrom/$$x ];then \
+		$(INSTALL_DATA) pc-bios/optionrom/$$x "$(DESTDIR)$(datadir)"; \
+	    fi \
 	done
 endif
 	$(INSTALL_DIR) "$(DESTDIR)$(datadir)/keymaps"
@@ -315,6 +335,9 @@ endif
 	for d in $(TARGET_DIRS); do \
 	$(MAKE) -C $$d $@ || exit 1 ; \
         done
+ifeq ($(KVM_KMOD),yes)
+	$(MAKE) -C kvm/kernel $@
+endif
 
 # various test targets
 test speed: all
@@ -435,6 +458,7 @@ tarbin:
 	$(datadir)/pxe-rtl8139.bin \
 	$(datadir)/pxe-pcnet.bin \
 	$(datadir)/pxe-e1000.bin \
+	$(datadir)/extboot.bin \
 	$(docdir)/qemu-doc.html \
 	$(docdir)/qemu-tech.html \
 	$(mandir)/man1/qemu.1 \

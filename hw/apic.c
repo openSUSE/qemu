@@ -24,6 +24,8 @@
 #include "host-utils.h"
 #include "kvm.h"
 
+#include "qemu-kvm.h"
+
 //#define DEBUG_APIC
 
 /* APIC Local Vector Table */
@@ -299,8 +301,11 @@ void cpu_set_apic_base(CPUState *env, uint64_t val)
 #endif
     if (!s)
         return;
-    s->apicbase = (val & 0xfffff000) |
-        (s->apicbase & (MSR_IA32_APICBASE_BSP | MSR_IA32_APICBASE_ENABLE));
+    if (kvm_enabled() && kvm_irqchip_in_kernel())
+        s->apicbase = val;
+    else
+        s->apicbase = (val & 0xfffff000) |
+            (s->apicbase & (MSR_IA32_APICBASE_BSP | MSR_IA32_APICBASE_ENABLE));
     /* if disabled, cannot be enabled again */
     if (!(val & MSR_IA32_APICBASE_ENABLE)) {
         s->apicbase &= ~MSR_IA32_APICBASE_ENABLE;
@@ -393,6 +398,11 @@ int apic_get_irq_delivered(void)
     return apic_irq_delivered;
 }
 
+void apic_set_irq_delivered(void)
+{
+    apic_irq_delivered = 1;
+}
+
 static void apic_set_irq(APICState *s, int vector_num, int trigger_mode)
 {
     apic_irq_delivered += !get_bit(s->irr, vector_num);
@@ -478,6 +488,7 @@ void apic_init_reset(CPUState *env)
     if (!s)
         return;
 
+    cpu_synchronize_state(env);
     s->tpr = 0;
     s->spurious_vec = 0xff;
     s->log_dest = 0;
@@ -497,6 +508,13 @@ void apic_init_reset(CPUState *env)
     s->wait_for_sipi = 1;
 
     env->halted = !(s->apicbase & MSR_IA32_APICBASE_BSP);
+#ifdef KVM_CAP_MP_STATE
+    if (kvm_enabled() && kvm_irqchip_in_kernel()) {
+        env->mp_state
+            = env->halted ? KVM_MP_STATE_UNINITIALIZED : KVM_MP_STATE_RUNNABLE;
+        kvm_load_mpstate(env);
+    }
+#endif
 }
 
 static void apic_startup(APICState *s, int vector_num)
@@ -864,6 +882,115 @@ static void apic_mem_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
     }
 }
 
+#ifdef KVM_CAP_IRQCHIP
+
+static inline uint32_t kapic_reg(struct kvm_lapic_state *kapic, int reg_id)
+{
+    return *((uint32_t *) (kapic->regs + (reg_id << 4)));
+}
+
+static inline void kapic_set_reg(struct kvm_lapic_state *kapic,
+                                 int reg_id, uint32_t val)
+{
+    *((uint32_t *) (kapic->regs + (reg_id << 4))) = val;
+}
+
+static void kvm_kernel_lapic_save_to_user(APICState *s)
+{
+    struct kvm_lapic_state apic;
+    struct kvm_lapic_state *kapic = &apic;
+    int i, v;
+
+    kvm_get_lapic(s->cpu_env, kapic);
+
+    s->id = kapic_reg(kapic, 0x2) >> 24;
+    s->tpr = kapic_reg(kapic, 0x8);
+    s->arb_id = kapic_reg(kapic, 0x9);
+    s->log_dest = kapic_reg(kapic, 0xd) >> 24;
+    s->dest_mode = kapic_reg(kapic, 0xe) >> 28;
+    s->spurious_vec = kapic_reg(kapic, 0xf);
+    for (i = 0; i < 8; i++) {
+        s->isr[i] = kapic_reg(kapic, 0x10 + i);
+        s->tmr[i] = kapic_reg(kapic, 0x18 + i);
+        s->irr[i] = kapic_reg(kapic, 0x20 + i);
+    }
+    s->esr = kapic_reg(kapic, 0x28);
+    s->icr[0] = kapic_reg(kapic, 0x30);
+    s->icr[1] = kapic_reg(kapic, 0x31);
+    for (i = 0; i < APIC_LVT_NB; i++)
+	s->lvt[i] = kapic_reg(kapic, 0x32 + i);
+    s->initial_count = kapic_reg(kapic, 0x38);
+    s->divide_conf = kapic_reg(kapic, 0x3e);
+
+    v = (s->divide_conf & 3) | ((s->divide_conf >> 1) & 4);
+    s->count_shift = (v + 1) & 7;
+
+    s->initial_count_load_time = qemu_get_clock(vm_clock);
+    apic_timer_update(s, s->initial_count_load_time);
+}
+
+static void kvm_kernel_lapic_load_from_user(APICState *s)
+{
+    struct kvm_lapic_state apic;
+    struct kvm_lapic_state *klapic = &apic;
+    int i;
+
+    memset(klapic, 0, sizeof apic);
+    kapic_set_reg(klapic, 0x2, s->id << 24);
+    kapic_set_reg(klapic, 0x8, s->tpr);
+    kapic_set_reg(klapic, 0xd, s->log_dest << 24);
+    kapic_set_reg(klapic, 0xe, s->dest_mode << 28 | 0x0fffffff);
+    kapic_set_reg(klapic, 0xf, s->spurious_vec);
+    for (i = 0; i < 8; i++) {
+        kapic_set_reg(klapic, 0x10 + i, s->isr[i]);
+        kapic_set_reg(klapic, 0x18 + i, s->tmr[i]);
+        kapic_set_reg(klapic, 0x20 + i, s->irr[i]);
+    }
+    kapic_set_reg(klapic, 0x28, s->esr);
+    kapic_set_reg(klapic, 0x30, s->icr[0]);
+    kapic_set_reg(klapic, 0x31, s->icr[1]);
+    for (i = 0; i < APIC_LVT_NB; i++)
+        kapic_set_reg(klapic, 0x32 + i, s->lvt[i]);
+    kapic_set_reg(klapic, 0x38, s->initial_count);
+    kapic_set_reg(klapic, 0x3e, s->divide_conf);
+
+    kvm_set_lapic(s->cpu_env, klapic);
+}
+
+#endif
+
+void qemu_kvm_load_lapic(CPUState *env)
+{
+#ifdef KVM_CAP_IRQCHIP
+    if (kvm_enabled() && kvm_vcpu_inited(env) && kvm_irqchip_in_kernel()) {
+        kvm_kernel_lapic_load_from_user(env->apic_state);
+    }
+#endif
+}
+
+static void apic_pre_save(void *opaque)
+{
+#ifdef KVM_CAP_IRQCHIP
+    APICState *s = (void *)opaque;
+
+    if (kvm_enabled() && kvm_irqchip_in_kernel()) {
+        kvm_kernel_lapic_save_to_user(s);
+    }
+#endif
+}
+
+static int apic_post_load(void *opaque, int version_id)
+{
+#ifdef KVM_CAP_IRQCHIP
+    APICState *s = opaque;
+
+    if (kvm_enabled() && kvm_irqchip_in_kernel()) {
+        kvm_kernel_lapic_load_from_user(s);
+    }
+#endif
+    return 0;
+}
+
 /* This function is only used for old state version 1 and 2 */
 static int apic_load_old(QEMUFile *f, void *opaque, int version_id)
 {
@@ -900,6 +1027,9 @@ static int apic_load_old(QEMUFile *f, void *opaque, int version_id)
 
     if (version_id >= 2)
         qemu_get_timer(f, s->timer);
+
+    qemu_kvm_load_lapic(s->cpu_env);
+
     return 0;
 }
 
@@ -930,7 +1060,9 @@ static const VMStateDescription vmstate_apic = {
         VMSTATE_INT64(next_time, APICState),
         VMSTATE_TIMER(timer, APICState),
         VMSTATE_END_OF_LIST()
-    }
+    },
+    .pre_save = apic_pre_save,
+    .post_load = apic_post_load,
 };
 
 static void apic_reset(void *opaque)
@@ -955,6 +1087,7 @@ static void apic_reset(void *opaque)
          */
         s->lvt[APIC_LVT_LINT0] = 0x700;
     }
+    qemu_kvm_load_lapic(s->cpu_env);
 }
 
 static CPUReadMemoryFunc * const apic_mem_read[3] = {
@@ -997,6 +1130,11 @@ int apic_init(CPUState *env)
 
     vmstate_register(s->idx, &vmstate_apic, s);
     qemu_register_reset(apic_reset, s);
+
+    /* apic_reset must be called before the vcpu threads are initialized and load
+     * registers, in qemu-kvm.
+     */
+    apic_reset(s);
 
     local_apics[s->idx] = s;
     return 0;

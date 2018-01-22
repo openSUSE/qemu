@@ -29,6 +29,8 @@
 #include "isa.h"
 #include "sysbus.h"
 
+#include "qemu-kvm.h"
+
 typedef PCIHostState I440FXState;
 
 typedef struct PIIX3State {
@@ -88,6 +90,10 @@ static void i440fx_update_memory_mappings(PCII440FXState *d)
     int i, r;
     uint32_t smram, addr;
 
+    if (kvm_enabled()) {
+        /* FIXME: Support remappings and protection changes. */
+        return;
+    }
     update_pam(d, 0xf0000, 0x100000, (d->dev.config[0x59] >> 4) & 3);
     for(i = 0; i < 12; i++) {
         r = (d->dev.config[(i >> 1) + 0x5a] >> ((i & 1) * 4)) & 3;
@@ -201,6 +207,8 @@ static int i440fx_initfn(PCIDevice *dev)
     return 0;
 }
 
+static PIIX3State *piix3_dev;
+
 PCIBus *i440fx_init(PCII440FXState **pi440fx_state, int *piix3_devfn, qemu_irq *pic)
 {
     DeviceState *dev;
@@ -225,6 +233,8 @@ PCIBus *i440fx_init(PCII440FXState **pi440fx_state, int *piix3_devfn, qemu_irq *
     (*pi440fx_state)->piix3 = piix3;
 
     *piix3_devfn = piix3->dev.devfn;
+
+    piix3_dev = piix3;
 
     return b;
 }
@@ -251,6 +261,13 @@ static void piix3_set_irq(void *opaque, int irq_num, int level)
         }
         qemu_set_irq(piix3->pic[pic_irq], pic_level);
     }
+}
+
+int piix_get_irq(int pin)
+{
+    if (piix3_dev)
+        return piix3_dev->dev.config[0x60+pin];
+    return 0;
 }
 
 static void piix3_reset(void *opaque)

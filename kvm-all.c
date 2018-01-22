@@ -26,6 +26,7 @@
 #include "gdbstub.h"
 #include "kvm.h"
 
+#ifdef KVM_UPSTREAM
 /* KVM uses PAGE_SIZE in it's definition of COALESCED_MMIO_MAX */
 #define PAGE_SIZE TARGET_PAGE_SIZE
 
@@ -57,7 +58,6 @@ struct KVMState
     KVMSlot slots[32];
     int fd;
     int vmfd;
-    int regs_modified;
     int coalesced_mmio;
     int broken_set_mem_region;
     int migration_log;
@@ -157,12 +157,14 @@ static void kvm_reset_vcpu(void *opaque)
         abort();
     }
 }
+#endif
 
 int kvm_irqchip_in_kernel(void)
 {
     return kvm_state->irqchip_in_kernel;
 }
 
+#ifdef KVM_UPSTREAM
 int kvm_pit_in_kernel(void)
 {
     return kvm_state->pit_in_kernel;
@@ -343,6 +345,7 @@ int kvm_physical_sync_dirty_bitmap(target_phys_addr_t start_addr,
 
     return ret;
 }
+#endif
 
 int kvm_coalesce_mmio_region(target_phys_addr_t start, ram_addr_t size)
 {
@@ -393,6 +396,7 @@ int kvm_check_extension(KVMState *s, unsigned int extension)
 
     return ret;
 }
+#ifdef KVM_UPSTREAM
 
 int kvm_init(int smp_cpus)
 {
@@ -504,6 +508,7 @@ err:
 
     return ret;
 }
+#endif
 
 static int kvm_handle_io(uint16_t port, void *data, int direction, int size,
                          uint32_t count)
@@ -544,6 +549,7 @@ static int kvm_handle_io(uint16_t port, void *data, int direction, int size,
     return 1;
 }
 
+#ifdef KVM_UPSTREAM
 static void kvm_run_coalesced_mmio(CPUState *env, struct kvm_run *run)
 {
 #ifdef KVM_CAP_COALESCED_MMIO
@@ -812,6 +818,7 @@ void kvm_set_phys_mem(target_phys_addr_t start_addr,
     }
 }
 
+#endif
 int kvm_ioctl(KVMState *s, int type, ...)
 {
     int ret;
@@ -879,6 +886,7 @@ int kvm_has_vcpu_events(void)
     return kvm_state->vcpu_events;
 }
 
+#ifdef KVM_UPSTREAM
 void kvm_setup_guest_memory(void *start, size_t size)
 {
     if (!kvm_has_sync_mmu()) {
@@ -897,7 +905,11 @@ void kvm_setup_guest_memory(void *start, size_t size)
     }
 }
 
+#endif /* KVM_UPSTREAM */
+
 #ifdef KVM_CAP_SET_GUEST_DEBUG
+
+#ifdef KVM_UPSTREAM
 static void on_vcpu(CPUState *env, void (*func)(void *data), void *data)
 {
 #ifdef CONFIG_IOTHREAD
@@ -910,6 +922,7 @@ static void on_vcpu(CPUState *env, void (*func)(void *data), void *data)
     func(data);
 #endif
 }
+#endif /* KVM_UPSTREAM */
 
 struct kvm_sw_breakpoint *kvm_find_sw_breakpoint(CPUState *env,
                                                  target_ulong pc)
@@ -927,6 +940,8 @@ int kvm_sw_breakpoints_active(CPUState *env)
 {
     return !QTAILQ_EMPTY(&env->kvm_state->kvm_sw_breakpoints);
 }
+
+#ifdef KVM_UPSTREAM
 
 struct kvm_set_guest_debug_data {
     struct kvm_guest_debug dbg;
@@ -961,6 +976,7 @@ int kvm_update_guest_debug(CPUState *env, unsigned long reinject_trap)
     on_vcpu(env, kvm_invoke_set_guest_debug, &data);
     return data.err;
 }
+#endif
 
 int kvm_insert_breakpoint(CPUState *current_env, target_ulong addr,
                           target_ulong len, int type)
@@ -1085,3 +1101,5 @@ void kvm_remove_all_breakpoints(CPUState *current_env)
 {
 }
 #endif /* !KVM_CAP_SET_GUEST_DEBUG */
+
+#include "qemu-kvm.c"

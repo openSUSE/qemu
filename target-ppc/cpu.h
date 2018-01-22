@@ -36,9 +36,10 @@
 #if defined(TARGET_PPCEMB)
 /* Specific definitions for PowerPC embedded */
 /* BookE have 36 bits physical address space */
-#if defined(CONFIG_USER_ONLY)
+#if defined(CONFIG_USER_ONLY) || defined(USE_KVM)
 /* It looks like a lot of Linux programs assume page size
  * is 4kB long. This is evil, but we have to deal with it...
+ * Also kvm for embedded powerpc needs (atm) 4kB aligned pages
  */
 #define TARGET_PAGE_BITS 12
 #else /* defined(CONFIG_USER_ONLY) */
@@ -1601,5 +1602,12 @@ static inline void cpu_set_tls(CPUState *env, target_ulong newtls)
     env->gpr[2] = newtls;
 #endif
 }
+
+/* hidden flags (hflags) - used internally by qemu to represent additional
+ * cpu states.
+ */
+#define HF_HALTED_SHIFT 1
+
+#define HF_HALTED_MASK 1<<HF_HALTED_SHIFT
 
 #endif /* !defined (__CPU_PPC_H__) */

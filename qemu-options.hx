@@ -104,6 +104,7 @@ DEF("drive", HAS_ARG, QEMU_OPTION_drive,
     "       [,cyls=c,heads=h,secs=s[,trans=t]][,snapshot=on|off]\n"
     "       [,cache=writethrough|writeback|none][,format=f][,serial=s]\n"
     "       [,addr=A][,id=name][,aio=threads|native]\n"
+    "       [,boot=on|off]\n"
     "                use 'file' as a drive image\n")
 DEF("set", HAS_ARG, QEMU_OPTION_set,
     "-set group.id.arg=value\n"
@@ -1953,6 +1954,37 @@ STEXI
 @item -writeconfig @var{file}
 Write device configuration to @var{file}.
 ETEXI
+
+DEF("no-kvm", 0, QEMU_OPTION_no_kvm,
+    "-no-kvm         disable KVM hardware virtualization\n")
+DEF("no-kvm-irqchip", 0, QEMU_OPTION_no_kvm_irqchip,
+    "-no-kvm-irqchip disable KVM kernel mode PIC/IOAPIC/LAPIC\n")
+DEF("no-kvm-pit", 0, QEMU_OPTION_no_kvm_pit,
+    "-no-kvm-pit     disable KVM kernel mode PIT\n")
+DEF("no-kvm-pit-reinjection", 0, QEMU_OPTION_no_kvm_pit_reinjection,
+    "-no-kvm-pit-reinjection disable KVM kernel mode PIT interrupt reinjection\n")
+#if defined(TARGET_I386) || defined(TARGET_X86_64) || defined(TARGET_IA64) || defined(__linux__)
+DEF("pcidevice", HAS_ARG, QEMU_OPTION_pcidevice,
+    "-pcidevice host=bus:dev.func[,dma=none][,name=string]\n"
+    "                expose a PCI device to the guest OS.\n"
+    "                dma=none: don't perform any dma translations (default is to use an iommu)\n"
+    "                'string' is used in log output.\n")
+#endif
+DEF("enable-nesting", 0, QEMU_OPTION_enable_nesting,
+    "-enable-nesting enable support for running a VM inside the VM (AMD only)\n")
+DEF("nvram", HAS_ARG, QEMU_OPTION_nvram,
+    "-nvram FILE          provide ia64 nvram contents\n")
+DEF("tdf", 0, QEMU_OPTION_tdf,
+    "-tdf                 enable guest time drift compensation\n")
+DEF("kvm-shadow-memory", HAS_ARG, QEMU_OPTION_kvm_shadow_memory,
+    "-kvm-shadow-memory MEGABYTES\n"
+    "                     allocate MEGABYTES for kvm mmu shadowing\n")
+DEF("mem-path", HAS_ARG, QEMU_OPTION_mempath,
+    "-mem-path FILE       provide backing storage for guest RAM\n")
+#ifdef MAP_POPULATE
+DEF("mem-prealloc", 0, QEMU_OPTION_mem_prealloc,
+    "-mem-prealloc        preallocate guest memory (use with -mempath)\n")
+#endif
 
 HXCOMM This is the last statement. Insert new options before this line!
 STEXI

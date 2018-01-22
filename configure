@@ -160,7 +160,7 @@ else
   cpu=`uname -m`
 fi
 
-target_list=""
+target_list="x86_64-softmmu"
 case "$cpu" in
   alpha|cris|ia64|m68k|microblaze|ppc|ppc64|sparc64)
     cpu="$cpu"
@@ -196,6 +196,16 @@ case "$cpu" in
     cpu="unknown"
   ;;
 esac
+
+kvm_version() {
+    local fname="$(dirname "$0")/KVM_VERSION"
+
+    if test -f "$fname"; then
+        cat "$fname"
+    else
+        echo "qemu-kvm-devel"
+    fi
+}
 
 # Default value for a variable defining feature "foo".
 #  * foo="no"  feature will only be used if --enable-foo arg is given
@@ -250,10 +260,15 @@ guest_base=""
 uname_release=""
 io_thread="no"
 mixemu="no"
+kvm_trace="no"
+kvm_cap_pit=""
+kvm_cap_device_assignment=""
 kerneldir=""
 aix="no"
 blobs="yes"
-pkgversion=""
+pkgversion=" ($(kvm_version))"
+cpu_emulation="yes"
+kvm_kmod="no"
 check_utests="no"
 user_pie="no"
 zero_malloc=""
@@ -389,6 +404,13 @@ AIX)
   if [ "$cpu" = "i386" -o "$cpu" = "x86_64" ] ; then
     audio_possible_drivers="$audio_possible_drivers fmod"
   fi
+  if [ "$cpu" = "ia64" ] ; then
+     xen="no"
+     target_list="ia64-softmmu"
+     cpu_emulation="no"
+     gdbstub="no"
+     slirp="no"
+  fi
 ;;
 esac
 
@@ -518,6 +540,14 @@ for opt do
   ;;
   --enable-kvm) kvm="yes"
   ;;
+  --disable-kvm-cap-pit) kvm_cap_pit="no"
+  ;;
+  --enable-kvm-cap-pit) kvm_cap_pit="yes"
+  ;;
+  --disable-kvm-cap-device-assignment) kvm_cap_device_assignment="no"
+  ;;
+  --enable-kvm-cap-device-assignment) kvm_cap_device_assignment="yes"
+  ;;
   --enable-profiler) profiler="yes"
   ;;
   --enable-cocoa)
@@ -595,11 +625,15 @@ for opt do
   ;;
   --kerneldir=*) kerneldir="$optarg"
   ;;
+  --with-kvm-trace) kvm_trace="yes"
+  ;;
   --with-pkgversion=*) pkgversion=" ($optarg)"
   ;;
   --disable-docs) docs="no"
   ;;
   --enable-docs) docs="yes"
+  ;;
+  --disable-cpu-emulation) cpu_emulation="no"
   ;;
   *) echo "ERROR: unknown option $opt"; show_help="yes"
   ;;
@@ -722,6 +756,10 @@ echo "  --disable-bluez          disable bluez stack connectivity"
 echo "  --enable-bluez           enable bluez stack connectivity"
 echo "  --disable-kvm            disable KVM acceleration support"
 echo "  --enable-kvm             enable KVM acceleration support"
+echo "  --disable-cap-kvm-pit    disable KVM pit support"
+echo "  --enable-cap-kvm-pit     enable KVM pit support"
+echo "  --disable-cap-device-assignment    disable KVM device assignment support"
+echo "  --enable-cap-device-assignment     enable KVM device assignment support"
 echo "  --disable-nptl           disable usermode NPTL support"
 echo "  --enable-nptl            enable usermode NPTL support"
 echo "  --enable-system          enable all system emulation targets"
@@ -753,6 +791,8 @@ echo "  --enable-linux-aio       enable Linux AIO support"
 echo "  --enable-io-thread       enable IO thread"
 echo "  --disable-blobs          disable installing provided firmware blobs"
 echo "  --kerneldir=PATH         look for kernel includes in PATH"
+echo "  --with-kvm-trace         enable building the KVM module with the kvm trace option"
+echo "  --disable-cpu-emulation  disables use of qemu cpu emulation code"
 echo ""
 echo "NOTE: The object files are built at the place where configure is launched"
 exit 1
@@ -1384,8 +1424,22 @@ EOF
             kvm_cflags="$kvm_cflags -I$kerneldir/arch/$cpu/include"
       fi
   else
-      kvm_cflags=""
+      case "$cpu" in
+      i386 | x86_64)
+        kvm_arch="x86"
+        ;;
+      ppc)
+        kvm_arch="powerpc"
+        ;;
+      *)
+        kvm_arch="$cpu"
+        ;;
+      esac
+      kvm_cflags="-I$source_path/kvm/include"
+      kvm_cflags="$kvm_cflags -include $source_path/kvm/include/linux/config.h"
+      kvm_cflags="$kvm_cflags -I$source_path/kvm/include/$kvm_arch"
   fi
+  kvm_cflags="$kvm_cflags -idirafter $source_path/compat"
   if compile_prog "$kvm_cflags" "" ; then
     kvm=yes
   else
@@ -1404,6 +1458,75 @@ EOF
       feature_not_found "kvm"
     fi
     kvm=no
+  fi
+fi
+
+##########################################
+# test for KVM_CAP_PIT
+
+if test "$kvm_cap_pit" != "no" ; then
+  if test "$kvm" = "no" -a "$kvm_cap_pit" = "yes" ; then
+      feature_not_found "kvm_cap_pit (kvm is not enabled)"
+  fi
+  cat > $TMPC <<EOF
+#include <linux/kvm.h>
+#ifndef KVM_CAP_PIT
+#error "kvm no pit capability"
+#endif
+int main(void) { return 0; }
+EOF
+  if compile_prog "$kvm_cflags" ""; then
+    kvm_cap_pit=yes
+  else
+    if test "$kvm_cap_pit" = "yes" ; then
+      feature_not_found "kvm_cap_pit"
+    fi
+    kvm_cap_pit=no
+  fi
+fi
+
+##########################################
+# test for KVM_CAP_DEVICE_ASSIGNMENT
+
+if test "$kvm_cap_device_assignment" != "no" ; then
+  if test "$kvm" = "no" -a "$kvm_cap_device_assignment" = "yes" ; then
+      feature_not_found "kvm_cap_device_assignment (kvm is not enabled)"
+  fi
+  cat > $TMPC <<EOF
+#include <linux/kvm.h>
+#ifndef KVM_CAP_DEVICE_ASSIGNMENT
+#error "kvm no device assignment capability"
+#endif
+int main(void) { return 0; }
+EOF
+  if compile_prog "$kvm_cflags" "" ; then
+    kvm_cap_device_assignment=yes
+  else
+    if test "$kvm_cap_device_assignment" = "yes" ; then
+      feature_not_found "kvm_cap_device_assigment"
+    fi
+    kvm_cap_device_assignment=no
+  fi
+fi
+
+##########################################
+# libpci probe for kvm_cap_device_assignment
+if test $kvm_cap_device_assignment = "yes" ; then
+  cat > $TMPC << EOF
+#include <pci/pci.h>
+#ifndef PCI_VENDOR_ID
+#error NO LIBPCI
+#endif
+int main(void) { struct pci_access a; pci_init(&a); return 0; }
+EOF
+  if compile_prog "" "-lpci -lz" ; then
+    libs_softmmu="-lpci -lz $libs_softmmu"
+  else
+    echo
+    echo "Error: libpci check failed"
+    echo "Disable KVM Device Assignment capability."
+    echo
+    kvm_cap_device_assignment=no
   fi
 fi
 
@@ -1611,6 +1734,21 @@ int main(void)
 EOF
 if compile_prog "" "" ; then
   splice=yes
+fi
+
+##########################################
+# signalfd probe
+signalfd="no"
+cat > $TMPC << EOF
+#define _GNU_SOURCE
+#include <unistd.h>
+#include <sys/syscall.h>
+#include <signal.h>
+int main(void) { return syscall(SYS_signalfd, -1, NULL, _NSIG / 8); }
+EOF
+
+if $cc $ARCH_CFLAGS -o $TMPE $TMPC 2> /dev/null ; then
+  signalfd=yes
 fi
 
 # check if eventfd is supported
@@ -1842,6 +1980,20 @@ else
   binsuffix="/bin"
 fi
 
+if test -f kvm/kernel/configure; then
+    kvm_kmod="yes"
+    kmod_args=""
+    if test -n "$kerneldir"; then
+        kmod_args="--kerneldir=$kerneldir"
+    fi
+    if test "$kvm_trace" = "yes"; then
+        kmod_args="$kmod_args --with-kvm-trace"
+    fi
+    # hope there are no spaces in kmod_args; can't use arrays because of
+    # dash.
+    (cd kvm/kernel; ./configure $kmod_args)
+fi
+
 echo "Install prefix    $prefix"
 echo "BIOS directory    $prefix$datasuffix"
 echo "binary directory  $prefix$binsuffix"
@@ -1885,6 +2037,7 @@ if test -n "$sparc_cpu"; then
     echo "Target Sparc Arch $sparc_cpu"
 fi
 echo "xen support       $xen"
+echo "CPU emulation     $cpu_emulation"
 echo "brlapi support    $brlapi"
 echo "bluez  support    $bluez"
 echo "Documentation     $docs"
@@ -1898,6 +2051,9 @@ echo "IO thread         $io_thread"
 echo "Linux AIO support $linux_aio"
 echo "Install blobs     $blobs"
 echo "KVM support       $kvm"
+echo "KVM PIT support   $kvm_cap_pit"
+echo "KVM device assig. $kvm_cap_device_assignment"
+echo "KVM trace support $kvm_trace"
 echo "fdt support       $fdt"
 echo "preadv support    $preadv"
 echo "fdatasync         $fdatasync"
@@ -2104,6 +2260,9 @@ fi
 if test "$fdt" = "yes" ; then
   echo "CONFIG_FDT=y" >> $config_host_mak
 fi
+if test "$signalfd" = "yes" ; then
+  echo "CONFIG_SIGNALFD=y" >> $config_host_mak
+fi
 if test "$need_offsetof" = "yes" ; then
   echo "CONFIG_NEED_OFFSETOF=y" >> $config_host_mak
 fi
@@ -2112,6 +2271,11 @@ if test "$gcc_attribute_warn_unused_result" = "yes" ; then
 fi
 if test "$fdatasync" = "yes" ; then
   echo "CONFIG_FDATASYNC=y" >> $config_host_mak
+fi
+if test $cpu_emulation = "yes"; then
+  echo "CONFIG_CPU_EMULATION=y" >> $config_host_mak
+else
+  echo "CONFIG_NO_CPU_EMULATION=y" >> $config_host_mak
 fi
 
 # XXX: suppress that
@@ -2137,6 +2301,8 @@ bsd)
   echo "HOST_USB=stub" >> $config_host_mak
 ;;
 esac
+
+echo "KVM_KMOD=$kvm_kmod" >> $config_host_mak
 
 tools=
 if test `expr "$target_list" : ".*softmmu.*"` != 0 ; then
@@ -2288,6 +2454,9 @@ case "$target_arch2" in
     TARGET_BASE_ARCH=i386
     target_phys_bits=64
   ;;
+  ia64)
+    target_phys_bits=64
+  ;;
   alpha)
     target_phys_bits=64
   ;;
@@ -2418,6 +2587,12 @@ case "$target_arch2" in
       \( "$target_arch2" = "i386"   -a "$cpu" = "x86_64" \) \) ; then
       echo "CONFIG_KVM=y" >> $config_target_mak
       echo "KVM_CFLAGS=$kvm_cflags" >> $config_target_mak
+      if test $kvm_cap_pit = "yes" ; then
+        echo "CONFIG_KVM_PIT=y" >> $config_target_mak
+      fi
+      if test $kvm_cap_device_assignment = "yes" ; then
+        echo "CONFIG_KVM_DEVICE_ASSIGNMENT=y" >> $config_target_mak
+      fi
     fi
 esac
 echo "TARGET_PHYS_ADDR_BITS=$target_phys_bits" >> $config_target_mak
@@ -2626,7 +2801,7 @@ if test "$source_path_used" = "yes" ; then
 fi
 
 # temporary config to build submodules
-for rom in seabios vgabios ; do
+for rom in seabios vgabios; do
     config_mak=roms/$rom/config.mak
     echo "# Automatically generated by configure - do not modify" >> $config_mak
     echo "SRC_PATH=$source_path/roms/$rom" >> $config_mak

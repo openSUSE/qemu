@@ -129,6 +129,9 @@ VirtIODevice *virtio_console_init(DeviceState *dev)
     s = (VirtIOConsole *)virtio_common_init("virtio-console",
                                             VIRTIO_ID_CONSOLE,
                                             0, sizeof(VirtIOConsole));
+    if (s == NULL)
+        return NULL;
+
     s->vdev.get_features = virtio_console_get_features;
 
     s->ivq = virtio_add_queue(&s->vdev, 128, virtio_console_handle_input);

@@ -184,11 +184,11 @@ static inline int testandset (spinlock_t *p)
 
 #elif defined(__ia64)
 
-#include <ia64intrin.h>
+#include "ia64intrin.h"
 
 static inline int testandset (int *p)
 {
-    return __sync_lock_test_and_set (p, 1);
+    return (int)cmpxchg_acq(p,0,1);
 }
 #elif defined(__mips__)
 static inline int testandset (int *p)

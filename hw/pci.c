@@ -27,6 +27,9 @@
 #include "net.h"
 #include "sysemu.h"
 #include "loader.h"
+#include "qemu-kvm.h"
+#include "hw/pc.h"
+#include "device-assignment.h"
 
 //#define DEBUG_PCI
 #ifdef DEBUG_PCI
@@ -423,6 +426,7 @@ static int pci_set_default_subsystem_id(PCIDevice *pci_dev)
 }
 
 /*
+ * Parse pci address in qemu command
  * Parse [[<domain>:]<bus>:]<slot>, return -1 on error
  */
 static int pci_parse_devaddr(const char *addr, int *domp, int *busp, unsigned *slotp)
@@ -468,6 +472,55 @@ static int pci_parse_devaddr(const char *addr, int *domp, int *busp, unsigned *s
     *domp = dom;
     *busp = bus;
     *slotp = slot;
+    return 0;
+}
+
+/*
+ * Parse device bdf in device assignment command:
+ *
+ * -pcidevice host=bus:dev.func
+ *
+ * Parse <bus>:<slot>.<func> return -1 on error
+ */
+int pci_parse_host_devaddr(const char *addr, int *busp,
+                           int *slotp, int *funcp)
+{
+    const char *p;
+    char *e;
+    int val;
+    int bus = 0, slot = 0, func = 0;
+
+    p = addr;
+    val = strtoul(p, &e, 16);
+    if (e == p)
+	return -1;
+    if (*e == ':') {
+	bus = val;
+	p = e + 1;
+	val = strtoul(p, &e, 16);
+	if (e == p)
+	    return -1;
+	if (*e == '.') {
+	    slot = val;
+	    p = e + 1;
+	    val = strtoul(p, &e, 16);
+	    if (e == p)
+		return -1;
+	    func = val;
+	} else
+	    return -1;
+    } else
+	return -1;
+
+    if (bus > 0xff || slot > 0x1f || func > 0x7)
+	return -1;
+
+    if (*e)
+	return -1;
+
+    *busp = bus;
+    *slotp = slot;
+    *funcp = func;
     return 0;
 }
 
@@ -947,14 +1000,56 @@ static void pci_update_mappings(PCIDevice *d)
     }
 }
 
-uint32_t pci_default_read_config(PCIDevice *d,
-                                 uint32_t address, int len)
+static uint32_t pci_read_config(PCIDevice *d,
+                                uint32_t address, int len)
 {
     uint32_t val = 0;
-    assert(len == 1 || len == 2 || len == 4);
+
     len = MIN(len, pci_config_size(d) - address);
     memcpy(&val, d->config + address, len);
     return le32_to_cpu(val);
+}
+
+uint32_t pci_default_read_config(PCIDevice *d,
+                                 uint32_t address, int len)
+{
+    assert(len == 1 || len == 2 || len == 4);
+
+    if (pci_access_cap_config(d, address, len)) {
+        return d->cap.config_read(d, address, len);
+    }
+
+    return pci_read_config(d, address, len);
+}
+
+static void pci_write_config(PCIDevice *pci_dev,
+                             uint32_t address, uint32_t val, int len)
+{
+    int i;
+    for (i = 0; i < len; i++) {
+        pci_dev->config[address + i] = val & 0xff;
+        val >>= 8;
+    }
+}
+
+int pci_access_cap_config(PCIDevice *pci_dev, uint32_t address, int len)
+{
+    if (pci_dev->cap.supported && address >= pci_dev->cap.start &&
+            (address + len) < pci_dev->cap.start + pci_dev->cap.length)
+        return 1;
+    return 0;
+}
+
+uint32_t pci_default_cap_read_config(PCIDevice *pci_dev,
+                                     uint32_t address, int len)
+{
+    return pci_read_config(pci_dev, address, len);
+}
+
+void pci_default_cap_write_config(PCIDevice *pci_dev,
+                                  uint32_t address, uint32_t val, int len)
+{
+    pci_write_config(pci_dev, address, val, len);
 }
 
 void pci_default_write_config(PCIDevice *d, uint32_t addr, uint32_t val, int l)
@@ -962,10 +1057,23 @@ void pci_default_write_config(PCIDevice *d, uint32_t addr, uint32_t val, int l)
     int i;
     uint32_t config_size = pci_config_size(d);
 
+    if (pci_access_cap_config(d, addr, l)) {
+        d->cap.config_write(d, addr, val, l);
+        return;
+    }
+
     for (i = 0; i < l && addr + i < config_size; val >>= 8, ++i) {
         uint8_t wmask = d->wmask[addr + i];
         d->config[addr + i] = (d->config[addr + i] & ~wmask) | (val & wmask);
     }
+
+#ifdef CONFIG_KVM_DEVICE_ASSIGNMENT
+    if (kvm_enabled() && kvm_irqchip_in_kernel() &&
+        addr >= PIIX_CONFIG_IRQ_ROUTE &&
+	addr < PIIX_CONFIG_IRQ_ROUTE + 4)
+        assigned_dev_update_irqs();
+#endif /* CONFIG_KVM_DEVICE_ASSIGNMENT */
+
     if (ranges_overlap(addr, l, PCI_BASE_ADDRESS_0, 24) ||
         ranges_overlap(addr, l, PCI_ROM_ADDRESS, 4) ||
         ranges_overlap(addr, l, PCI_ROM_ADDRESS1, 4) ||
@@ -986,9 +1094,18 @@ static void pci_set_irq(void *opaque, int irq_num, int level)
     if (!change)
         return;
 
+#if defined(TARGET_IA64)
+    ioapic_set_irq(pci_dev, irq_num, level);
+#endif
+
     pci_set_irq_state(pci_dev, irq_num, level);
     pci_update_irq_status(pci_dev);
     pci_change_irq_level(pci_dev, irq_num, change);
+}
+
+int pci_map_irq(PCIDevice *pci_dev, int pin)
+{
+    return pci_dev->bus->map_irq(pci_dev, pin);
 }
 
 /***********************************************************/
@@ -1415,6 +1532,37 @@ PCIDevice *pci_create_simple(PCIBus *bus, int devfn, const char *name)
     PCIDevice *dev = pci_create(bus, devfn, name);
     qdev_init_nofail(&dev->qdev);
     return dev;
+}
+
+int pci_enable_capability_support(PCIDevice *pci_dev,
+                                  uint32_t config_start,
+                                  PCICapConfigReadFunc *config_read,
+                                  PCICapConfigWriteFunc *config_write,
+                                  PCICapConfigInitFunc *config_init)
+{
+    if (!pci_dev)
+        return -ENODEV;
+
+    pci_dev->config[0x06] |= 0x10; // status = capabilities
+
+    if (config_start == 0)
+	pci_dev->cap.start = PCI_CAPABILITY_CONFIG_DEFAULT_START_ADDR;
+    else if (config_start >= 0x40 && config_start < 0xff)
+        pci_dev->cap.start = config_start;
+    else
+        return -EINVAL;
+
+    if (config_read)
+        pci_dev->cap.config_read = config_read;
+    else
+        pci_dev->cap.config_read = pci_default_cap_read_config;
+    if (config_write)
+        pci_dev->cap.config_write = config_write;
+    else
+        pci_dev->cap.config_write = pci_default_cap_write_config;
+    pci_dev->cap.supported = 1;
+    pci_dev->config[PCI_CAPABILITY_LIST] = pci_dev->cap.start;
+    return config_init(pci_dev);
 }
 
 static int pci_find_space(PCIDevice *pdev, uint8_t size)

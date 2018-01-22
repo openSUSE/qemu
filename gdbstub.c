@@ -34,6 +34,7 @@
 #include "sysemu.h"
 #include "gdbstub.h"
 #endif
+#include "qemu-kvm.h"
 
 #define MAX_PACKET_LENGTH 4096
 

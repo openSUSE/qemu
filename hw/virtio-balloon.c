@@ -19,6 +19,7 @@
 #include "balloon.h"
 #include "virtio-balloon.h"
 #include "kvm.h"
+#include "qemu-kvm.h"
 
 #if defined(__linux__)
 #include <sys/mman.h>

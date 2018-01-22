@@ -34,7 +34,13 @@
 #include "cpu.h"
 #include "exec-all.h"
 #include "qemu-common.h"
+#include "cache-utils.h"
+
+#if !defined(TARGET_IA64)
 #include "tcg.h"
+#endif
+#include "qemu-kvm.h"
+
 #include "hw/hw.h"
 #include "osdep.h"
 #include "kvm.h"
@@ -74,6 +80,8 @@
 #define TARGET_PHYS_ADDR_SPACE_BITS 42
 #elif defined(TARGET_I386)
 #define TARGET_PHYS_ADDR_SPACE_BITS 36
+#elif defined(TARGET_IA64)
+#define TARGET_PHYS_ADDR_SPACE_BITS 36
 #else
 #define TARGET_PHYS_ADDR_SPACE_BITS 32
 #endif
@@ -111,6 +119,7 @@ uint8_t *code_gen_ptr;
 #if !defined(CONFIG_USER_ONLY)
 int phys_ram_fd;
 uint8_t *phys_ram_dirty;
+uint8_t *bios_mem;
 static int in_migration;
 
 typedef struct RAMBlock {
@@ -412,6 +421,9 @@ static uint8_t static_code_gen_buffer[DEFAULT_CODE_GEN_BUFFER_SIZE];
 
 static void code_gen_alloc(unsigned long tb_size)
 {
+    if (kvm_enabled())
+        return;
+
 #ifdef USE_STATIC_CODE_GEN_BUFFER
     code_gen_buffer = static_code_gen_buffer;
     code_gen_buffer_size = DEFAULT_CODE_GEN_BUFFER_SIZE;
@@ -588,6 +600,11 @@ void cpu_exec_init(CPUState *env)
     env->numa_node = 0;
     QTAILQ_INIT(&env->breakpoints);
     QTAILQ_INIT(&env->watchpoints);
+#ifdef __WIN32
+    env->thread_id = GetCurrentProcessId();
+#else
+    env->thread_id = getpid();
+#endif
     *penv = env;
 #if defined(CONFIG_USER_ONLY)
     cpu_list_unlock();
@@ -1553,6 +1570,8 @@ void cpu_interrupt(CPUState *env, int mask)
 
     old_mask = env->interrupt_request;
     env->interrupt_request |= mask;
+    if (kvm_enabled() && !kvm_irqchip_in_kernel())
+	kvm_update_interrupt_request(env);
 
 #ifndef CONFIG_USER_ONLY
     /*
@@ -1880,7 +1899,6 @@ void cpu_physical_memory_reset_dirty(ram_addr_t start, ram_addr_t end,
 
 int cpu_physical_memory_set_dirty_tracking(int enable)
 {
-    in_migration = enable;
     if (kvm_enabled()) {
         return kvm_set_migration_log(enable);
     }
@@ -2404,6 +2422,113 @@ void qemu_unregister_coalesced_mmio(target_phys_addr_t addr, ram_addr_t size)
         kvm_uncoalesce_mmio_region(addr, size);
 }
 
+#ifdef __linux__
+
+#include <sys/vfs.h>
+
+#define HUGETLBFS_MAGIC       0x958458f6
+
+static long gethugepagesize(const char *path)
+{
+    struct statfs fs;
+    int ret;
+
+    do {
+	    ret = statfs(path, &fs);
+    } while (ret != 0 && errno == EINTR);
+
+    if (ret != 0) {
+	    perror("statfs");
+	    return 0;
+    }
+
+    if (fs.f_type != HUGETLBFS_MAGIC)
+	    fprintf(stderr, "Warning: path not on HugeTLBFS: %s\n", path);
+
+    return fs.f_bsize;
+}
+
+static void *file_ram_alloc(ram_addr_t memory, const char *path)
+{
+    char *filename;
+    void *area;
+    int fd;
+#ifdef MAP_POPULATE
+    int flags;
+#endif
+    unsigned long hpagesize;
+    extern int mem_prealloc;
+
+    if (!path) {
+        return NULL;
+    }
+
+    hpagesize = gethugepagesize(path);
+    if (!hpagesize) {
+	return NULL;
+    }
+
+    if (memory < hpagesize) {
+        return NULL;
+    }
+
+    if (kvm_enabled() && !kvm_has_sync_mmu()) {
+        fprintf(stderr, "host lacks mmu notifiers, disabling --mem-path\n");
+        return NULL;
+    }
+
+    if (asprintf(&filename, "%s/kvm.XXXXXX", path) == -1) {
+	return NULL;
+    }
+
+    fd = mkstemp(filename);
+    if (fd < 0) {
+	perror("mkstemp");
+	free(filename);
+	return NULL;
+    }
+    unlink(filename);
+    free(filename);
+
+    memory = (memory+hpagesize-1) & ~(hpagesize-1);
+
+    /*
+     * ftruncate is not supported by hugetlbfs in older
+     * hosts, so don't bother checking for errors.
+     * If anything goes wrong with it under other filesystems,
+     * mmap will fail.
+     */
+    ftruncate(fd, memory);
+
+#ifdef MAP_POPULATE
+    /* NB: MAP_POPULATE won't exhaustively alloc all phys pages in the case
+     * MAP_PRIVATE is requested.  For mem_prealloc we mmap as MAP_SHARED
+     * to sidestep this quirk.
+     */
+    flags = mem_prealloc ? MAP_POPULATE|MAP_SHARED : MAP_PRIVATE;
+    area = mmap(0, memory, PROT_READ|PROT_WRITE, flags, fd, 0);
+#else
+    area = mmap(0, memory, PROT_READ|PROT_WRITE, MAP_PRIVATE, fd, 0);
+#endif
+    if (area == MAP_FAILED) {
+	perror("alloc_mem_area: can't mmap hugetlbfs pages");
+	close(fd);
+	return (NULL);
+    }
+    return area;
+}
+
+#else
+
+static void *file_ram_alloc(ram_addr_t memory, const char *path)
+{
+    return NULL;
+}
+
+#endif
+
+extern const char *mem_path;
+
 ram_addr_t qemu_ram_alloc(ram_addr_t size)
 {
     RAMBlock *new_block;
@@ -2411,16 +2536,20 @@ ram_addr_t qemu_ram_alloc(ram_addr_t size)
     size = TARGET_PAGE_ALIGN(size);
     new_block = qemu_malloc(sizeof(*new_block));
 
+    new_block->host = file_ram_alloc(size, mem_path);
+    if (!new_block->host) {
 #if defined(TARGET_S390X) && defined(CONFIG_KVM)
     /* XXX S390 KVM requires the topmost vma of the RAM to be < 256GB */
-    new_block->host = mmap((void*)0x1000000, size, PROT_EXEC|PROT_READ|PROT_WRITE,
-                           MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+        new_block->host = mmap((void*)0x1000000, size,
+                               PROT_EXEC|PROT_READ|PROT_WRITE,
+                               MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 #else
-    new_block->host = qemu_vmalloc(size);
+        new_block->host = qemu_vmalloc(size);
 #endif
 #ifdef MADV_MERGEABLE
-    madvise(new_block->host, size, MADV_MERGEABLE);
+        madvise(new_block->host, size, MADV_MERGEABLE);
 #endif
+    }
     new_block->offset = last_ram_offset;
     new_block->length = size;
 
@@ -2482,9 +2611,7 @@ void *qemu_get_ram_ptr(ram_addr_t addr)
     return block->host + (addr - block->offset);
 }
 
-/* Some of the softmmu routines need to translate from a host pointer
-   (typically a TLB entry) back to a ram offset.  */
-ram_addr_t qemu_ram_addr_from_host(void *ptr)
+int do_qemu_ram_addr_from_host(void *ptr, ram_addr_t *ram_addr)
 {
     RAMBlock *prev;
     RAMBlock **prevp;
@@ -2501,11 +2628,23 @@ ram_addr_t qemu_ram_addr_from_host(void *ptr)
         prev = block;
         block = block->next;
     }
-    if (!block) {
+    if (!block)
+        return -1;
+    *ram_addr = block->offset + (host - block->host);
+    return 0;
+}
+
+/* Some of the softmmu routines need to translate from a host pointer
+   (typically a TLB entry) back to a ram offset.  */
+ram_addr_t qemu_ram_addr_from_host(void *ptr)
+{
+    ram_addr_t ram_addr;
+
+    if (do_qemu_ram_addr_from_host(ptr, &ram_addr)) {
         fprintf(stderr, "Bad ram pointer %p\n", ptr);
         abort();
     }
-    return block->offset + (host - block->host);
+    return ram_addr;
 }
 
 static uint32_t unassigned_mem_readb(void *opaque, target_phys_addr_t addr)
@@ -3091,6 +3230,11 @@ void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
                     phys_ram_dirty[addr1 >> TARGET_PAGE_BITS] |=
                         (0xff & ~CODE_DIRTY_FLAG);
                 }
+		/* qemu doesn't execute guest code directly, but kvm does
+		   therefore flush instruction caches */
+		if (kvm_enabled())
+		    flush_icache_range((unsigned long)ptr,
+				       ((unsigned long)ptr)+l);
             }
         } else {
             if ((pd & ~TARGET_PAGE_MASK) > IO_MEM_ROM &&
@@ -3283,6 +3427,8 @@ void *cpu_physical_memory_map(target_phys_addr_t addr,
 void cpu_physical_memory_unmap(void *buffer, target_phys_addr_t len,
                                int is_write, target_phys_addr_t access_len)
 {
+    unsigned long flush_len = (unsigned long)access_len;
+
     if (buffer != bounce.buffer) {
         if (is_write) {
             ram_addr_t addr1 = qemu_ram_addr_from_host(buffer);
@@ -3300,7 +3446,9 @@ void cpu_physical_memory_unmap(void *buffer, target_phys_addr_t len,
                 }
                 addr1 += l;
                 access_len -= l;
-            }
+	    }
+	    dma_flush_range((unsigned long)buffer,
+			    (unsigned long)buffer + flush_len);
         }
         return;
     }
@@ -3668,7 +3816,9 @@ void dump_exec_info(FILE *f,
     cpu_fprintf(f, "TB flush count      %d\n", tb_flush_count);
     cpu_fprintf(f, "TB invalidate count %d\n", tb_phys_invalidate_count);
     cpu_fprintf(f, "TLB flush count     %d\n", tlb_flush_count);
+#ifdef CONFIG_PROFILER
     tcg_dump_info(f, cpu_fprintf);
+#endif
 }
 
 #if !defined(CONFIG_USER_ONLY)

@@ -5,11 +5,16 @@
 
 #include "qdev.h"
 
+struct kvm_irq_routing_entry;
+
 /* PCI includes legacy ISA access.  */
 #include "isa.h"
 
-/* PCI bus */
+/* imported from <linux/pci.h> */
+#define PCI_SLOT(devfn)         (((devfn) >> 3) & 0x1f)
+#define PCI_FUNC(devfn)         ((devfn) & 0x07)
 
+/* PCI bus */
 extern target_phys_addr_t pci_mem_base;
 
 #define PCI_DEVFN(slot, func)   ((((slot) & 0x1f) << 3) | ((func) & 0x07))
@@ -81,6 +86,12 @@ typedef uint32_t PCIConfigReadFunc(PCIDevice *pci_dev,
 typedef void PCIMapIORegionFunc(PCIDevice *pci_dev, int region_num,
                                 pcibus_t addr, pcibus_t size, int type);
 typedef int PCIUnregisterFunc(PCIDevice *pci_dev);
+
+typedef void PCICapConfigWriteFunc(PCIDevice *pci_dev,
+                                   uint32_t address, uint32_t val, int len);
+typedef uint32_t PCICapConfigReadFunc(PCIDevice *pci_dev,
+                                      uint32_t address, int len);
+typedef int PCICapConfigInitFunc(PCIDevice *pci_dev);
 
 typedef struct PCIIORegion {
     pcibus_t addr; /* current PCI mapping address. -1 means not mapped */
@@ -160,10 +171,19 @@ typedef struct PCIIORegion {
 /* Bits in the PCI Status Register (PCI 2.3 spec) */
 #define PCI_STATUS_RESERVED1	0x007
 #define PCI_STATUS_INT_STATUS	0x008
+#ifndef PCI_STATUS_CAP_LIST
 #define PCI_STATUS_CAP_LIST	0x010
+#endif
+#ifndef PCI_STATUS_66MHZ
 #define PCI_STATUS_66MHZ	0x020
+#endif
+
 #define PCI_STATUS_RESERVED2	0x040
+
+#ifndef PCI_STATUS_FAST_BACK
 #define PCI_STATUS_FAST_BACK	0x080
+#endif
+
 #define PCI_STATUS_DEVSEL	0x600
 
 #define PCI_STATUS_RESERVED_MASK_LO (PCI_STATUS_RESERVED1 | \
@@ -191,6 +211,11 @@ enum {
     QEMU_PCI_CAP_MSIX = 0x1,
     QEMU_PCI_CAP_EXPRESS = 0x2,
 };
+
+#define PCI_CAPABILITY_CONFIG_MAX_LENGTH 0x60
+#define PCI_CAPABILITY_CONFIG_DEFAULT_START_ADDR 0x40
+#define PCI_CAPABILITY_CONFIG_MSI_LENGTH 0x10
+#define PCI_CAPABILITY_CONFIG_MSIX_LENGTH 0x10
 
 struct PCIDevice {
     DeviceState qdev;
@@ -247,6 +272,23 @@ struct PCIDevice {
     char *romfile;
     ram_addr_t rom_offset;
     uint32_t rom_bar;
+
+    /* How much space does an MSIX table need. */
+    /* The spec requires giving the table structure
+     * a 4K aligned region all by itself. Align it to
+     * target pages so that drivers can do passthrough
+     * on the rest of the region. */
+    target_phys_addr_t msix_page_size;
+
+    struct kvm_irq_routing_entry *msix_irq_entries;
+
+    /* Device capability configuration space */
+    struct {
+        int supported;
+        unsigned int start, length;
+        PCICapConfigReadFunc *config_read;
+        PCICapConfigWriteFunc *config_write;
+    } cap;
 };
 
 PCIDevice *pci_register_device(PCIBus *bus, const char *name,
@@ -258,6 +300,14 @@ void pci_register_bar(PCIDevice *pci_dev, int region_num,
                             pcibus_t size, int type,
                             PCIMapIORegionFunc *map_func);
 
+int pci_enable_capability_support(PCIDevice *pci_dev,
+                                  uint32_t config_start,
+                                  PCICapConfigReadFunc *config_read,
+                                  PCICapConfigWriteFunc *config_write,
+                                  PCICapConfigInitFunc *config_init);
+
+int pci_map_irq(PCIDevice *pci_dev, int pin);
+
 int pci_add_capability(PCIDevice *pci_dev, uint8_t cap_id, uint8_t cap_size);
 
 void pci_del_capability(PCIDevice *pci_dev, uint8_t cap_id, uint8_t cap_size);
@@ -266,13 +316,17 @@ void pci_reserve_capability(PCIDevice *pci_dev, uint8_t offset, uint8_t size);
 
 uint8_t pci_find_capability(PCIDevice *pci_dev, uint8_t cap_id);
 
-
 uint32_t pci_default_read_config(PCIDevice *d,
                                  uint32_t address, int len);
 void pci_default_write_config(PCIDevice *d,
                               uint32_t address, uint32_t val, int len);
 void pci_device_save(PCIDevice *s, QEMUFile *f);
 int pci_device_load(PCIDevice *s, QEMUFile *f);
+uint32_t pci_default_cap_read_config(PCIDevice *pci_dev,
+                                     uint32_t address, int len);
+void pci_default_cap_write_config(PCIDevice *pci_dev,
+                                  uint32_t address, uint32_t val, int len);
+int pci_access_cap_config(PCIDevice *pci_dev, uint32_t address, int len);
 
 typedef void (*pci_set_irq_fn)(void *opaque, int irq_num, int level);
 typedef int (*pci_map_irq_fn)(PCIDevice *pci_dev, int irq_num);
@@ -300,6 +354,9 @@ PCIBus *pci_get_bus_devfn(int *devfnp, const char *devaddr);
 
 int pci_read_devaddr(Monitor *mon, const char *addr, int *domp, int *busp,
                      unsigned *slotp);
+
+int pci_parse_host_devaddr(const char *addr, int *busp,
+                           int *slotp, int *funcp);
 
 void pci_info(Monitor *mon);
 PCIBus *pci_bridge_init(PCIBus *bus, int devfn, uint16_t vid, uint16_t did,

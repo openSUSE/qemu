@@ -28,6 +28,8 @@
 #include "qemu-common.h"
 #include "kvm.h"
 
+#include "qemu-kvm.h"
+
 //#define DEBUG_MMU
 
 /* feature flags taken from "Intel Processor Identification and the CPUID
@@ -42,7 +44,7 @@ static const char *feature_name[] = {
 static const char *ext_feature_name[] = {
     "pni" /* Intel,AMD sse3 */, NULL, NULL, "monitor", "ds_cpl", "vmx", NULL /* Linux smx */, "est",
     "tm2", "ssse3", "cid", NULL, NULL, "cx16", "xtpr", NULL,
-    NULL, NULL, "dca", NULL, NULL, NULL, NULL, "popcnt",
+    NULL, NULL, "dca", NULL, NULL, "x2apic", NULL, "popcnt",
     NULL, NULL, NULL, NULL, NULL, NULL, NULL, "hypervisor",
 };
 static const char *ext2_feature_name[] = {
@@ -516,7 +518,7 @@ static int cpu_x86_register (CPUX86State *env, const char *cpu_model)
         env->cpuid_vendor2 = CPUID_VENDOR_INTEL_2;
         env->cpuid_vendor3 = CPUID_VENDOR_INTEL_3;
     }
-    env->cpuid_vendor_override = def->vendor_override;
+    env->cpuid_vendor_override = def->vendor_override || kvm_enabled();
     env->cpuid_level = def->level;
     if (def->family > 0x0f)
         env->cpuid_version = 0xf00 | ((def->family - 0x0f) << 20);
@@ -1548,6 +1550,11 @@ void cpu_inject_x86_mce(CPUState *cenv, int bank, uint64_t status,
     unsigned bank_num = mcg_cap & 0xff;
     uint64_t *banks = cenv->mce_banks;
 
+    if (kvm_enabled()) {
+        kvm_inject_x86_mce(cenv, bank, status, mcg_status, addr, misc, 0);
+        return;
+    }
+
     if (bank >= bank_num || !(status & MCI_STATUS_VAL))
         return;
 
@@ -1611,7 +1618,7 @@ static void host_cpuid(uint32_t function, uint32_t count,
                        uint32_t *eax, uint32_t *ebx,
                        uint32_t *ecx, uint32_t *edx)
 {
-#if defined(CONFIG_KVM)
+#if defined(CONFIG_KVM) || defined(USE_KVM)
     uint32_t vec[4];
 
 #ifdef __x86_64__
@@ -1787,8 +1794,32 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
         }
 
         if (kvm_enabled()) {
-            /* Nested SVM not yet supported in upstream QEMU */
-            *ecx &= ~CPUID_EXT3_SVM;
+            uint32_t h_eax, h_edx;
+
+            host_cpuid(index, 0, &h_eax, NULL, NULL, &h_edx);
+
+            /* disable CPU features that the host does not support */
+
+            /* long mode */
+            if ((h_edx & 0x20000000) == 0 /* || !lm_capable_kernel */)
+                *edx &= ~0x20000000;
+            /* syscall */
+            if ((h_edx & 0x00000800) == 0)
+                *edx &= ~0x00000800;
+            /* nx */
+            if ((h_edx & 0x00100000) == 0)
+                *edx &= ~0x00100000;
+
+            /* disable CPU features that KVM cannot support */
+
+            /* svm */
+            if (!kvm_nested)
+                *ecx &= ~CPUID_EXT3_SVM;
+            /* 3dnow */
+            *edx &= ~0xc0000000;
+        } else {
+            /* AMD 3DNow! is not supported in QEMU */
+            *edx &= ~(CPUID_EXT2_3DNOW | CPUID_EXT2_3DNOWEXT);
         }
         break;
     case 0x80000002:
@@ -1902,8 +1933,6 @@ CPUX86State *cpu_x86_init(const char *cpu_model)
         return NULL;
     }
     mce_init(env);
-
-    qemu_init_vcpu(env);
 
     return env;
 }

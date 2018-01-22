@@ -230,6 +230,14 @@ int cpu_load(QEMUFile *f, void *opaque, int version_id);
 /* Force QEMU to stop what it's doing and service IO */
 void qemu_service_io(void);
 
+/* work queue */
+struct qemu_work_item {
+    struct qemu_work_item *next;
+    void (*func)(void *data);
+    void *data;
+    int done;
+};
+
 /* Force QEMU to process pending events */
 void qemu_notify_event(void);
 

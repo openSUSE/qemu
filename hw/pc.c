@@ -44,6 +44,9 @@
 #include "ide.h"
 #include "loader.h"
 #include "elf.h"
+#include "device-assignment.h"
+
+#include "qemu-kvm.h"
 
 /* output Bochs bios info messages */
 //#define DEBUG_BIOS
@@ -52,6 +55,8 @@
 //#define DEBUG_MULTIBOOT
 
 #define BIOS_FILENAME "bios.bin"
+#define EXTBOOT_FILENAME "extboot.bin"
+#define VAPIC_FILENAME "vapic.bin"
 
 #define PC_MAX_BIOS_SIZE (4 * 1024 * 1024)
 
@@ -68,6 +73,8 @@ static fdctrl_t *floppy_controller;
 static RTCState *rtc_state;
 static PITState *pit;
 static PCII440FXState *i440fx_state;
+
+qemu_irq *ioapic_irq_hack;
 
 typedef struct isa_irq_state {
     qemu_irq *i8259;
@@ -952,7 +959,7 @@ int cpu_is_bsp(CPUState *env)
     return env->cpuid_apic_id == 0;
 }
 
-static CPUState *pc_new_cpu(const char *cpu_model)
+CPUState *pc_new_cpu(const char *cpu_model)
 {
     CPUState *env;
 
@@ -961,6 +968,7 @@ static CPUState *pc_new_cpu(const char *cpu_model)
         fprintf(stderr, "Unable to find x86 CPU definition\n");
         exit(1);
     }
+    env->kvm_cpu_state.regs_modified = 1;
     if ((env->cpuid_features & CPUID_APIC) || smp_cpus > 1) {
         env->cpuid_apic_id = env->cpu_index;
         /* APIC reset callback resets cpu */
@@ -968,6 +976,11 @@ static CPUState *pc_new_cpu(const char *cpu_model)
     } else {
         qemu_register_reset((QEMUResetHandler*)cpu_reset, env);
     }
+
+    /* kvm needs this to run after the apic is initialized. Otherwise,
+     * it can access invalid state and crash.
+     */
+    qemu_init_vcpu(env);
     return env;
 }
 
@@ -1015,6 +1028,9 @@ static void pc_init1(ram_addr_t ram_size,
 #endif
     }
 
+    if (kvm_enabled()) {
+        kvm_set_boot_cpu_id(0);
+    }
     for (i = 0; i < smp_cpus; i++) {
         env = pc_new_cpu(cpu_model);
     }
@@ -1022,18 +1038,11 @@ static void pc_init1(ram_addr_t ram_size,
     vmport_init();
 
     /* allocate RAM */
-    ram_addr = qemu_ram_alloc(0xa0000);
+    ram_addr = qemu_ram_alloc(below_4g_mem_size);
     cpu_register_physical_memory(0, 0xa0000, ram_addr);
-
-    /* Allocate, even though we won't register, so we don't break the
-     * phys_ram_base + PA assumption. This range includes vga (0xa0000 - 0xc0000),
-     * and some bios areas, which will be registered later
-     */
-    ram_addr = qemu_ram_alloc(0x100000 - 0xa0000);
-    ram_addr = qemu_ram_alloc(below_4g_mem_size - 0x100000);
     cpu_register_physical_memory(0x100000,
                  below_4g_mem_size - 0x100000,
-                 ram_addr);
+                 ram_addr + 0x100000);
 
     /* above 4giga memory allocation */
     if (above_4g_mem_size > 0) {
@@ -1075,11 +1084,17 @@ static void pc_init1(ram_addr_t ram_size,
     isa_bios_size = bios_size;
     if (isa_bios_size > (128 * 1024))
         isa_bios_size = 128 * 1024;
+    cpu_register_physical_memory(0xd0000, (192 * 1024) - isa_bios_size,
+                                 IO_MEM_UNASSIGNED);
+    /* kvm tpr optimization needs the bios accessible for write, at least to qemu itself */
     cpu_register_physical_memory(0x100000 - isa_bios_size,
                                  isa_bios_size,
-                                 (bios_offset + bios_size - isa_bios_size) | IO_MEM_ROM);
+                                 (bios_offset + bios_size - isa_bios_size) /* | IO_MEM_ROM */);
 
-
+    if (extboot_drive) {
+        option_rom[nb_option_roms++] = qemu_strdup(EXTBOOT_FILENAME);
+    }
+    option_rom[nb_option_roms++] = qemu_strdup(VAPIC_FILENAME);
 
     rom_enable_driver_roms = 1;
     option_rom_offset = qemu_ram_alloc(PC_ROM_SIZE);
@@ -1101,10 +1116,18 @@ static void pc_init1(ram_addr_t ram_size,
     }
 
     cpu_irq = qemu_allocate_irqs(pic_irq_request, NULL, 1);
-    i8259 = i8259_init(cpu_irq[0]);
-    isa_irq_state = qemu_mallocz(sizeof(*isa_irq_state));
-    isa_irq_state->i8259 = i8259;
-    isa_irq = qemu_allocate_irqs(isa_irq_handler, isa_irq_state, 24);
+#ifdef KVM_CAP_IRQCHIP
+    if (kvm_enabled() && kvm_irqchip_in_kernel()) {
+        isa_irq_state = qemu_mallocz(sizeof(*isa_irq_state));
+        isa_irq = i8259 = kvm_i8259_init(cpu_irq[0]);
+    } else
+#endif
+    {
+        i8259 = i8259_init(cpu_irq[0]);
+        isa_irq_state = qemu_mallocz(sizeof(*isa_irq_state));
+        isa_irq_state->i8259 = i8259;
+        isa_irq = qemu_allocate_irqs(isa_irq_handler, isa_irq_state, 24);
+    }
 
     if (pci_enabled) {
         pci_bus = i440fx_init(&i440fx_state, &piix3_devfn, isa_irq);
@@ -1149,8 +1172,14 @@ static void pc_init1(ram_addr_t ram_size,
 
     if (pci_enabled) {
         isa_irq_state->ioapic = ioapic_init();
+        ioapic_irq_hack = isa_irq;
     }
-    pit = pit_init(0x40, isa_reserve_irq(0));
+#ifdef CONFIG_KVM_PIT
+    if (kvm_enabled() && qemu_kvm_pit_in_kernel())
+	pit = kvm_pit_init(0x40, isa_reserve_irq(0));
+    else
+#endif
+	pit = pit_init(0x40, isa_reserve_irq(0));
     pcspk_init(pit);
     if (!no_hpet) {
         hpet_init(isa_irq);
@@ -1174,7 +1203,7 @@ static void pc_init1(ram_addr_t ram_size,
         if (!pci_enabled || (nd->model && strcmp(nd->model, "ne2k_isa") == 0))
             pc_init_ne2k_isa(nd);
         else
-            pci_nic_init_nofail(nd, "e1000", NULL);
+            pci_nic_init_nofail(nd, "rtl8139", NULL);
     }
 
     if (drive_get_max_bus(IF_IDE) >= MAX_IDE_BUS) {
@@ -1226,7 +1255,7 @@ static void pc_init1(ram_addr_t ram_size,
             qdev_prop_set_ptr(eeprom, "data", eeprom_buf + (i * 256));
             qdev_init_nofail(eeprom);
         }
-        piix4_acpi_system_hot_add_init(pci_bus);
+        piix4_acpi_system_hot_add_init(pci_bus, cpu_model);
     }
 
     if (i440fx_state) {
@@ -1243,6 +1272,18 @@ static void pc_init1(ram_addr_t ram_size,
         }
     }
 
+    if (extboot_drive) {
+	DriveInfo *info = extboot_drive;
+	int cyls, heads, secs;
+
+	if (info->type != IF_IDE && info->type != IF_VIRTIO) {
+	    bdrv_guess_geometry(info->bdrv, &cyls, &heads, &secs);
+	    bdrv_set_geometry_hint(info->bdrv, cyls, heads, secs);
+	}
+
+	extboot_init(info->bdrv, 1);
+    }
+
     /* Add virtio console devices */
     if (pci_enabled) {
         for(i = 0; i < MAX_VIRTIO_CONSOLES; i++) {
@@ -1251,6 +1292,12 @@ static void pc_init1(ram_addr_t ram_size,
             }
         }
     }
+
+#ifdef CONFIG_KVM_DEVICE_ASSIGNMENT
+    if (kvm_enabled()) {
+        add_assigned_devices(pci_bus, assigned_devices, assigned_devices_index);
+    }
+#endif /* CONFIG_KVM_DEVICE_ASSIGNMENT */
 }
 
 static void pc_init_pci(ram_addr_t ram_size,

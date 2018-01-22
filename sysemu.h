@@ -47,6 +47,7 @@ void cpu_disable_ticks(void);
 void qemu_system_reset_request(void);
 void qemu_system_shutdown_request(void);
 void qemu_system_powerdown_request(void);
+int qemu_no_shutdown(void);
 int qemu_shutdown_requested(void);
 int qemu_reset_requested(void);
 int qemu_powerdown_requested(void);
@@ -141,6 +142,7 @@ extern int semihosting_enabled;
 extern int old_param;
 extern int boot_menu;
 extern QEMUClock *rtc_clock;
+extern long hpagesize;
 
 #define MAX_NODES 64
 extern int nb_numa_nodes;
@@ -192,6 +194,7 @@ typedef struct DriveInfo {
 
 extern QTAILQ_HEAD(drivelist, DriveInfo) drives;
 extern QTAILQ_HEAD(driveoptlist, DriveOpt) driveopts;
+extern DriveInfo *extboot_drive;
 
 extern DriveInfo *drive_get(BlockInterfaceType type, int bus, int unit);
 extern DriveInfo *drive_get_by_id(const char *id);
@@ -206,6 +209,9 @@ BlockDriverState *qdev_init_bdrv(DeviceState *dev, BlockInterfaceType type);
 
 extern QemuOpts *drive_add(const char *file, const char *fmt, ...);
 extern DriveInfo *drive_init(QemuOpts *arg, void *machine, int *fatal_error);
+
+/* acpi */
+void qemu_system_cpu_hot_add(int cpu, int state);
 
 /* device-hotplug */
 

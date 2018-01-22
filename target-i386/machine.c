@@ -5,6 +5,7 @@
 
 #include "exec-all.h"
 #include "kvm.h"
+#include "qemu-kvm.h"
 
 static const VMStateDescription vmstate_segment = {
     .name = "segment",
@@ -322,6 +323,10 @@ static void cpu_pre_save(void *opaque)
     int i;
 
     cpu_synchronize_state(env);
+    if (kvm_enabled()) {
+        kvm_save_mpstate(env);
+        kvm_get_vcpu_events(env);
+    }
 
     /* FPU */
     env->fpus_vmstate = (env->fpus & ~0x3800) | (env->fpstt & 0x7) << 11;
@@ -364,6 +369,17 @@ static int cpu_post_load(void *opaque, int version_id)
         hw_breakpoint_insert(env, i);
 
     tlb_flush(env, 1);
+
+    if (kvm_enabled()) {
+        /* when in-kernel irqchip is used, env->halted causes deadlock
+           because no userspace IRQs will ever clear this flag */
+        env->halted = 0;
+
+        kvm_load_tsc(env);
+        kvm_load_mpstate(env);
+        kvm_put_vcpu_events(env);
+    }
+
     return 0;
 }
 

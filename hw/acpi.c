@@ -23,6 +23,8 @@
 #include "i2c.h"
 #include "smbus.h"
 #include "kvm.h"
+#include "qemu-kvm.h"
+#include "string.h"
 
 //#define DEBUG
 
@@ -521,6 +523,13 @@ i2c_bus *piix4_pm_init(PCIBus *bus, int devfn, uint32_t smb_io_base,
 
     pci_conf[0x40] = 0x01; /* PM io base read only bit */
 
+#if defined(TARGET_IA64)
+    pci_conf[0x40] = 0x41; /* PM io base read only bit */
+    pci_conf[0x41] = 0x1f;
+    pm_write_config(s, 0x80, 0x01, 1); /*Set default pm_io_base 0x1f40*/
+    s->pmcntrl = SCI_EN;
+#endif
+
     register_ioport_write(0xb2, 2, 1, pm_smi_writeb, s);
     register_ioport_read(0xb2, 2, 1, pm_smi_readb, s);
 
@@ -559,12 +568,14 @@ i2c_bus *piix4_pm_init(PCIBus *bus, int devfn, uint32_t smb_io_base,
 }
 
 #define GPE_BASE 0xafe0
+#define PROC_BASE 0xaf00
 #define PCI_BASE 0xae00
 #define PCI_EJ_BASE 0xae08
 
 struct gpe_regs {
     uint16_t sts; /* status */
     uint16_t en;  /* enabled */
+    uint8_t cpus_sts[32];
 };
 
 struct pci_status {
@@ -587,6 +598,10 @@ static uint32_t gpe_readb(void *opaque, uint32_t addr)
     uint32_t val = 0;
     struct gpe_regs *g = opaque;
     switch (addr) {
+        case PROC_BASE ... PROC_BASE+31:
+            val = g->cpus_sts[addr - PROC_BASE];
+            break;
+
         case GPE_BASE:
         case GPE_BASE + 1:
             val = gpe_read_val(g->sts, addr);
@@ -629,6 +644,10 @@ static void gpe_writeb(void *opaque, uint32_t addr, uint32_t val)
 {
     struct gpe_regs *g = opaque;
     switch (addr) {
+        case PROC_BASE ... PROC_BASE + 31:
+            /* don't allow to change cpus_sts from inside a guest */
+            break;
+
         case GPE_BASE:
         case GPE_BASE + 1:
             gpe_reset_val(&g->sts, addr, val);
@@ -712,12 +731,23 @@ static void pciej_write(void *opaque, uint32_t addr, uint32_t val)
 #endif
 }
 
+static const char *model;
+
 static int piix4_device_hotplug(PCIDevice *dev, int state);
 
-void piix4_acpi_system_hot_add_init(PCIBus *bus)
+void piix4_acpi_system_hot_add_init(PCIBus *bus, const char *cpu_model)
 {
+    int i = 0, cpus = smp_cpus;
+
+    while (cpus > 0) {
+        gpe.cpus_sts[i++] = (cpus < 8) ? (1 << cpus) - 1 : 0xff;
+        cpus -= 8;
+    }
     register_ioport_write(GPE_BASE, 4, 1, gpe_writeb, &gpe);
     register_ioport_read(GPE_BASE, 4, 1,  gpe_readb, &gpe);
+
+    register_ioport_write(PROC_BASE, 32, 1, gpe_writeb, &gpe);
+    register_ioport_read(PROC_BASE, 32, 1,  gpe_readb, &gpe);
 
     register_ioport_write(PCI_BASE, 8, 4, pcihotplug_write, &pci0_status);
     register_ioport_read(PCI_BASE, 8, 4,  pcihotplug_read, &pci0_status);
@@ -725,8 +755,47 @@ void piix4_acpi_system_hot_add_init(PCIBus *bus)
     register_ioport_write(PCI_EJ_BASE, 4, 4, pciej_write, bus);
     register_ioport_read(PCI_EJ_BASE, 4, 4,  pciej_read, bus);
 
+    model = cpu_model;
+
     pci_bus_hotplug(bus, piix4_device_hotplug);
 }
+
+#if defined(TARGET_I386)
+static void enable_processor(struct gpe_regs *g, int cpu)
+{
+    g->sts |= 4;
+    g->cpus_sts[cpu/8] |= (1 << (cpu%8));
+}
+
+static void disable_processor(struct gpe_regs *g, int cpu)
+{
+    g->sts |= 4;
+    g->cpus_sts[cpu/8] &= ~(1 << (cpu%8));
+}
+
+void qemu_system_cpu_hot_add(int cpu, int state)
+{
+    CPUState *env;
+
+    if (state && !qemu_get_cpu(cpu)) {
+        env = pc_new_cpu(model);
+        if (!env) {
+            fprintf(stderr, "cpu %d creation failed\n", cpu);
+            return;
+        }
+        env->cpuid_apic_id = cpu;
+    }
+
+    if (state)
+        enable_processor(&gpe, cpu);
+    else
+        disable_processor(&gpe, cpu);
+    if (gpe.en & 4) {
+        qemu_set_irq(pm_state->irq, 1);
+        qemu_set_irq(pm_state->irq, 0);
+    }
+}
+#endif
 
 static void enable_device(struct pci_status *p, struct gpe_regs *g, int slot)
 {

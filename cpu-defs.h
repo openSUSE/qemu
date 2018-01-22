@@ -27,6 +27,7 @@
 #include <setjmp.h>
 #include <inttypes.h>
 #include <signal.h>
+#include <pthread.h>
 #include "osdep.h"
 #include "qemu-queue.h"
 #include "targphys.h"
@@ -134,6 +135,16 @@ typedef struct CPUWatchpoint {
     QTAILQ_ENTRY(CPUWatchpoint) entry;
 } CPUWatchpoint;
 
+/* forward decleration */
+struct qemu_work_item;
+
+struct KVMCPUState {
+    pthread_t thread;
+    int signalled;
+    struct qemu_work_item *queued_work_first, *queued_work_last;
+    int regs_modified;
+};
+
 #define CPU_TEMP_BUF_NLONGS 128
 #define CPU_COMMON                                                      \
     struct TranslationBlock *current_tb; /* currently executing TB  */  \
@@ -146,8 +157,6 @@ typedef struct CPUWatchpoint {
     target_ulong mem_io_vaddr; /* target virtual addr at which the      \
                                      memory was accessed */             \
     uint32_t halted; /* Nonzero if the CPU is in suspend state */       \
-    uint32_t stop;   /* Stop request */                                 \
-    uint32_t stopped; /* Artificially stopped */                        \
     uint32_t interrupt_request;                                         \
     volatile sig_atomic_t exit_request;                                 \
     /* The meaning of the MMU modes is defined in the target code. */   \
@@ -188,6 +197,7 @@ typedef struct CPUWatchpoint {
     int nr_cores;  /* number of cores within this CPU package */        \
     int nr_threads;/* number of threads within this CPU */              \
     int running; /* Nonzero if cpu is currently running(usermode).  */  \
+    int thread_id;							\
     /* user data */                                                     \
     void *opaque;                                                       \
                                                                         \
@@ -197,6 +207,9 @@ typedef struct CPUWatchpoint {
     const char *cpu_model_str;                                          \
     struct KVMState *kvm_state;                                         \
     struct kvm_run *kvm_run;                                            \
-    int kvm_fd;
+    int kvm_fd;                                                         \
+    uint32_t stop;   /* Stop request */                                 \
+    uint32_t stopped; /* Artificially stopped */                        \
+    struct KVMCPUState kvm_cpu_state;
 
 #endif

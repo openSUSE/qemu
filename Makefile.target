@@ -30,6 +30,8 @@ LIBS+=-lm
 
 kvm.o kvm-all.o: QEMU_CFLAGS+=$(KVM_CFLAGS)
 
+CFLAGS += $(KVM_CFLAGS)
+
 config-target.h: config-target.h-timestamp
 config-target.h-timestamp: config-target.mak
 
@@ -40,12 +42,18 @@ all: $(PROGS)
 
 #########################################################
 # cpu emulator library
-libobj-y = exec.o translate-all.o cpu-exec.o translate.o
-libobj-y += tcg/tcg.o
+libobj-y = exec.o cpu-exec.o
+libobj-$(CONFIG_NO_CPU_EMULATION) += fake-exec.o
+libobj-$(CONFIG_CPU_EMULATION) += translate-all.o translate.o
+libobj-$(CONFIG_CPU_EMULATION) += tcg/tcg.o
 libobj-$(CONFIG_SOFTFLOAT) += fpu/softfloat.o
 libobj-$(CONFIG_NOSOFTFLOAT) += fpu/softfloat-native.o
 libobj-y += op_helper.o helper.o
 libobj-$(CONFIG_NEED_MMU) += mmu.o
+
+libobj-$(CONFIG_KVM) += kvm-tpr-opt.o
+libobj-$(CONFIG_KVM) += qemu-kvm-helper.o
+
 libobj-$(TARGET_ARM) += neon_helper.o iwmmxt_helper.o
 libobj-$(TARGET_ALPHA) += alpha_palcode.o
 
@@ -81,6 +89,8 @@ op_helper.o cpu-exec.o: QEMU_CFLAGS += $(HELPER_CFLAGS)
 # Note: this is a workaround. The real fix is to avoid compiling
 # cpu_signal_handler() in cpu-exec.c.
 signal.o: QEMU_CFLAGS += $(HELPER_CFLAGS)
+
+qemu-kvm-helper.o: QEMU_CFLAGS += $(HELPER_CFLAGS)
 
 #########################################################
 # Linux user emulator target
@@ -158,6 +168,10 @@ obj-y = vl.o async.o monitor.o pci.o pci_host.o pcie_host.o machine.o gdbstub.o
 # need to fix this properly
 obj-y += virtio-blk.o virtio-balloon.o virtio-net.o virtio-console.o virtio-pci.o
 obj-$(CONFIG_KVM) += kvm.o kvm-all.o
+# MSI-X depends on kvm for interrupt injection,
+# so moved it from Makefile.hw to Makefile.target for now
+obj-y += msix.o
+
 obj-$(CONFIG_ISA_MMIO) += isa_mmio.o
 LIBS+=-lz
 
@@ -194,12 +208,25 @@ obj-i386-y += fdc.o mc146818rtc.o serial.o i8259.o i8254.o pcspk.o pc.o
 obj-i386-y += cirrus_vga.o apic.o ioapic.o parallel.o acpi.o piix_pci.o
 obj-i386-y += usb-uhci.o vmmouse.o vmport.o vmware_vga.o hpet.o
 obj-i386-y += device-hotplug.o pci-hotplug.o smbios.o wdt_ib700.o
+obj-i386-y += extboot.o
 obj-i386-y += ne2000-isa.o
+obj-i386-y += testdev.o
+
+obj-i386-$(CONFIG_KVM_PIT) += i8254-kvm.o
+obj-i386-$(CONFIG_KVM_DEVICE_ASSIGNMENT) += device-assignment.o
+
+# Hardware support
+obj-ia64-y += ide.o pckbd.o vga.o $(SOUND_HW) dma.o $(AUDIODRV)
+obj-ia64-y += fdc.o mc146818rtc.o serial.o i8259.o ipf.o
+obj-ia64-y += cirrus_vga.o parallel.o acpi.o piix_pci.o
+obj-ia64-y += usb-uhci.o
+obj-ia64-$(CONFIG_KVM_DEVICE_ASSIGNMENT) += device-assignment.o
 
 # shared objects
 obj-ppc-y = ppc.o ide/core.o ide/qdev.o ide/isa.o ide/pci.o ide/macio.o
 obj-ppc-y += ide/cmd646.o
 obj-ppc-y += vga.o vga-pci.o $(sound-obj-y) dma.o openpic.o
+obj-ppc-y += cirrus_vga.o
 # PREP target
 obj-ppc-y += pckbd.o serial.o i8259.o i8254.o fdc.o mc146818rtc.o
 obj-ppc-y += prep_pci.o ppc_prep.o ne2000-isa.o
@@ -294,6 +321,11 @@ obj-m68k-y = an5206.o mcf5206.o mcf_uart.o mcf_intc.o mcf5208.o mcf_fec.o
 obj-m68k-y += m68k-semi.o dummy_m68k.o
 
 obj-s390x-y = s390-virtio-bus.o s390-virtio.o
+
+ifeq ($(TARGET_ARCH), ia64)
+firmware.o: firmware.c
+	$(CC) $(HELPER_CFLAGS) $(CPPFLAGS) $(BASE_CFLAGS) -c -o $@ $<
+endif
 
 main.o vl.o: QEMU_CFLAGS+=$(GPROF_CFLAGS)
 
