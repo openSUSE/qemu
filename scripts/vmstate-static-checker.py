@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 #
 # Compares vmstate information stored in JSON format, obtained from
 # the -dump-vmstate QEMU command.
