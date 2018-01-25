@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/python3
 #
 #  Migration Stream Analyzer
 #
@@ -162,7 +162,7 @@ class RamSection(object):
                     len = self.file.read64()
                     self.sizeinfo[self.name] = '0x%016x' % len
                     if self.write_memory:
-                        print self.name
+                        print(self.name)
                         mkdir_p('./' + os.path.dirname(self.name))
                         f = open('./' + self.name, "wb")
                         f.truncate(0)
@@ -359,7 +359,7 @@ class VMSDFieldStruct(VMSDFieldGeneric):
             array_len = field.pop('array_len')
             field['index'] = 0
             new_fields.append(field)
-            for i in xrange(1, array_len):
+            for i in range(1, array_len):
                 c = field.copy()
                 c['index'] = i
                 new_fields.append(c)
@@ -426,7 +426,7 @@ class VMSDFieldStruct(VMSDFieldGeneric):
 
     def getDictOrderedDict(self, dict):
         r = collections.OrderedDict()
-        for (key, value) in dict.items():
+        for (key, value) in list(dict.items()):
             r[key] = self.getDictItem(value)
         return r
 
@@ -558,7 +558,7 @@ class MigrationDump(object):
 
     def getDict(self):
         r = collections.OrderedDict()
-        for (key, value) in self.sections.items():
+        for (key, value) in list(self.sections.items()):
            key = "%s (%d)" % ( value.section_key[0], key )
            r[key] = value.getDict()
         return r
@@ -584,7 +584,7 @@ if args.extract:
     dump = MigrationDump(args.file)
 
     dump.read(desc_only = True)
-    print "desc.json"
+    print("desc.json")
     f = open("desc.json", "wb")
     f.truncate()
     f.write(jsonenc.encode(dump.vmsd_desc))
@@ -592,7 +592,7 @@ if args.extract:
 
     dump.read(write_memory = True)
     dict = dump.getDict()
-    print "state.json"
+    print("state.json")
     f = open("state.json", "wb")
     f.truncate()
     f.write(jsonenc.encode(dict))
@@ -601,10 +601,10 @@ elif args.dump == "state":
     dump = MigrationDump(args.file)
     dump.read(dump_memory = args.memory)
     dict = dump.getDict()
-    print jsonenc.encode(dict)
+    print(jsonenc.encode(dict))
 elif args.dump == "desc":
     dump = MigrationDump(args.file)
     dump.read(desc_only = True)
-    print jsonenc.encode(dump.vmsd_desc)
+    print(jsonenc.encode(dump.vmsd_desc))
 else:
     raise Exception("Please specify either -x, -d state or -d dump")
