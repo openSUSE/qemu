@@ -369,7 +369,8 @@ static TPMVersion tpm_passthrough_get_tpm_version(TPMBackend *tb)
  * Unless path or file descriptor set has been provided by user,
  * determine the sysfs cancel file following kernel documentation
  * in Documentation/ABI/stable/sysfs-class-tpm.
- * From /dev/tpm0 create /sys/class/misc/tpm0/device/cancel
+ * From /dev/tpm0 create /sys/class/tpm/tpm0/device/cancel
+ * before 4.0: /sys/class/misc/tpm0/device/cancel
  */
 static int tpm_passthrough_open_sysfs_cancel(TPMBackend *tb)
 {
@@ -390,10 +391,15 @@ static int tpm_passthrough_open_sysfs_cancel(TPMBackend *tb)
     dev = strrchr(tpm_pt->tpm_dev, '/');
     if (dev) {
         dev++;
-        if (snprintf(path, sizeof(path), "/sys/class/misc/%s/device/cancel",
+        if (snprintf(path, sizeof(path), "/sys/class/tpm/%s/device/cancel",
                      dev) < sizeof(path)) {
             fd = qemu_open(path, O_WRONLY);
-            if (fd >= 0) {
+            if (fd < 0) {
+            	if (snprintf(path, sizeof(path), "/sys/class/misc/%s/device/cancel", dev) < sizeof(path)) {
+                fd = qemu_open(path, O_WRONLY);
+            	}
+            }
+	    if (fd >= 0) {
                 tb->cancel_path = g_strdup(path);
             } else {
                 error_report("tpm_passthrough: Could not open TPM cancel "
