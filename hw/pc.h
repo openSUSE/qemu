@@ -62,6 +62,7 @@ extern PicState2 *isa_pic;
 void pic_set_irq(int irq, int level);
 void pic_set_irq_new(void *opaque, int irq, int level);
 qemu_irq *i8259_init(qemu_irq parent_irq);
+qemu_irq *kvm_i8259_init(qemu_irq parent_irq);
 int pic_read_irq(PicState2 *s);
 void pic_update_irq(PicState2 *s);
 uint32_t pic_intack_read(PicState2 *s);
@@ -172,6 +173,9 @@ void pcspk_init(ISADevice *pit);
 int pcspk_audio_init(qemu_irq *pic);
 
 /* piix_pci.c */
+/* config space register for IRQ routing */
+#define PIIX_CONFIG_IRQ_ROUTE 0x60
+
 struct PCII440FXState;
 typedef struct PCII440FXState PCII440FXState;
 
@@ -181,6 +185,10 @@ void i440fx_init_memory_mappings(PCII440FXState *d);
 /* piix4.c */
 extern PCIDevice *piix4_dev;
 int piix4_init(PCIBus *bus, int devfn);
+
+int piix_get_irq(int pin);
+
+int ipf_map_irq(PCIDevice *pci_dev, int irq_num);
 
 /* vga.c */
 enum vga_retrace_method {
@@ -228,6 +236,10 @@ static inline bool isa_ne2000_init(int base, int irq, NICInfo *nd)
     qdev_init_nofail(&dev->qdev);
     return true;
 }
+
+/* extboot.c */
+
+void extboot_init(BlockDriverState *bs);
 
 /* e820 types */
 #define E820_RAM        1

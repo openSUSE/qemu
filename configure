@@ -93,7 +93,17 @@ audio_pt_int=""
 audio_win_int=""
 cc_i386=i386-pc-linux-gnu-gcc
 
-target_list=""
+target_list="x86_64-softmmu"
+
+kvm_version() {
+    local fname="$(dirname "$0")/KVM_VERSION"
+
+    if test -f "$fname"; then
+        cat "$fname"
+    else
+        echo "qemu-kvm-devel"
+    fi
+}
 
 # Default value for a variable defining feature "foo".
 #  * foo="no"  feature will only be used if --enable-foo arg is given
@@ -163,11 +173,14 @@ darwin_user="no"
 bsd_user="no"
 guest_base=""
 uname_release=""
-io_thread="no"
+io_thread="yes"
 mixemu="no"
+kvm_cap_pit="yes"
+kvm_cap_device_assignment="yes"
 aix="no"
 blobs="yes"
-pkgversion=""
+pkgversion=" ($(kvm_version))"
+cpu_emulation="yes"
 check_utests="no"
 user_pie="no"
 zero_malloc=""
@@ -465,6 +478,13 @@ Haiku)
   if [ "$cpu" = "i386" -o "$cpu" = "x86_64" ] ; then
     audio_possible_drivers="$audio_possible_drivers fmod"
   fi
+  if [ "$cpu" = "ia64" ] ; then
+     xen="no"
+     target_list="ia64-softmmu"
+     cpu_emulation="no"
+     gdbstub="no"
+     slirp="no"
+  fi
 ;;
 esac
 
@@ -641,6 +661,14 @@ for opt do
   ;;
   --enable-kvm) kvm="yes"
   ;;
+  --disable-kvm-pit) kvm_cap_pit="no"
+  ;;
+  --enable-kvm-pit) kvm_cap_pit="yes"
+  ;;
+  --disable-kvm-device-assignment) kvm_cap_device_assignment="no"
+  ;;
+  --enable-kvm-device-assignment) kvm_cap_device_assignment="yes"
+  ;;
   --disable-spice) spice="no"
   ;;
   --enable-spice) spice="yes"
@@ -729,6 +757,8 @@ for opt do
   --disable-docs) docs="no"
   ;;
   --enable-docs) docs="yes"
+  ;;
+  --disable-cpu-emulation) cpu_emulation="no"
   ;;
   --disable-vhost-net) vhost_net="no"
   ;;
@@ -989,6 +1019,10 @@ echo "  --enable-bluez           enable bluez stack connectivity"
 echo "  --disable-slirp          disable SLIRP userspace network connectivity"
 echo "  --disable-kvm            disable KVM acceleration support"
 echo "  --enable-kvm             enable KVM acceleration support"
+echo "  --disable-kvm-pit        disable KVM pit support"
+echo "  --enable-kvm-pit         enable KVM pit support"
+echo "  --disable-kvm-device-assignment  disable KVM device assignment support"
+echo "  --enable-kvm-device-assignment   enable KVM device assignment support"
 echo "  --disable-nptl           disable usermode NPTL support"
 echo "  --enable-nptl            enable usermode NPTL support"
 echo "  --enable-system          enable all system emulation targets"
@@ -1021,6 +1055,7 @@ echo "  --disable-attr           disables attr and xattr support"
 echo "  --enable-attr            enable attr and xattr support"
 echo "  --enable-io-thread       enable IO thread"
 echo "  --disable-blobs          disable installing provided firmware blobs"
+echo "  --disable-cpu-emulation  disables use of qemu cpu emulation code"
 echo "  --enable-docs            enable documentation build"
 echo "  --disable-docs           disable documentation build"
 echo "  --disable-vhost-net      disable vhost-net acceleration support"
@@ -1851,6 +1886,27 @@ if test "$guest_agent" != "no" ; then
         echo "glib-2.0 required to compile QEMU"
         exit 1
     fi
+fi
+
+##########################################
+# libpci header probe for kvm_cap_device_assignment
+if test $kvm_cap_device_assignment = "yes" ; then
+  cat > $TMPC << EOF
+#include <pci/header.h>
+#ifndef PCI_VENDOR_ID
+#error NO LIBPCI HEADER
+#endif
+int main(void) { return 0; }
+EOF
+  if compile_prog "" "" ; then
+    kvm_cap_device_assignment=yes
+  else
+    echo
+    echo "Error: libpci header check failed"
+    echo "Disable KVM Device Assignment capability."
+    echo
+    kvm_cap_device_assignment=no
+  fi
 fi
 
 ##########################################
@@ -2687,6 +2743,7 @@ if test -n "$sparc_cpu"; then
     echo "Target Sparc Arch $sparc_cpu"
 fi
 echo "xen support       $xen"
+echo "CPU emulation     $cpu_emulation"
 echo "brlapi support    $brlapi"
 echo "bluez  support    $bluez"
 echo "Documentation     $docs"
@@ -2701,6 +2758,8 @@ echo "Linux AIO support $linux_aio"
 echo "ATTR/XATTR support $attr"
 echo "Install blobs     $blobs"
 echo "KVM support       $kvm"
+echo "KVM PIT support   $kvm_cap_pit"
+echo "KVM device assig. $kvm_cap_device_assignment"
 echo "fdt support       $fdt"
 echo "preadv support    $preadv"
 echo "fdatasync         $fdatasync"
@@ -2992,6 +3051,11 @@ fi
 if test "$fdatasync" = "yes" ; then
   echo "CONFIG_FDATASYNC=y" >> $config_host_mak
 fi
+if test $cpu_emulation = "yes"; then
+  echo "CONFIG_CPU_EMULATION=y" >> $config_host_mak
+else
+  echo "CONFIG_NO_CPU_EMULATION=y" >> $config_host_mak
+fi
 if test "$madvise" = "yes" ; then
   echo "CONFIG_MADVISE=y" >> $config_host_mak
 fi
@@ -3199,6 +3263,9 @@ case "$target_arch2" in
     target_phys_bits=64
     target_long_alignment=8
   ;;
+  ia64)
+    target_phys_bits=64
+  ;;
   alpha)
     target_phys_bits=64
     target_long_alignment=8
@@ -3360,6 +3427,12 @@ case "$target_arch2" in
       echo "CONFIG_KVM=y" >> $config_target_mak
       if test $vhost_net = "yes" ; then
         echo "CONFIG_VHOST_NET=y" >> $config_target_mak
+      fi
+      if test $kvm_cap_pit = "yes" ; then
+        echo "CONFIG_KVM_PIT=y" >> $config_target_mak
+      fi
+      if test $kvm_cap_device_assignment = "yes" ; then
+        echo "CONFIG_KVM_DEVICE_ASSIGNMENT=y" >> $config_target_mak
       fi
     fi
 esac

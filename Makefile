@@ -246,6 +246,8 @@ mpc8544ds.dtb \
 multiboot.bin linuxboot.bin \
 s390-zipl.rom \
 spapr-rtas.bin slof.bin
+BLOBS += extboot.bin
+BLOBS += vapic.bin
 else
 BLOBS=
 endif
@@ -272,7 +274,12 @@ endif
 ifneq ($(BLOBS),)
 	$(INSTALL_DIR) "$(DESTDIR)$(datadir)"
 	set -e; for x in $(BLOBS); do \
+	    if [ -f $(SRC_PATH)/pc-bios/$$x ];then \
 		$(INSTALL_DATA) $(SRC_PATH)/pc-bios/$$x "$(DESTDIR)$(datadir)"; \
+	    fi \
+	    ; if [ -f pc-bios/optionrom/$$x ];then \
+		$(INSTALL_DATA) pc-bios/optionrom/$$x "$(DESTDIR)$(datadir)"; \
+	    fi \
 	done
 endif
 	$(INSTALL_DIR) "$(DESTDIR)$(datadir)/keymaps"
@@ -393,6 +400,7 @@ tarbin:
 	$(datadir)/pxe-pcnet.rom \
 	$(datadir)/pxe-rtl8139.rom \
 	$(datadir)/pxe-virtio.rom \
+	$(datadir)/extboot.bin \
 	$(docdir)/qemu-doc.html \
 	$(docdir)/qemu-tech.html \
 	$(mandir)/man1/qemu.1 \

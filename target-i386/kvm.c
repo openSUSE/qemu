@@ -343,8 +343,11 @@ static void cpu_update_state(void *opaque, int running, int reason)
     }
 }
 
+static int _kvm_arch_init_vcpu(CPUState *env);
+
 int kvm_arch_init_vcpu(CPUState *env)
 {
+    int r;
     struct {
         struct kvm_cpuid2 cpuid;
         struct kvm_cpuid_entry2 entries[100];
@@ -354,6 +357,11 @@ int kvm_arch_init_vcpu(CPUState *env)
     uint32_t unused;
     struct kvm_cpuid_entry2 *c;
     uint32_t signature[3];
+
+    r = _kvm_arch_init_vcpu(env);
+    if (r < 0) {
+        return r;
+    }
 
     env->cpuid_features &= kvm_arch_get_supported_cpuid(s, 1, 0, R_EDX);
 
@@ -502,8 +510,18 @@ int kvm_arch_init_vcpu(CPUState *env)
     return kvm_vcpu_ioctl(env, KVM_SET_CPUID2, &cpuid_data);
 }
 
+static void kvm_clear_vapic(CPUState *env)
+{
+    struct kvm_vapic_addr va = {
+        .vapic_addr = 0,
+    };
+
+    kvm_vcpu_ioctl(env, KVM_SET_VAPIC_ADDR, &va);
+}
+
 void kvm_arch_reset_vcpu(CPUState *env)
 {
+    kvm_clear_vapic(env);
     env->exception_injected = -1;
     env->interrupt_injected = -1;
     env->xcr0 = 1;
@@ -562,6 +580,8 @@ static int kvm_get_supported_msrs(KVMState *s)
     return ret;
 }
 
+static int kvm_create_pit(KVMState *s);
+
 int kvm_arch_init(KVMState *s)
 {
     uint64_t identity_base = 0xfffbc000;
@@ -610,6 +630,18 @@ int kvm_arch_init(KVMState *s)
         return ret;
     }
     qemu_register_reset(kvm_unpoison_all, NULL);
+
+    ret = kvm_create_pit(s);
+    if (ret < 0) {
+        return ret;
+    }
+
+    if (kvm_shadow_memory) {
+        ret = kvm_vm_ioctl(s, KVM_SET_NR_MMU_PAGES, kvm_shadow_memory);
+        if (ret < 0) {
+            return ret;
+        }
+    }
 
     return 0;
 }
@@ -661,6 +693,7 @@ static void get_seg(SegmentCache *lhs, const struct kvm_segment *rhs)
                  (rhs->g * DESC_G_MASK) |
                  (rhs->avl * DESC_AVL_MASK);
 }
+
 
 static void kvm_getput_reg(__u64 *kvm_reg, target_ulong *qemu_reg, int set)
 {
@@ -1406,6 +1439,8 @@ int kvm_arch_put_registers(CPUState *env, int level)
         if (ret < 0) {
             return ret;
         }
+
+        kvm_load_lapic(env);
     }
     ret = kvm_put_vcpu_events(env, level);
     if (ret < 0) {
@@ -1414,6 +1449,11 @@ int kvm_arch_put_registers(CPUState *env, int level)
     ret = kvm_put_debugregs(env);
     if (ret < 0) {
         return ret;
+    }
+    if (level == KVM_PUT_FULL_STATE) {
+        if (env->kvm_vcpu_update_vapic) {
+            kvm_tpr_enable_vapic(env);
+        }
     }
     /* must be last */
     ret = kvm_guest_debug_workarounds(env);
@@ -1453,6 +1493,7 @@ int kvm_arch_get_registers(CPUState *env)
     if (ret < 0) {
         return ret;
     }
+    kvm_save_lapic(env);
     ret = kvm_get_vcpu_events(env);
     if (ret < 0) {
         return ret;
@@ -1821,6 +1862,9 @@ int kvm_arch_handle_exit(CPUState *env, struct kvm_run *run)
         DPRINTF("kvm_exit_debug\n");
         ret = kvm_handle_debug(&run->debug.arch);
         break;
+    case KVM_EXIT_TPR_ACCESS:
+        ret = kvm_handle_tpr_access(env);
+        break;
     default:
         fprintf(stderr, "KVM: unknown exit reason %d\n", run->exit_reason);
         ret = -1;
@@ -1835,3 +1879,5 @@ bool kvm_arch_stop_on_emulation_error(CPUState *env)
     return !(env->cr[0] & CR0_PE_MASK) ||
            ((env->segs[R_CS].selector  & 3) != 3);
 }
+
+#include "qemu-kvm-x86.c"

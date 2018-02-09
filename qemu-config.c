@@ -84,6 +84,10 @@ static QemuOptsList qemu_drive_opts = {
             .name = "readonly",
             .type = QEMU_OPT_BOOL,
             .help = "open drive file as read-only",
+        },{
+            .name = "boot",
+            .type = QEMU_OPT_BOOL,
+            .help = "make this a boot drive",
         },
         { /* end of list */ }
     },

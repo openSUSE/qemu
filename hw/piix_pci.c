@@ -30,6 +30,7 @@
 #include "sysbus.h"
 #include "range.h"
 #include "xen.h"
+#include "kvm.h"
 
 /*
  * I440FX chipset data sheet.
@@ -238,6 +239,8 @@ static int i440fx_initfn(PCIDevice *dev)
     return 0;
 }
 
+static PIIX3State *piix3_dev;
+
 static PCIBus *i440fx_common_init(const char *device_name,
                                   PCII440FXState **pi440fx_state,
                                   int *piix3_devfn,
@@ -283,6 +286,8 @@ static PCIBus *i440fx_common_init(const char *device_name,
     if (ram_size > 255)
         ram_size = 255;
     (*pi440fx_state)->dev.config[0x57]=ram_size;
+
+    piix3_dev = piix3;
 
     return b;
 }
@@ -352,6 +357,13 @@ static void piix3_write_config(PCIDevice *dev,
             piix3_set_irq_pic(piix3, pic_irq);
         }
     }
+}
+
+int piix_get_irq(int pin)
+{
+    if (piix3_dev)
+        return piix3_dev->dev.config[0x60+pin];
+    return 0;
 }
 
 static void piix3_write_config_xen(PCIDevice *dev,

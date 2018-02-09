@@ -5,6 +5,7 @@
 #include "qobject.h"
 
 #include "qdev.h"
+#include "kvm.h"
 
 /* PCI includes legacy ISA access.  */
 #include "isa.h"
@@ -127,6 +128,9 @@ enum {
     QEMU_PCI_CAP_SERR = (1 << QEMU_PCI_CAP_SERR_BITNR),
 };
 
+typedef int (*msix_mask_notifier_func)(PCIDevice *, unsigned vector,
+				       int masked);
+
 struct PCIDevice {
     DeviceState qdev;
     /* PCI config space */
@@ -142,8 +146,8 @@ struct PCIDevice {
     /* Used to implement RW1C(Write 1 to Clear) bytes */
     uint8_t *w1cmask;
 
-    /* Used to allocate config space for capabilities. */
-    uint8_t *used;
+    /* Used to allocate config space and track capabilities. */
+    uint8_t *config_map;
 
     /* the following fields are read only */
     PCIBus *bus;
@@ -191,6 +195,21 @@ struct PCIDevice {
     char *romfile;
     ram_addr_t rom_offset;
     uint32_t rom_bar;
+
+    /* MSI entries */
+    int msi_entries_nr;
+    struct KVMMsiMessage *msi_irq_entries;
+
+    /* How much space does an MSIX table need. */
+    /* The spec requires giving the table structure
+     * a 4K aligned region all by itself. Align it to
+     * target pages so that drivers can do passthrough
+     * on the rest of the region. */
+    target_phys_addr_t msix_page_size;
+
+    KVMMsiMessage *msix_irq_entries;
+
+    msix_mask_notifier_func msix_mask_notifier;
 };
 
 PCIDevice *pci_register_device(PCIBus *bus, const char *name,
@@ -204,15 +223,17 @@ void pci_register_bar(PCIDevice *pci_dev, int region_num,
 void pci_register_bar_simple(PCIDevice *pci_dev, int region_num,
                              pcibus_t size, uint8_t attr, ram_addr_t ram_addr);
 
+void pci_map_option_rom(PCIDevice *pdev, int region_num, pcibus_t addr,
+                        pcibus_t size, int type);
+
+int pci_map_irq(PCIDevice *pci_dev, int pin);
+
 int pci_add_capability(PCIDevice *pdev, uint8_t cap_id,
                        uint8_t offset, uint8_t size);
 
 void pci_del_capability(PCIDevice *pci_dev, uint8_t cap_id, uint8_t cap_size);
 
-void pci_reserve_capability(PCIDevice *pci_dev, uint8_t offset, uint8_t size);
-
 uint8_t pci_find_capability(PCIDevice *pci_dev, uint8_t cap_id);
-
 
 uint32_t pci_default_read_config(PCIDevice *d,
                                  uint32_t address, int len);
@@ -220,7 +241,6 @@ void pci_default_write_config(PCIDevice *d,
                               uint32_t address, uint32_t val, int len);
 void pci_device_save(PCIDevice *s, QEMUFile *f);
 int pci_device_load(PCIDevice *s, QEMUFile *f);
-
 typedef void (*pci_set_irq_fn)(void *opaque, int irq_num, int level);
 typedef int (*pci_map_irq_fn)(PCIDevice *pci_dev, int irq_num);
 
@@ -264,6 +284,9 @@ int pci_parse_devaddr(const char *addr, int *domp, int *busp,
                       unsigned int *slotp, unsigned int *funcp);
 int pci_read_devaddr(Monitor *mon, const char *addr, int *domp, int *busp,
                      unsigned *slotp);
+
+int pci_parse_host_devaddr(const char *addr, int *segp, int *busp,
+                           int *slotp, int *funcp);
 
 void do_pci_info_print(Monitor *mon, const QObject *data);
 void do_pci_info(Monitor *mon, QObject **ret_data);

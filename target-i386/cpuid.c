@@ -1219,6 +1219,28 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
                 *ecx |= 1 << 1;    /* CmpLegacy bit */
             }
         }
+        if (kvm_enabled()) {
+            uint32_t h_eax, h_edx;
+
+            host_cpuid(index, 0, &h_eax, NULL, NULL, &h_edx);
+
+            /* disable CPU features that the host does not support */
+
+            /* long mode */
+            if ((h_edx & 0x20000000) == 0 /* || !lm_capable_kernel */)
+                *edx &= ~0x20000000;
+            /* syscall */
+            if ((h_edx & 0x00000800) == 0)
+                *edx &= ~0x00000800;
+            /* nx */
+            if ((h_edx & 0x00100000) == 0)
+                *edx &= ~0x00100000;
+
+            /* disable CPU features that KVM cannot support */
+
+            /* 3dnow */
+            *edx &= ~0xc0000000;
+        }
         break;
     case 0x80000002:
     case 0x80000003:

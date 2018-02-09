@@ -76,6 +76,15 @@ struct KVMState
     int pit_in_kernel;
     int xsave, xcrs;
     int many_ioeventfds;
+    int pit_state2;
+
+    int irqchip_inject_ioctl;
+#ifdef KVM_CAP_IRQ_ROUTING
+    struct kvm_irq_routing *irq_routes;
+    int nr_allocated_irq_routes;
+#endif
+    void *used_gsi_bitmap;
+    int max_gsi;
 };
 
 KVMState *kvm_state;
@@ -781,6 +790,13 @@ int kvm_init(void)
     s->xcrs = kvm_check_extension(s, KVM_CAP_XCRS);
 #endif
 
+    s->pit_state2 = 0;
+#ifdef KVM_CAP_PIT_STATE2
+    s->pit_state2 = kvm_check_extension(s, KVM_CAP_PIT_STATE2);
+#endif
+
+    s->pit_in_kernel = kvm_pit;
+
     ret = kvm_arch_init(s);
     if (ret < 0) {
         goto err;
@@ -790,6 +806,11 @@ int kvm_init(void)
     cpu_register_phys_memory_client(&kvm_cpu_phys_memory_client);
 
     s->many_ioeventfds = kvm_check_many_ioeventfds();
+
+    ret = kvm_create_irqchip(s);
+    if (ret < 0) {
+        return ret;
+    }
 
     cpu_interrupt_handler = kvm_handle_interrupt;
 
@@ -1103,12 +1124,22 @@ int kvm_has_xcrs(void)
     return kvm_state->xcrs;
 }
 
+int kvm_has_pit_state2(void)
+{
+    return kvm_state->pit_state2;
+}
+
 int kvm_has_many_ioeventfds(void)
 {
     if (!kvm_enabled()) {
         return 0;
     }
     return kvm_state->many_ioeventfds;
+}
+
+int kvm_allows_irq0_override(void)
+{
+    return !kvm_enabled() || !kvm_irqchip_in_kernel() || kvm_has_gsi_routing();
 }
 
 void kvm_setup_guest_memory(void *start, size_t size)
@@ -1385,6 +1416,23 @@ int kvm_set_ioeventfd_pio_word(int fd, uint16_t addr, uint16_t val, bool assign)
 #endif
 }
 
+int kvm_set_irqfd(int gsi, int fd, bool assigned)
+{
+    struct kvm_irqfd irqfd = {
+        .fd = fd,
+        .gsi = gsi,
+        .flags = assigned ? 0 : KVM_IRQFD_FLAG_DEASSIGN,
+    };
+    int r;
+    if (!kvm_enabled() || !kvm_irqchip_in_kernel())
+        return -ENOSYS;
+
+    r = kvm_vm_ioctl(kvm_state, KVM_IRQFD, &irqfd);
+    if (r < 0)
+        return r;
+    return 0;
+}
+
 int kvm_on_sigbus_vcpu(CPUState *env, int code, void *addr)
 {
     return kvm_arch_on_sigbus_vcpu(env, code, addr);
@@ -1394,3 +1442,6 @@ int kvm_on_sigbus(int code, void *addr)
 {
     return kvm_arch_on_sigbus(code, addr);
 }
+
+#undef PAGE_SIZE
+#include "qemu-kvm.c"

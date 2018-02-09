@@ -25,40 +25,10 @@
 #include "pc.h"
 #include "isa.h"
 #include "qemu-timer.h"
+#include "kvm.h"
+#include "i8254.h"
 
 //#define DEBUG_PIT
-
-#define RW_STATE_LSB 1
-#define RW_STATE_MSB 2
-#define RW_STATE_WORD0 3
-#define RW_STATE_WORD1 4
-
-typedef struct PITChannelState {
-    int count; /* can be 65536 */
-    uint16_t latched_count;
-    uint8_t count_latched;
-    uint8_t status_latched;
-    uint8_t status;
-    uint8_t read_state;
-    uint8_t write_state;
-    uint8_t write_latch;
-    uint8_t rw_mode;
-    uint8_t mode;
-    uint8_t bcd; /* not supported */
-    uint8_t gate; /* timer start */
-    int64_t count_load_time;
-    /* irq handling */
-    int64_t next_transition_time;
-    QEMUTimer *irq_timer;
-    qemu_irq irq;
-} PITChannelState;
-
-typedef struct PITState {
-    ISADevice dev;
-    uint32_t irq;
-    uint32_t iobase;
-    PITChannelState channels[3];
-} PITState;
 
 static PITState pit_state;
 
@@ -236,13 +206,18 @@ int pit_get_mode(ISADevice *dev, int channel)
     return s->mode;
 }
 
-static inline void pit_load_count(PITChannelState *s, int val)
+static inline void pit_load_count(PITState *s, int val, int chan)
 {
     if (val == 0)
         val = 0x10000;
-    s->count_load_time = qemu_get_clock_ns(vm_clock);
-    s->count = val;
-    pit_irq_timer_update(s, s->count_load_time);
+    s->channels[chan].count_load_time = qemu_get_clock_ns(vm_clock);
+    s->channels[chan].count = val;
+#ifdef TARGET_I386
+    if (chan == 0 && pit_state.flags & PIT_FLAGS_HPET_LEGACY) {
+        return;
+    }
+#endif
+    pit_irq_timer_update(&s->channels[chan], s->channels[chan].count_load_time);
 }
 
 /* if already latched, do not latch again */
@@ -302,17 +277,17 @@ static void pit_ioport_write(void *opaque, uint32_t addr, uint32_t val)
         switch(s->write_state) {
         default:
         case RW_STATE_LSB:
-            pit_load_count(s, val);
+            pit_load_count(pit, val, addr);
             break;
         case RW_STATE_MSB:
-            pit_load_count(s, val << 8);
+            pit_load_count(pit, val << 8, addr);
             break;
         case RW_STATE_WORD0:
             s->write_latch = val;
             s->write_state = RW_STATE_WORD1;
             break;
         case RW_STATE_WORD1:
-            pit_load_count(s, s->write_latch | (val << 8));
+            pit_load_count(pit, s->write_latch | (val << 8), addr);
             s->write_state = RW_STATE_WORD0;
             break;
         }
@@ -372,6 +347,11 @@ static uint32_t pit_ioport_read(void *opaque, uint32_t addr)
     return ret;
 }
 
+/* global counters for time-drift fix */
+int64_t timer_acks=0, timer_interrupts=0, timer_ints_to_push=0;
+
+extern int time_drift_fix;
+
 static void pit_irq_timer_update(PITChannelState *s, int64_t current_time)
 {
     int64_t expire_time;
@@ -382,16 +362,35 @@ static void pit_irq_timer_update(PITChannelState *s, int64_t current_time)
     expire_time = pit_get_next_transition_time(s, current_time);
     irq_level = pit_get_out1(s, current_time);
     qemu_set_irq(s->irq, irq_level);
+    if (time_drift_fix && irq_level==1) {
+        /* FIXME: fine tune timer_max_fix (max fix per tick). 
+         *        Should it be 1 (double time), 2 , 4, 10 ? 
+         *        Currently setting it to 5% of PIT-ticks-per-second (per PIT-tick)
+         */
+        const long pit_ticks_per_sec = (s->count>0) ? (PIT_FREQ/s->count) : 0;
+        const long timer_max_fix = pit_ticks_per_sec/20;
+        const long delta = timer_interrupts - timer_acks;
+        const long max_delta = pit_ticks_per_sec * 60; /* one minute */
+        if ((delta >  max_delta) && (pit_ticks_per_sec > 0)) {
+            printf("time drift is too long, %ld seconds were lost\n", delta/pit_ticks_per_sec);
+            timer_acks = timer_interrupts;
+            timer_ints_to_push = 0;
+        } else if (delta > 0) {
+            timer_ints_to_push = MIN(delta, timer_max_fix);
+        }
+        timer_interrupts++;
+    }
 #ifdef DEBUG_PIT
     printf("irq_level=%d next_delay=%f\n",
            irq_level,
            (double)(expire_time - current_time) / get_ticks_per_sec());
 #endif
     s->next_transition_time = expire_time;
-    if (expire_time != -1)
+    if (expire_time != -1) {
         qemu_mod_timer(s->irq_timer, expire_time);
-    else
+    } else {
         qemu_del_timer(s->irq_timer);
+    }
 }
 
 static void pit_irq_timer(void *opaque)
@@ -431,9 +430,10 @@ static int pit_load_old(QEMUFile *f, void *opaque, int version_id)
     PITChannelState *s;
     int i;
 
-    if (version_id != 1)
+    if (version_id != PIT_SAVEVM_VERSION)
         return -EINVAL;
 
+    pit->flags = qemu_get_be32(f);
     for(i = 0; i < 3; i++) {
         s = &pit->channels[i];
         s->count=qemu_get_be32(f);
@@ -454,16 +454,18 @@ static int pit_load_old(QEMUFile *f, void *opaque, int version_id)
             qemu_get_timer(f, s->irq_timer);
         }
     }
+
     return 0;
 }
 
-static const VMStateDescription vmstate_pit = {
+VMStateDescription vmstate_pit = {
     .name = "i8254",
     .version_id = 2,
     .minimum_version_id = 2,
     .minimum_version_id_old = 1,
     .load_state_old = pit_load_old,
     .fields      = (VMStateField []) {
+        VMSTATE_UINT32(flags, PITState),
         VMSTATE_STRUCT_ARRAY(channels, PITState, 3, 2, vmstate_pit_channel, PITChannelState),
         VMSTATE_TIMER(channels[0].irq_timer, PITState),
         VMSTATE_END_OF_LIST()
@@ -476,20 +478,40 @@ static void pit_reset(DeviceState *dev)
     PITChannelState *s;
     int i;
 
+#ifdef TARGET_I386
+    pit->flags &= ~PIT_FLAGS_HPET_LEGACY;
+#endif
     for(i = 0;i < 3; i++) {
         s = &pit->channels[i];
         s->mode = 3;
         s->gate = (i != 2);
-        pit_load_count(s, 0);
+        pit_load_count(pit, 0, i);
+    }
+    if (vmstate_pit.post_load) {
+        vmstate_pit.post_load(pit, 2);
     }
 }
 
+#ifdef TARGET_I386
 /* When HPET is operating in legacy mode, i8254 timer0 is disabled */
-void hpet_pit_disable(void) {
-    PITChannelState *s;
-    s = &pit_state.channels[0];
-    if (s->irq_timer)
-        qemu_del_timer(s->irq_timer);
+
+void hpet_pit_disable(void)
+{
+    PITChannelState *s = &pit_state.channels[0];
+
+    if (kvm_enabled() && kvm_pit_in_kernel()) {
+        if (kvm_has_pit_state2()) {
+            kvm_hpet_disable_kpit();
+        } else {
+             fprintf(stderr, "%s: kvm does not support pit_state2!\n", __FUNCTION__);
+             exit(1);
+        }
+    } else {
+        pit_state.flags |= PIT_FLAGS_HPET_LEGACY;
+        if (s->irq_timer) {
+            qemu_del_timer(s->irq_timer);
+        }
+    }
 }
 
 /* When HPET is reset or leaving legacy mode, it must reenable i8254
@@ -499,17 +521,32 @@ void hpet_pit_disable(void) {
 void hpet_pit_enable(void)
 {
     PITState *pit = &pit_state;
-    PITChannelState *s;
-    s = &pit->channels[0];
-    s->mode = 3;
-    s->gate = 1;
-    pit_load_count(s, 0);
+    PITChannelState *s = &pit->channels[0];
+
+    if (kvm_enabled() && kvm_pit_in_kernel()) {
+        if (kvm_has_pit_state2()) {
+            kvm_hpet_enable_kpit();
+        } else {
+             fprintf(stderr, "%s: kvm does not support pit_state2!\n", __FUNCTION__);
+             exit(1);
+        }
+    } else {
+        pit_state.flags &= ~PIT_FLAGS_HPET_LEGACY;
+        pit_load_count(pit, s->count, 0);
+    }
 }
+#endif
 
 static int pit_initfn(ISADevice *dev)
 {
     PITState *pit = DO_UPCAST(PITState, dev, dev);
     PITChannelState *s;
+
+#ifdef CONFIG_KVM_PIT
+    if (kvm_enabled() && kvm_pit_in_kernel())
+        kvm_pit_init(pit);
+    else {
+#endif
 
     s = &pit->channels[0];
     /* the timer 0 is connected to an IRQ */
@@ -520,6 +557,9 @@ static int pit_initfn(ISADevice *dev)
     register_ioport_read(pit->iobase, 3, 1, pit_ioport_read, pit);
     isa_init_ioport(dev, pit->iobase);
 
+#ifdef CONFIG_KVM_PIT
+    }
+#endif
     qdev_set_legacy_instance_id(&dev->qdev, pit->iobase, 2);
 
     return 0;

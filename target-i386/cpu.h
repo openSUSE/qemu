@@ -759,6 +759,8 @@ typedef struct CPUX86State {
     uint16_t fptag_vmstate;
     uint16_t fpregs_format_vmstate;
 
+    int kvm_vcpu_update_vapic;
+
     uint64_t xstate_bv;
     XMMReg ymmh_regs[CPU_NB_REGS];
 
@@ -921,6 +923,7 @@ void cpu_x86_update_cr4(CPUX86State *env, uint32_t new_cr4);
 /* hw/pc.c */
 void cpu_smm_update(CPUX86State *env);
 uint64_t cpu_get_tsc(CPUX86State *env);
+CPUState *pc_new_cpu(const char *cpu_model);
 
 /* used to debug */
 #define X86_DUMP_FPU  0x0001 /* dump FPU state too */

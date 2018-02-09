@@ -963,6 +963,27 @@ static int do_cpu_set(Monitor *mon, const QDict *qdict, QObject **ret_data)
     return 0;
 }
 
+static void do_cpu_set_nr(Monitor *mon, const QDict *qdict)
+{
+    int state, value;
+    const char *status;
+
+    status = qdict_get_str(qdict, "state");
+    value = qdict_get_int(qdict, "cpu");
+
+    if (!strcmp(status, "online"))
+       state = 1;
+    else if (!strcmp(status, "offline"))
+       state = 0;
+    else {
+        monitor_printf(mon, "invalid status: %s\n", status);
+        return;
+    }
+#if defined(TARGET_I386) || defined(TARGET_X86_64)
+    qemu_system_cpu_hot_add(value, state);
+#endif
+}
+
 static void do_info_jit(Monitor *mon)
 {
     dump_exec_info((FILE *)mon, monitor_fprintf);

@@ -71,14 +71,19 @@ all: $(PROGS) stap
 
 #########################################################
 # cpu emulator library
-libobj-y = exec.o translate-all.o cpu-exec.o translate.o
-libobj-y += tcg/tcg.o
+libobj-y = exec.o cpu-exec.o
+libobj-$(CONFIG_NO_CPU_EMULATION) += fake-exec.o
+libobj-$(CONFIG_CPU_EMULATION) += translate-all.o translate.o
+libobj-$(CONFIG_CPU_EMULATION) += tcg/tcg.o
 libobj-y += fpu/softfloat.o
 libobj-y += op_helper.o helper.o
 ifeq ($(TARGET_BASE_ARCH), i386)
 libobj-y += cpuid.o
 endif
 libobj-$(CONFIG_NEED_MMU) += mmu.o
+
+libobj-$(CONFIG_KVM) += kvm-tpr-opt.o
+
 libobj-$(TARGET_ARM) += neon_helper.o iwmmxt_helper.o
 
 libobj-y += disas.o
@@ -187,10 +192,11 @@ endif #CONFIG_BSD_USER
 # System emulator target
 ifdef CONFIG_SOFTMMU
 
-obj-y = arch_init.o cpus.o monitor.o machine.o gdbstub.o balloon.o
+obj-y = arch_init.o cpus.o monitor.o machine.o gdbstub.o vl.o balloon.o
 # virtio has to be here due to weird dependency between PCI and virtio-net.
 # need to fix this properly
 obj-$(CONFIG_NO_PCI) += pci-stub.o
+obj-$(CONFIG_PCI) += pci.o
 obj-$(CONFIG_VIRTIO) += virtio.o virtio-blk.o virtio-balloon.o virtio-net.o virtio-serial-bus.o
 obj-y += vhost_net.o
 obj-$(CONFIG_VHOST_NET) += vhost.o
@@ -227,10 +233,24 @@ obj-i386-y += mc146818rtc.o i8259.o pc.o
 obj-i386-y += cirrus_vga.o sga.o apic.o ioapic.o piix_pci.o
 obj-i386-y += vmport.o
 obj-i386-y += device-hotplug.o pci-hotplug.o smbios.o wdt_ib700.o
+obj-i386-y += extboot.o
 obj-i386-y += debugcon.o multiboot.o
 obj-i386-y += pc_piix.o
 obj-i386-$(CONFIG_KVM) += kvmclock.o
 obj-i386-$(CONFIG_SPICE) += qxl.o qxl-logger.o qxl-render.o
+obj-i386-y += testdev.o
+obj-i386-y += acpi.o acpi_piix4.o
+
+obj-i386-y += pcspk.o i8254.o
+obj-i386-$(CONFIG_KVM_PIT) += i8254-kvm.o
+obj-i386-$(CONFIG_KVM_DEVICE_ASSIGNMENT) += device-assignment.o
+
+# Hardware support
+obj-ia64-y += ide.o pckbd.o vga.o $(SOUND_HW) dma.o $(AUDIODRV)
+obj-ia64-y += fdc.o mc146818rtc.o serial.o i8259.o ipf.o
+obj-ia64-y += cirrus_vga.o parallel.o acpi.o piix_pci.o
+obj-ia64-y += usb-uhci.o
+obj-ia64-$(CONFIG_KVM_DEVICE_ASSIGNMENT) += device-assignment.o
 
 # shared objects
 obj-ppc-y = ppc.o
@@ -286,6 +306,8 @@ obj-lm32-y += milkymist-vgafb.o
 obj-lm32-y += framebuffer.o
 
 obj-mips-y = mips_r4k.o mips_jazz.o mips_malta.o mips_mipssim.o
+obj-mips-y += pcspk.o i8254.o
+obj-mips-y += acpi.o acpi_piix4.o
 obj-mips-y += mips_addr.o mips_timer.o mips_int.o
 obj-mips-y += vga.o i8259.o
 obj-mips-y += g364fb.o jazz_led.o
@@ -371,6 +393,11 @@ obj-s390x-y = s390-virtio-bus.o s390-virtio.o
 
 obj-alpha-y = i8259.o mc146818rtc.o
 obj-alpha-y += vga.o cirrus_vga.o
+
+ifeq ($(TARGET_ARCH), ia64)
+firmware.o: firmware.c
+	$(CC) $(HELPER_CFLAGS) $(CPPFLAGS) $(BASE_CFLAGS) -c -o $@ $<
+endif
 
 main.o: QEMU_CFLAGS+=$(GPROF_CFLAGS)
 

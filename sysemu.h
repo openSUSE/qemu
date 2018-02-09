@@ -106,7 +106,6 @@ extern int vga_interface_type;
 extern int graphic_width;
 extern int graphic_height;
 extern int graphic_depth;
-extern uint8_t irq0override;
 extern DisplayType display_type;
 extern const char *keyboard_layout;
 extern int win2k_install_hack;
@@ -124,6 +123,7 @@ extern int semihosting_enabled;
 extern int old_param;
 extern int boot_menu;
 extern QEMUClock *rtc_clock;
+extern long hpagesize;
 
 #define MAX_NODES 64
 extern int nb_numa_nodes;
@@ -141,6 +141,9 @@ extern int nb_option_roms;
 #define MAX_PROM_ENVS 128
 extern const char *prom_envs[MAX_PROM_ENVS];
 extern unsigned int nb_prom_envs;
+
+/* acpi */
+void qemu_system_cpu_hot_add(int cpu, int state);
 
 /* pci-hotplug */
 void pci_device_hot_add(Monitor *mon, const QDict *qdict);

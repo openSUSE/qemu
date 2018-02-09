@@ -23,6 +23,7 @@
 #include "host-utils.h"
 #include "sysbus.h"
 #include "trace.h"
+#include "kvm.h"
 
 /* APIC Local Vector Table */
 #define APIC_LVT_TIMER   0
@@ -302,8 +303,11 @@ void cpu_set_apic_base(DeviceState *d, uint64_t val)
 
     if (!s)
         return;
-    s->apicbase = (val & 0xfffff000) |
-        (s->apicbase & (MSR_IA32_APICBASE_BSP | MSR_IA32_APICBASE_ENABLE));
+    if (kvm_enabled() && kvm_irqchip_in_kernel())
+        s->apicbase = val;
+    else
+        s->apicbase = (val & 0xfffff000) |
+            (s->apicbase & (MSR_IA32_APICBASE_BSP | MSR_IA32_APICBASE_ENABLE));
     /* if disabled, cannot be enabled again */
     if (!(val & MSR_IA32_APICBASE_ENABLE)) {
         s->apicbase &= ~MSR_IA32_APICBASE_ENABLE;
@@ -416,6 +420,11 @@ int apic_get_irq_delivered(void)
     trace_apic_get_irq_delivered(apic_irq_delivered);
 
     return apic_irq_delivered;
+}
+
+void apic_set_irq_delivered(void)
+{
+    apic_irq_delivered = 1;
 }
 
 static void apic_set_irq(APICState *s, int vector_num, int trigger_mode)
@@ -887,6 +896,113 @@ static void apic_mem_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
         s->esr |= ESR_ILLEGAL_ADDRESS;
         break;
     }
+}
+
+#ifdef KVM_CAP_IRQCHIP
+
+static inline uint32_t kapic_reg(struct kvm_lapic_state *kapic, int reg_id)
+{
+    return *((uint32_t *) (kapic->regs + (reg_id << 4)));
+}
+
+static inline void kapic_set_reg(struct kvm_lapic_state *kapic,
+                                 int reg_id, uint32_t val)
+{
+    *((uint32_t *) (kapic->regs + (reg_id << 4))) = val;
+}
+
+static void kvm_kernel_lapic_save_to_user(APICState *s)
+{
+    struct kvm_lapic_state apic;
+    struct kvm_lapic_state *kapic = &apic;
+    int i, v;
+
+    kvm_get_lapic(s->cpu_env, kapic);
+
+    s->id = kapic_reg(kapic, 0x2) >> 24;
+    s->tpr = kapic_reg(kapic, 0x8);
+    s->arb_id = kapic_reg(kapic, 0x9);
+    s->log_dest = kapic_reg(kapic, 0xd) >> 24;
+    s->dest_mode = kapic_reg(kapic, 0xe) >> 28;
+    s->spurious_vec = kapic_reg(kapic, 0xf);
+    for (i = 0; i < 8; i++) {
+        s->isr[i] = kapic_reg(kapic, 0x10 + i);
+        s->tmr[i] = kapic_reg(kapic, 0x18 + i);
+        s->irr[i] = kapic_reg(kapic, 0x20 + i);
+    }
+    s->esr = kapic_reg(kapic, 0x28);
+    s->icr[0] = kapic_reg(kapic, 0x30);
+    s->icr[1] = kapic_reg(kapic, 0x31);
+    for (i = 0; i < APIC_LVT_NB; i++)
+	s->lvt[i] = kapic_reg(kapic, 0x32 + i);
+    s->initial_count = kapic_reg(kapic, 0x38);
+    s->divide_conf = kapic_reg(kapic, 0x3e);
+
+    v = (s->divide_conf & 3) | ((s->divide_conf >> 1) & 4);
+    s->count_shift = (v + 1) & 7;
+
+    s->initial_count_load_time = qemu_get_clock_ns(vm_clock);
+    apic_timer_update(s, s->initial_count_load_time);
+}
+
+static void kvm_kernel_lapic_load_from_user(APICState *s)
+{
+    struct kvm_lapic_state apic;
+    struct kvm_lapic_state *klapic = &apic;
+    int i;
+
+    memset(klapic, 0, sizeof apic);
+    kapic_set_reg(klapic, 0x2, s->id << 24);
+    kapic_set_reg(klapic, 0x8, s->tpr);
+    kapic_set_reg(klapic, 0xd, s->log_dest << 24);
+    kapic_set_reg(klapic, 0xe, s->dest_mode << 28 | 0x0fffffff);
+    kapic_set_reg(klapic, 0xf, s->spurious_vec);
+    for (i = 0; i < 8; i++) {
+        kapic_set_reg(klapic, 0x10 + i, s->isr[i]);
+        kapic_set_reg(klapic, 0x18 + i, s->tmr[i]);
+        kapic_set_reg(klapic, 0x20 + i, s->irr[i]);
+    }
+    kapic_set_reg(klapic, 0x28, s->esr);
+    kapic_set_reg(klapic, 0x30, s->icr[0]);
+    kapic_set_reg(klapic, 0x31, s->icr[1]);
+    for (i = 0; i < APIC_LVT_NB; i++)
+        kapic_set_reg(klapic, 0x32 + i, s->lvt[i]);
+    kapic_set_reg(klapic, 0x38, s->initial_count);
+    kapic_set_reg(klapic, 0x3e, s->divide_conf);
+
+    kvm_set_lapic(s->cpu_env, klapic);
+}
+
+#endif
+
+void kvm_load_lapic(CPUState *env)
+{
+#ifdef KVM_CAP_IRQCHIP
+    APICState *s = DO_UPCAST(APICState, busdev.qdev, env->apic_state);
+
+    if (!s) {
+        return;
+    }
+
+    if (kvm_enabled() && kvm_irqchip_in_kernel()) {
+        kvm_kernel_lapic_load_from_user(s);
+    }
+#endif
+}
+
+void kvm_save_lapic(CPUState *env)
+{
+#ifdef KVM_CAP_IRQCHIP
+    APICState *s = DO_UPCAST(APICState, busdev.qdev, env->apic_state);
+
+    if (!s) {
+        return;
+    }
+
+    if (kvm_enabled() && kvm_irqchip_in_kernel()) {
+        kvm_kernel_lapic_save_to_user(s);
+    }
+#endif
 }
 
 /* This function is only used for old state version 1 and 2 */

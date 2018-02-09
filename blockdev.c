@@ -17,6 +17,8 @@
 #include "hw/qdev.h"
 #include "block_int.h"
 
+DriveInfo *extboot_drive = NULL;
+
 static QTAILQ_HEAD(drivelist, DriveInfo) drives = QTAILQ_HEAD_INITIALIZER(drives);
 
 static const char *const if_name[IF_COUNT] = {
@@ -236,6 +238,7 @@ DriveInfo *drive_init(QemuOpts *opts, int default_to_scsi)
     int on_read_error, on_write_error;
     const char *devaddr;
     DriveInfo *dinfo;
+    int is_extboot = 0;
     int snapshot = 0;
     int ret;
 
@@ -363,6 +366,12 @@ DriveInfo *drive_init(QemuOpts *opts, int default_to_scsi)
         }
     }
 
+    is_extboot = qemu_opt_get_bool(opts, "boot", 0);
+    if (is_extboot && extboot_drive) {
+        fprintf(stderr, "qemu: two bootable drives specified\n");
+        return NULL;
+    }
+
     on_write_error = BLOCK_ERR_STOP_ENOSPC;
     if ((buf = qemu_opt_get(opts, "werror")) != NULL) {
         if (type != IF_IDE && type != IF_SCSI && type != IF_VIRTIO && type != IF_NONE) {
@@ -467,6 +476,10 @@ DriveInfo *drive_init(QemuOpts *opts, int default_to_scsi)
     if (serial)
         strncpy(dinfo->serial, serial, sizeof(dinfo->serial) - 1);
     QTAILQ_INSERT_TAIL(&drives, dinfo, next);
+
+    if (is_extboot) {
+        extboot_drive = dinfo;
+    }
 
     bdrv_set_on_error(dinfo->bdrv, on_read_error, on_write_error);
 

@@ -78,6 +78,16 @@ int kvm_has_many_ioeventfds(void)
     return 0;
 }
 
+int kvm_allows_irq0_override(void)
+{
+    return 1;
+}
+
+int kvm_has_pit_state2(void)
+{
+    return 0;
+}
+
 void kvm_setup_guest_memory(void *start, size_t size)
 {
 }
@@ -120,6 +130,42 @@ int kvm_set_ioeventfd_mmio_long(int fd, uint32_t adr, uint32_t val, bool assign)
     return -ENOSYS;
 }
 
+int kvm_has_gsi_routing(void)
+{
+    return 0;
+}
+
+int kvm_get_irq_route_gsi(void)
+{
+    return -ENOSYS;
+}
+
+int kvm_msi_message_add(KVMMsiMessage *msg)
+{
+    return -ENOSYS;
+}
+
+int kvm_msi_message_del(KVMMsiMessage *msg)
+{
+    return -ENOSYS;
+}
+
+int kvm_msi_message_update(KVMMsiMessage *old, KVMMsiMessage *new)
+{
+    return -ENOSYS;
+}
+
+int kvm_commit_irq_routes(void)
+{
+    return -ENOSYS;
+}
+
+int kvm_set_irq(int irq, int level, int *status)
+{
+    assert(0);
+    return -ENOSYS;
+}
+
 int kvm_on_sigbus_vcpu(CPUState *env, int code, void *addr)
 {
     return 1;
@@ -128,4 +174,9 @@ int kvm_on_sigbus_vcpu(CPUState *env, int code, void *addr)
 int kvm_on_sigbus(int code, void *addr)
 {
     return 1;
+}
+
+int kvm_set_irqfd(int gsi, int fd, bool assigned)
+{
+    return -ENOSYS;
 }

@@ -1216,6 +1216,19 @@ Set the encrypted device @var{device} password to @var{password}
 ETEXI
 
     {
+        .name       = "cpu_set",
+        .args_type  = "cpu:i,state:s",
+        .params     = "cpu [online|offline]",
+        .help       = "change cpu state",
+        .mhandler.cmd  = do_cpu_set_nr,
+    },
+
+STEXI
+@item cpu_set @var{cpu} [online|offline]
+Set CPU @var{cpu} online or offline.
+ETEXI
+
+    {
         .name       = "set_password",
         .args_type  = "protocol:s,password:s,connected:s?",
         .params     = "protocol password action-if-connected",

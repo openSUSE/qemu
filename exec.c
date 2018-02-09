@@ -26,7 +26,12 @@
 
 #include "qemu-common.h"
 #include "cpu.h"
+#include "cache-utils.h"
+
+#if !defined(TARGET_IA64)
 #include "tcg.h"
+#endif
+
 #include "hw/hw.h"
 #include "hw/qdev.h"
 #include "osdep.h"
@@ -461,6 +466,9 @@ static uint8_t static_code_gen_buffer[DEFAULT_CODE_GEN_BUFFER_SIZE]
 
 static void code_gen_alloc(unsigned long tb_size)
 {
+    if (kvm_enabled())
+        return;
+
 #ifdef USE_STATIC_CODE_GEN_BUFFER
     code_gen_buffer = static_code_gen_buffer;
     code_gen_buffer_size = DEFAULT_CODE_GEN_BUFFER_SIZE;
@@ -3910,6 +3918,11 @@ void cpu_physical_memory_rw(target_phys_addr_t addr, uint8_t *buf,
                     cpu_physical_memory_set_dirty_flags(
                         addr1, (0xff & ~CODE_DIRTY_FLAG));
                 }
+		/* qemu doesn't execute guest code directly, but kvm does
+		   therefore flush instruction caches */
+		if (kvm_enabled())
+		    flush_icache_range((unsigned long)ptr,
+				       ((unsigned long)ptr)+l);
                 qemu_put_ram_ptr(ptr);
             }
         } else {
@@ -4103,6 +4116,8 @@ void *cpu_physical_memory_map(target_phys_addr_t addr,
 void cpu_physical_memory_unmap(void *buffer, target_phys_addr_t len,
                                int is_write, target_phys_addr_t access_len)
 {
+    unsigned long flush_len = (unsigned long)access_len;
+
     if (buffer != bounce.buffer) {
         if (is_write) {
             ram_addr_t addr1 = qemu_ram_addr_from_host_nofail(buffer);
@@ -4120,7 +4135,9 @@ void cpu_physical_memory_unmap(void *buffer, target_phys_addr_t len,
                 }
                 addr1 += l;
                 access_len -= l;
-            }
+	    }
+	    dma_flush_range((unsigned long)buffer,
+			    (unsigned long)buffer + flush_len);
         }
         if (xen_enabled()) {
             xen_invalidate_map_cache_entry(buffer);
@@ -4723,7 +4740,9 @@ void dump_exec_info(FILE *f, fprintf_function cpu_fprintf)
     cpu_fprintf(f, "TB flush count      %d\n", tb_flush_count);
     cpu_fprintf(f, "TB invalidate count %d\n", tb_phys_invalidate_count);
     cpu_fprintf(f, "TLB flush count     %d\n", tlb_flush_count);
+#ifdef CONFIG_PROFILER
     tcg_dump_info(f, cpu_fprintf);
+#endif
 }
 
 #define MMUSUFFIX _cmmu

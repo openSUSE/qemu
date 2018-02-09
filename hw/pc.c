@@ -39,6 +39,7 @@
 #include "msix.h"
 #include "sysbus.h"
 #include "sysemu.h"
+#include "kvm.h"
 #include "blockdev.h"
 #include "ui/qemu-spice.h"
 
@@ -56,6 +57,8 @@
 #endif
 
 #define BIOS_FILENAME "bios.bin"
+#define EXTBOOT_FILENAME "extboot.bin"
+#define VAPIC_FILENAME "vapic.bin"
 
 #define PC_MAX_BIOS_SIZE (4 * 1024 * 1024)
 
@@ -601,7 +604,7 @@ static void *bochs_bios_init(void)
     fw_cfg_add_i64(fw_cfg, FW_CFG_RAM_SIZE, (uint64_t)ram_size);
     fw_cfg_add_bytes(fw_cfg, FW_CFG_ACPI_TABLES, (uint8_t *)acpi_tables,
                      acpi_tables_len);
-    fw_cfg_add_bytes(fw_cfg, FW_CFG_IRQ0_OVERRIDE, &irq0override, 1);
+    fw_cfg_add_i32(fw_cfg, FW_CFG_IRQ0_OVERRIDE, kvm_allows_irq0_override());
 
     smbios_table = smbios_get_table(&smbios_len);
     if (smbios_table)
@@ -921,9 +924,17 @@ static void pc_cpu_reset(void *opaque)
     env->halted = !cpu_is_bsp(env);
 }
 
-static CPUState *pc_new_cpu(const char *cpu_model)
+CPUState *pc_new_cpu(const char *cpu_model)
 {
     CPUState *env;
+
+    if (cpu_model == NULL) {
+#ifdef TARGET_X86_64
+        cpu_model = "qemu64";
+#else
+        cpu_model = "qemu32";
+#endif
+    }
 
     env = cpu_init(cpu_model);
     if (!env) {
@@ -944,14 +955,6 @@ void pc_cpus_init(const char *cpu_model)
     int i;
 
     /* init CPUs */
-    if (cpu_model == NULL) {
-#ifdef TARGET_X86_64
-        cpu_model = "qemu64";
-#else
-        cpu_model = "qemu32";
-#endif
-    }
-
     for(i = 0; i < smp_cpus; i++) {
         pc_new_cpu(cpu_model);
     }
@@ -1010,9 +1013,20 @@ void pc_memory_init(const char *kernel_filename,
     isa_bios_size = bios_size;
     if (isa_bios_size > (128 * 1024))
         isa_bios_size = 128 * 1024;
+    cpu_register_physical_memory(0xd0000, (192 * 1024) - isa_bios_size,
+                                 IO_MEM_UNASSIGNED);
     cpu_register_physical_memory(0x100000 - isa_bios_size,
                                  isa_bios_size,
                                  (bios_offset + bios_size - isa_bios_size) | IO_MEM_ROM);
+
+    if (extboot_drive) {
+        option_rom[nb_option_roms].name = qemu_strdup(EXTBOOT_FILENAME);
+        option_rom[nb_option_roms].bootindex = 0;
+        nb_option_roms++;
+    }
+    option_rom[nb_option_roms].name = qemu_strdup(VAPIC_FILENAME);
+    option_rom[nb_option_roms].bootindex = -1;
+    nb_option_roms++;
 
     option_rom_offset = qemu_ram_alloc(NULL, "pc.rom", PC_ROM_SIZE);
     cpu_register_physical_memory(PC_ROM_MIN_VGA, PC_ROM_SIZE, option_rom_offset);
@@ -1167,5 +1181,17 @@ void pc_pci_device_init(PCIBus *pci_bus)
     max_bus = drive_get_max_bus(IF_SCSI);
     for (bus = 0; bus <= max_bus; bus++) {
         pci_create_simple(pci_bus, -1, "lsi53c895a");
+    }
+
+    if (extboot_drive) {
+        DriveInfo *info = extboot_drive;
+        int cyls, heads, secs;
+
+        if (info->type != IF_IDE && info->type != IF_VIRTIO) {
+            bdrv_guess_geometry(info->bdrv, &cyls, &heads, &secs);
+            bdrv_set_geometry_hint(info->bdrv, cyls, heads, secs);
+        }
+
+        extboot_init(info->bdrv);
     }
 }

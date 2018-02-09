@@ -43,11 +43,15 @@
 #  include <xen/hvm/hvm_info_table.h>
 #endif
 
+qemu_irq *ioapic_irq_hack;
+
 #define MAX_IDE_BUS 2
 
 static const int ide_iobase[MAX_IDE_BUS] = { 0x1f0, 0x170 };
 static const int ide_iobase2[MAX_IDE_BUS] = { 0x3f6, 0x376 };
 static const int ide_irq[MAX_IDE_BUS] = { 14, 15 };
+
+const char *global_cpu_model; /* cpu hotadd */
 
 static void ioapic_init(IsaIrqState *isa_irq_state)
 {
@@ -90,6 +94,8 @@ static void pc_init1(ram_addr_t ram_size,
     BusState *idebus[MAX_IDE_BUS];
     ISADevice *rtc_state;
 
+    global_cpu_model = cpu_model;
+
     pc_cpus_init(cpu_model);
 
     if (kvmclock_enabled) {
@@ -112,7 +118,11 @@ static void pc_init1(ram_addr_t ram_size,
 
     if (!xen_enabled()) {
         cpu_irq = pc_allocate_cpu_irq();
-        i8259 = i8259_init(cpu_irq[0]);
+        if (!(kvm_enabled() && kvm_irqchip_in_kernel())) {
+            i8259 = i8259_init(cpu_irq[0]);
+        } else {
+            i8259 = kvm_i8259_init(cpu_irq[0]);
+        }
     } else {
         i8259 = xen_interrupt_controller_init();
     }
@@ -121,7 +131,11 @@ static void pc_init1(ram_addr_t ram_size,
     if (pci_enabled) {
         ioapic_init(isa_irq_state);
     }
-    isa_irq = qemu_allocate_irqs(isa_irq_handler, isa_irq_state, 24);
+    if (!(kvm_enabled() && kvm_irqchip_in_kernel())) {
+        isa_irq = qemu_allocate_irqs(isa_irq_handler, isa_irq_state, 24);
+    } else {
+        isa_irq = i8259;
+    }
 
     if (pci_enabled) {
         pci_bus = i440fx_init(&i440fx_state, &piix3_devfn, isa_irq, ram_size);
@@ -149,7 +163,7 @@ static void pc_init1(ram_addr_t ram_size,
         if (!pci_enabled || (nd->model && strcmp(nd->model, "ne2k_isa") == 0))
             pc_init_ne2k_isa(nd);
         else
-            pci_nic_init_nofail(nd, "e1000", NULL);
+            pci_nic_init_nofail(nd, "rtl8139", NULL);
     }
 
     ide_drive_get(hd, MAX_IDE_BUS);

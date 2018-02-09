@@ -51,6 +51,7 @@ int kvm_has_debugregs(void);
 int kvm_has_xsave(void);
 int kvm_has_xcrs(void);
 int kvm_has_many_ioeventfds(void);
+int kvm_has_pit_state2(void);
 
 #ifdef NEED_CPU_H
 int kvm_init_vcpu(CPUState *env);
@@ -76,10 +77,10 @@ int kvm_set_signal_mask(CPUState *env, const sigset_t *sigset);
 #endif
 
 int kvm_pit_in_kernel(void);
-int kvm_irqchip_in_kernel(void);
 
 int kvm_on_sigbus_vcpu(CPUState *env, int code, void *addr);
 int kvm_on_sigbus(int code, void *addr);
+#endif /* NEED_CPU_H */
 
 /* internal API */
 
@@ -91,6 +92,7 @@ int kvm_ioctl(KVMState *s, int type, ...);
 
 int kvm_vm_ioctl(KVMState *s, int type, ...);
 
+#ifdef NEED_CPU_H
 int kvm_vcpu_ioctl(CPUState *env, int type, ...);
 
 /* Arch specific hooks */
@@ -186,7 +188,6 @@ static inline void cpu_synchronize_post_init(CPUState *env)
     }
 }
 
-
 #if !defined(CONFIG_USER_ONLY)
 int kvm_physical_memory_addr_from_ram(KVMState *s, ram_addr_t ram_addr,
                                       target_phys_addr_t *phys_addr);
@@ -195,5 +196,33 @@ int kvm_physical_memory_addr_from_ram(KVMState *s, ram_addr_t ram_addr,
 #endif
 int kvm_set_ioeventfd_mmio_long(int fd, uint32_t adr, uint32_t val, bool assign);
 
+int kvm_set_irqfd(int gsi, int fd, bool assigned);
+
 int kvm_set_ioeventfd_pio_word(int fd, uint16_t adr, uint16_t val, bool assign);
+
+typedef struct KVMMsiMessage {
+    uint32_t gsi;
+    uint32_t addr_lo;
+    uint32_t addr_hi;
+    uint32_t data;
+} KVMMsiMessage;
+
+int kvm_has_gsi_routing(void);
+int kvm_allows_irq0_override(void);
+int kvm_get_irq_route_gsi(void);
+
+int kvm_msi_message_add(KVMMsiMessage *msg);
+int kvm_msi_message_del(KVMMsiMessage *msg);
+int kvm_msi_message_update(KVMMsiMessage *old, KVMMsiMessage *new);
+
+int kvm_commit_irq_routes(void);
+
+int kvm_irqchip_in_kernel(void);
+
+int kvm_set_irq(int irq, int level, int *status);
+
+#ifdef NEED_CPU_H
+#include "qemu-kvm.h"
+#endif
+
 #endif

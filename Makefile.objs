@@ -17,6 +17,7 @@ block-obj-y = cutils.o cache-utils.o qemu-malloc.o qemu-option.o module.o async.
 block-obj-y += nbd.o block.o aio.o aes.o qemu-config.o qemu-progress.o qemu-sockets.o
 block-obj-$(CONFIG_POSIX) += posix-aio-compat.o
 block-obj-$(CONFIG_LINUX_AIO) += linux-aio.o
+block-obj-$(CONFIG_POSIX) += compatfd.o
 
 block-nested-y += raw.o cow.o qcow.o vdi.o vmdk.o cloop.o dmg.o bochs.o vpc.o vvfat.o
 block-nested-y += qcow2.o qcow2-refcount.o qcow2-cluster.o qcow2-snapshot.o qcow2-cache.o
@@ -145,7 +146,7 @@ common-obj-y += $(addprefix ui/, $(ui-obj-y))
 common-obj-$(CONFIG_VNC) += $(addprefix ui/, $(vnc-obj-y))
 
 common-obj-y += iov.o acl.o
-common-obj-$(CONFIG_POSIX) += compatfd.o
+#common-obj-$(CONFIG_POSIX) += compatfd.o
 common-obj-y += notify.o event_notifier.o
 common-obj-y += qemu-timer.o qemu-timer-common.o
 
@@ -170,11 +171,11 @@ user-obj-y += cutils.o cache-utils.o
 # libhw
 
 hw-obj-y =
-hw-obj-y += vl.o loader.o
+hw-obj-y += loader.o
 hw-obj-$(CONFIG_VIRTIO) += virtio-console.o
 hw-obj-$(CONFIG_VIRTIO_PCI) += virtio-pci.o
 hw-obj-y += fw_cfg.o
-hw-obj-$(CONFIG_PCI) += pci.o pci_bridge.o
+hw-obj-$(CONFIG_PCI) += pci_bridge.o
 hw-obj-$(CONFIG_PCI) += msix.o msi.o
 hw-obj-$(CONFIG_PCI) += pci_host.o pcie_host.o
 hw-obj-$(CONFIG_PCI) += ioh3420.o xio3130_upstream.o xio3130_downstream.o
@@ -191,14 +192,16 @@ hw-obj-$(CONFIG_EMPTY_SLOT) += empty_slot.o
 
 hw-obj-$(CONFIG_SERIAL) += serial.o
 hw-obj-$(CONFIG_PARALLEL) += parallel.o
-hw-obj-$(CONFIG_I8254) += i8254.o
-hw-obj-$(CONFIG_PCSPK) += pcspk.o
+# Moved back to Makefile.target due to #include qemu-kvm.h:
+#hw-obj-$(CONFIG_I8254) += i8254.o
+#hw-obj-$(CONFIG_PCSPK) += pcspk.o
 hw-obj-$(CONFIG_PCKBD) += pckbd.o
 hw-obj-$(CONFIG_USB_UHCI) += usb-uhci.o
 hw-obj-$(CONFIG_USB_OHCI) += usb-ohci.o
 hw-obj-$(CONFIG_USB_EHCI) += usb-ehci.o
 hw-obj-$(CONFIG_FDC) += fdc.o
-hw-obj-$(CONFIG_ACPI) += acpi.o acpi_piix4.o
+# needs fixes for cpu hotplug, so moved to Makefile.target:
+# hw-obj-$(CONFIG_ACPI) += acpi.o acpi_piix4.o
 hw-obj-$(CONFIG_APM) += pm_smbus.o apm.o
 hw-obj-$(CONFIG_DMA) += dma.o
 hw-obj-$(CONFIG_HPET) += hpet.o

@@ -135,7 +135,7 @@ DEF("drive", HAS_ARG, QEMU_OPTION_drive,
     "       [,cyls=c,heads=h,secs=s[,trans=t]][,snapshot=on|off]\n"
     "       [,cache=writethrough|writeback|none|unsafe][,format=f]\n"
     "       [,serial=s][,addr=A][,id=name][,aio=threads|native]\n"
-    "       [,readonly=on|off]\n"
+    "       [,readonly=on|off][,boot=on|off]\n"
     "                use 'file' as a drive image\n", QEMU_ARCH_ALL)
 STEXI
 @item -drive @var{option}[,@var{option}[,@var{option}[,...]]]
@@ -183,6 +183,8 @@ host disk is full; report the error to the guest otherwise).
 The default setting is @option{werror=enospc} and @option{rerror=report}.
 @item readonly
 Open drive @option{file} as read-only. Guest write attempts will fail.
+@item boot=@var{boot}
+@var{boot} is "on" or "off" and allows for booting from non-traditional interfaces, such as virtio.
 @end table
 
 By default, writethrough caching is used for all block device.  This means that
@@ -2426,6 +2428,28 @@ STEXI
 Specify a trace file to log output traces to.
 ETEXI
 #endif
+
+DEF("no-kvm", 0, QEMU_OPTION_no_kvm,
+    "-no-kvm         disable KVM hardware virtualization\n",
+    QEMU_ARCH_ALL)
+DEF("no-kvm-irqchip", 0, QEMU_OPTION_no_kvm_irqchip,
+    "-no-kvm-irqchip disable KVM kernel mode PIC/IOAPIC/LAPIC\n",
+    QEMU_ARCH_I386)
+DEF("no-kvm-pit", 0, QEMU_OPTION_no_kvm_pit,
+    "-no-kvm-pit     disable KVM kernel mode PIT\n",
+    QEMU_ARCH_I386)
+DEF("no-kvm-pit-reinjection", 0, QEMU_OPTION_no_kvm_pit_reinjection,
+    "-no-kvm-pit-reinjection\n"
+    "                disable KVM kernel mode PIT interrupt reinjection\n",
+    QEMU_ARCH_I386)
+DEF("nvram", HAS_ARG, QEMU_OPTION_nvram,
+    "-nvram FILE     provide ia64 nvram contents\n", QEMU_ARCH_ALL)
+DEF("tdf", 0, QEMU_OPTION_tdf,
+    "-tdf            enable guest time drift compensation\n", QEMU_ARCH_ALL)
+DEF("kvm-shadow-memory", HAS_ARG, QEMU_OPTION_kvm_shadow_memory,
+    "-kvm-shadow-memory MEGABYTES\n"
+    "                allocate MEGABYTES for kvm mmu shadowing\n",
+    QEMU_ARCH_I386)
 
 HXCOMM This is the last statement. Insert new options before this line!
 STEXI

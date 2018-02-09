@@ -545,6 +545,57 @@ static void virtio_pci_guest_notifier_read(void *opaque)
     }
 }
 
+static int virtio_pci_mask_vq(PCIDevice *dev, unsigned vector,
+                              VirtQueue *vq, int masked)
+{
+    EventNotifier *notifier = virtio_queue_get_guest_notifier(vq);
+    int r = kvm_set_irqfd(dev->msix_irq_entries[vector].gsi,
+                          event_notifier_get_fd(notifier),
+                          !masked);
+    if (r < 0) {
+        return (r == -ENOSYS) ? 0 : r;
+    }
+    if (masked) {
+        qemu_set_fd_handler(event_notifier_get_fd(notifier),
+                            virtio_pci_guest_notifier_read, NULL, vq);
+    } else {
+        qemu_set_fd_handler(event_notifier_get_fd(notifier),
+                            NULL, NULL, NULL);
+    }
+    return 0;
+}
+
+static int virtio_pci_mask_notifier(PCIDevice *dev, unsigned vector,
+                                    int masked)
+{
+    VirtIOPCIProxy *proxy = container_of(dev, VirtIOPCIProxy, pci_dev);
+    VirtIODevice *vdev = proxy->vdev;
+    int r, n;
+
+    for (n = 0; n < VIRTIO_PCI_QUEUE_MAX; n++) {
+        if (!virtio_queue_get_num(vdev, n)) {
+            break;
+        }
+        if (virtio_queue_vector(vdev, n) != vector) {
+            continue;
+        }
+        r = virtio_pci_mask_vq(dev, vector, virtio_get_queue(vdev, n), masked);
+        if (r < 0) {
+            goto undo;
+        }
+    }
+    return 0;
+undo:
+    while (--n >= 0) {
+        if (virtio_queue_vector(vdev, n) != vector) {
+            continue;
+        }
+        virtio_pci_mask_vq(dev, vector, virtio_get_queue(vdev, n), !masked);
+    }
+    return r;
+}
+
+
 static int virtio_pci_set_guest_notifier(void *opaque, int n, bool assign)
 {
     VirtIOPCIProxy *proxy = opaque;
@@ -561,6 +612,9 @@ static int virtio_pci_set_guest_notifier(void *opaque, int n, bool assign)
     } else {
         qemu_set_fd_handler(event_notifier_get_fd(notifier),
                             NULL, NULL, NULL);
+        /* Test and clear notifier before closing it,
+         * in case poll callback didn't have time to run. */
+        virtio_pci_guest_notifier_read(vq);
         event_notifier_cleanup(notifier);
     }
 
@@ -579,6 +633,13 @@ static int virtio_pci_set_guest_notifiers(void *opaque, bool assign)
     VirtIODevice *vdev = proxy->vdev;
     int r, n;
 
+    /* Must unset mask notifier while guest notifier
+     * is still assigned */
+    if (!assign) {
+	    r = msix_unset_mask_notifier(&proxy->pci_dev);
+            assert(r >= 0);
+    }
+
     for (n = 0; n < VIRTIO_PCI_QUEUE_MAX; n++) {
         if (!virtio_queue_get_num(vdev, n)) {
             break;
@@ -590,12 +651,27 @@ static int virtio_pci_set_guest_notifiers(void *opaque, bool assign)
         }
     }
 
+    /* Must set mask notifier after guest notifier
+     * has been assigned */
+    if (assign) {
+        r = msix_set_mask_notifier(&proxy->pci_dev,
+                                   virtio_pci_mask_notifier);
+        if (r < 0) {
+            goto assign_error;
+        }
+    }
+
     return 0;
 
 assign_error:
     /* We get here on assignment failure. Recover by undoing for VQs 0 .. n. */
     while (--n >= 0) {
         virtio_pci_set_guest_notifier(opaque, n, !assign);
+    }
+
+    if (!assign) {
+        msix_set_mask_notifier(&proxy->pci_dev,
+                               virtio_pci_mask_notifier);
     }
     return r;
 }

@@ -28,6 +28,8 @@
 #include "host-utils.h"
 #include "sysbus.h"
 
+#include "kvm.h"
+
 //#define DEBUG_IOAPIC
 
 #ifdef DEBUG_IOAPIC
@@ -268,6 +270,57 @@ ioapic_mem_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
     }
 }
 
+static void kvm_kernel_ioapic_save_to_user(IOAPICState *s)
+{
+#if defined(KVM_CAP_IRQCHIP) && defined(TARGET_I386)
+    struct kvm_irqchip chip;
+    struct kvm_ioapic_state *kioapic;
+    int i;
+
+    chip.chip_id = KVM_IRQCHIP_IOAPIC;
+    kvm_get_irqchip(kvm_state, &chip);
+    kioapic = &chip.chip.ioapic;
+
+    s->id = kioapic->id;
+    s->ioregsel = kioapic->ioregsel;
+    s->irr = kioapic->irr;
+    for (i = 0; i < IOAPIC_NUM_PINS; i++) {
+        s->ioredtbl[i] = kioapic->redirtbl[i].bits;
+    }
+#endif
+}
+
+static void kvm_kernel_ioapic_load_from_user(IOAPICState *s)
+{
+#if defined(KVM_CAP_IRQCHIP) && defined(TARGET_I386)
+    struct kvm_irqchip chip;
+    struct kvm_ioapic_state *kioapic;
+    int i;
+
+    chip.chip_id = KVM_IRQCHIP_IOAPIC;
+    kioapic = &chip.chip.ioapic;
+
+    kioapic->id = s->id;
+    kioapic->ioregsel = s->ioregsel;
+    kioapic->base_address = s->busdev.mmio[0].addr;
+    kioapic->irr = s->irr;
+    for (i = 0; i < IOAPIC_NUM_PINS; i++) {
+        kioapic->redirtbl[i].bits = s->ioredtbl[i];
+    }
+
+    kvm_set_irqchip(kvm_state, &chip);
+#endif
+}
+
+static void ioapic_pre_save(void *opaque)
+{
+    IOAPICState *s = (void *)opaque;
+
+    if (kvm_enabled() && kvm_irqchip_in_kernel()) {
+        kvm_kernel_ioapic_save_to_user(s);
+    }
+}
+
 static int ioapic_post_load(void *opaque, int version_id)
 {
     IOAPICState *s = opaque;
@@ -276,15 +329,21 @@ static int ioapic_post_load(void *opaque, int version_id)
         /* set sane value */
         s->irr = 0;
     }
+
+    if (kvm_enabled() && kvm_irqchip_in_kernel()) {
+        kvm_kernel_ioapic_load_from_user(s);
+    }
+
     return 0;
 }
 
 static const VMStateDescription vmstate_ioapic = {
     .name = "ioapic",
     .version_id = 3,
-    .post_load = ioapic_post_load,
     .minimum_version_id = 1,
     .minimum_version_id_old = 1,
+    .post_load = ioapic_post_load,
+    .pre_save = ioapic_pre_save,
     .fields = (VMStateField[]) {
         VMSTATE_UINT8(id, IOAPICState),
         VMSTATE_UINT8(ioregsel, IOAPICState),
@@ -306,6 +365,11 @@ static void ioapic_reset(DeviceState *d)
     for (i = 0; i < IOAPIC_NUM_PINS; i++) {
         s->ioredtbl[i] = 1 << IOAPIC_LVT_MASKED_SHIFT;
     }
+#ifdef KVM_CAP_IRQCHIP
+    if (kvm_enabled() && kvm_irqchip_in_kernel()) {
+        kvm_kernel_ioapic_load_from_user(s);
+    }
+#endif
 }
 
 static CPUReadMemoryFunc * const ioapic_mem_read[3] = {
