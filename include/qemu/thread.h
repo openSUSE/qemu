@@ -53,4 +53,5 @@ void qemu_thread_get_self(QemuThread *thread);
 bool qemu_thread_is_self(QemuThread *thread);
 void qemu_thread_exit(void *retval);
 
+bool spec_ctrl_is_inconsistent(void);
 #endif
