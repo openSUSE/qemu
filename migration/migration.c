@@ -2121,6 +2121,14 @@ static void migration_completion(MigrationState *s, int current_active_state,
         migrate_set_state(&s->state, current_active_state,
                           MIGRATION_STATUS_COMPLETED);
     }
+    if (spec_ctrl_is_inconsistent()) {
+        fprintf(stderr, "WARNING! Migration from qemu with rudimentary "
+                        "Spectre v2 support to newer qemu\ndetected! To "
+                        "maintain proper protection, restart the guest as "
+                        "soon as possible\nusing the spec_ctrl cpu feature "
+                        "flag or a *-IBRS vcpu model specified\nas appropriate."
+                        "\n");
+    }
 
     return;
 

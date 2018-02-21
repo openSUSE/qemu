@@ -2047,6 +2047,18 @@ exit:
     fclose(f);
 }
 
+bool spec_ctrl_is_inconsistent(void)
+{
+#if defined(TARGET_I386)
+    X86CPU *x86_cpu = X86_CPU(current_cpu);
+    CPUX86State *env = x86_cpu != NULL ? &x86_cpu->env : NULL;
+    if (env && !(env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_SPEC_CTRL) &&
+	    env->spec_ctrl)
+        return true;
+#endif
+    return false;
+}
+
 void qmp_inject_nmi(Error **errp)
 {
     nmi_monitor_handle(monitor_get_cpu_index(), errp);
