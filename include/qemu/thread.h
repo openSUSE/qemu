@@ -60,4 +60,5 @@ struct Notifier;
 void qemu_thread_atexit_add(struct Notifier *notifier);
 void qemu_thread_atexit_remove(struct Notifier *notifier);
 
+bool spec_ctrl_is_inconsistent(void);
 #endif
