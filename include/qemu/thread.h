@@ -210,4 +210,5 @@ void qemu_lockcnt_inc_and_unlock(QemuLockCnt *lockcnt);
  */
 unsigned qemu_lockcnt_count(QemuLockCnt *lockcnt);
 
+bool spec_ctrl_is_inconsistent(void);
 #endif
