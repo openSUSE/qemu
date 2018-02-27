@@ -206,6 +206,10 @@ int load_multiboot(void *fw_cfg,
             fprintf(stderr, "invalid mh_load_addr address\n");
             exit(1);
         }
+        if (mh_load_end_addr > mh_bss_end_addr) {
+            fprintf(stderr, "invalid mh_load_end_addr address\n");
+            exit(1);
+        }
 
         uint32_t mb_kernel_text_offset = i - (mh_header_addr - mh_load_addr);
         uint32_t mb_load_size = 0;
