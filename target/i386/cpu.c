@@ -753,7 +753,7 @@ struct X86CPUDefinition {
     int model;
     int stepping;
     FeatureWordArray features;
-    char model_id[48];
+    char model_id[49];
 };
 
 static X86CPUDefinition builtin_x86_defs[] = {
