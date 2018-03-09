@@ -367,7 +367,7 @@ typedef struct x86_def_t {
     uint32_t features, ext_features, ext2_features, ext3_features;
     uint32_t kvm_features, svm_features;
     uint32_t xlevel;
-    char model_id[48];
+    char model_id[49];
     /* Store the results of Centaur's CPUID instructions */
     uint32_t ext4_features;
     uint32_t xlevel2;
