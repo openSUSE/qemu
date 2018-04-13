@@ -171,6 +171,7 @@ static void do_test_cancel(bool sync)
     /* Cancel the jobs that haven't been started yet.  */
     num_canceled = 0;
     for (i = 0; i < 100; i++) {
+        smp_mb(); /* test is currently racy */
         if (atomic_cmpxchg(&data[i].n, 0, 3) == 0) {
             data[i].ret = -ECANCELED;
             if (sync) {
@@ -185,6 +186,7 @@ static void do_test_cancel(bool sync)
     g_assert_cmpint(num_canceled, <, 100);
 
     for (i = 0; i < 100; i++) {
+        smp_mb(); /* test is currently racy */
         if (data[i].aiocb && data[i].n != 3) {
             if (sync) {
                 /* Canceling the others will be a blocking operation.  */
@@ -201,6 +203,7 @@ static void do_test_cancel(bool sync)
     }
     g_assert_cmpint(active, ==, 0);
     for (i = 0; i < 100; i++) {
+        smp_mb(); /* test is currently racy */
         if (data[i].n == 3) {
             g_assert_cmpint(data[i].ret, ==, -ECANCELED);
             g_assert(data[i].aiocb == NULL);
