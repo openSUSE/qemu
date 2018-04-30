@@ -86,7 +86,7 @@ void blk_iostatus_disable(BlockBackend *blk);
 void blk_iostatus_reset(BlockBackend *blk);
 void blk_iostatus_set_err(BlockBackend *blk, int error);
 int blk_attach_dev(BlockBackend *blk, void *dev);
-void blk_attach_dev_nofail(BlockBackend *blk, void *dev);
+void blk_attach_dev_nofail(BlockBackend *blk, void *dev, bool xen_dev);
 void blk_detach_dev(BlockBackend *blk, void *dev);
 void *blk_get_attached_dev(BlockBackend *blk);
 void blk_set_dev_ops(BlockBackend *blk, const BlockDevOps *ops, void *opaque);
@@ -189,6 +189,8 @@ int coroutine_fn blk_co_write_zeroes(BlockBackend *blk, int64_t offset,
 int blk_write_compressed(BlockBackend *blk, int64_t sector_num,
                          const uint8_t *buf, int nb_sectors);
 int blk_truncate(BlockBackend *blk, int64_t offset);
+void  blk_legacy_resize_cb(BlockBackend *blk);
+void xen_blk_resize_cb(void *dev);
 int blk_discard(BlockBackend *blk, int64_t sector_num, int nb_sectors);
 int blk_save_vmstate(BlockBackend *blk, const uint8_t *buf,
                      int64_t pos, int size);

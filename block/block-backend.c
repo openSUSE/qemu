@@ -36,6 +36,7 @@ struct BlockBackend {
     QTAILQ_ENTRY(BlockBackend) monitor_link; /* for monitor_block_backends */
 
     void *dev;                  /* attached device model, if any */
+    bool xen_dev;               /* true if dev is a Xen disk */
     /* TODO change to DeviceState when all users are qdevified */
     const BlockDevOps *dev_ops;
     void *dev_opaque;
@@ -460,11 +461,12 @@ int blk_attach_dev(BlockBackend *blk, void *dev)
  * @blk must not have a device model attached already.
  * TODO qdevified devices don't use this, remove when devices are qdevified
  */
-void blk_attach_dev_nofail(BlockBackend *blk, void *dev)
+void blk_attach_dev_nofail(BlockBackend *blk, void *dev, bool xen_dev)
 {
     if (blk_attach_dev(blk, dev) < 0) {
         abort();
     }
+    blk->xen_dev = xen_dev;
 }
 
 /*
@@ -1481,6 +1483,13 @@ int blk_truncate(BlockBackend *blk, int64_t offset)
     }
 
     return bdrv_truncate(blk_bs(blk), offset);
+}
+
+void blk_legacy_resize_cb(BlockBackend *blk)
+{
+    if (blk->xen_dev) {
+        xen_blk_resize_cb(blk->dev);
+    }
 }
 
 int blk_discard(BlockBackend *blk, int64_t sector_num, int nb_sectors)

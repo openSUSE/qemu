@@ -14,6 +14,7 @@
 #include "sysemu/char.h"
 #include "sysemu/accel.h"
 #include "migration/migration.h"
+#include "sysemu/block-backend.h"
 
 //#define DEBUG_XEN
 
@@ -24,6 +25,12 @@
 #define DPRINTF(fmt, ...) \
     do { } while (0)
 #endif
+
+extern void xen_blk_resize_update(void *dev);
+void xen_blk_resize_cb(void *dev)
+{
+    xen_blk_resize_update(dev);
+}
 
 static int store_dev_info(int domid, CharDriverState *cs, const char *string)
 {

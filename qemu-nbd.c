@@ -59,6 +59,10 @@ static QIOChannelSocket *server_ioc;
 static int server_watch = -1;
 static QCryptoTLSCreds *tlscreds;
 
+void xen_blk_resize_cb(void *dev)
+{
+}
+
 static void usage(const char *name)
 {
     (printf) (

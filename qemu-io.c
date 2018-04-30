@@ -38,6 +38,10 @@ static bool imageOpts;
 
 static ReadLineState *readline_state;
 
+void xen_blk_resize_cb(void *dev)
+{
+}
+
 static int close_f(BlockBackend *blk, int argc, char **argv)
 {
     blk_unref(qemuio_blk);

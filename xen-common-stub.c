@@ -8,7 +8,12 @@
 #include "qemu/osdep.h"
 #include "qemu-common.h"
 #include "hw/xen/xen.h"
+#include "sysemu/block-backend.h"
 
 void xenstore_store_pv_console_info(int i, CharDriverState *chr)
+{
+}
+
+void xen_blk_resize_cb(void *dev)
 {
 }
