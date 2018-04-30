@@ -69,6 +69,10 @@ typedef enum OutputFormat {
 /* Default to cache=writeback as data integrity is not important for qemu-img */
 #define BDRV_DEFAULT_CACHE "writeback"
 
+void xen_blk_resize_cb(void *dev)
+{
+}
+
 static void format_print(void *opaque, const char *name)
 {
     printf(" %s", name);

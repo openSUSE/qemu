@@ -1756,6 +1756,13 @@ int blk_truncate(BlockBackend *blk, int64_t offset, Error **errp)
     return bdrv_truncate(blk->root, offset, errp);
 }
 
+void blk_legacy_resize_cb(BlockBackend *blk)
+{
+    if (blk->legacy_dev) {
+        xen_blk_resize_cb(blk->dev);
+    }
+}
+
 static void blk_pdiscard_entry(void *opaque)
 {
     BlkRwCo *rwco = opaque;

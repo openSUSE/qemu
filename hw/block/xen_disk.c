@@ -1068,6 +1068,7 @@ static int blk_connect(struct XenDevice *xendev)
     int pers, index, qflags;
     bool readonly = true;
     bool writethrough = true;
+    Error *errp = NULL;
 
     /* read-only ? */
     if (blkdev->directiosafe) {
@@ -1125,6 +1126,13 @@ static int blk_connect(struct XenDevice *xendev)
         blk_ref(blkdev->blk);
     }
     blk_attach_dev_legacy(blkdev->blk, blkdev);
+    if (!monitor_add_blk(blkdev->blk, g_strdup(blkdev->dev), &errp)) {
+        xen_pv_printf(&blkdev->xendev, 0, "error: %s\n",
+                      error_get_pretty(errp));
+        error_free(errp);
+        return -1;
+    }
+
     blkdev->file_size = blk_getlength(blkdev->blk);
     if (blkdev->file_size < 0) {
         BlockDriverState *bs = blk_bs(blkdev->blk);
@@ -1235,6 +1243,7 @@ static void blk_disconnect(struct XenDevice *xendev)
 
     if (blkdev->blk) {
         blk_detach_dev(blkdev->blk, blkdev);
+        monitor_remove_blk(blkdev->blk);
         blk_unref(blkdev->blk);
         blkdev->blk = NULL;
     }
@@ -1297,6 +1306,16 @@ static void blk_event(struct XenDevice *xendev)
     struct XenBlkDev *blkdev = container_of(xendev, struct XenBlkDev, xendev);
 
     qemu_bh_schedule(blkdev->bh);
+}
+
+extern void xen_blk_resize_update(void *dev);
+void xen_blk_resize_update(void *dev)
+{
+    struct XenBlkDev *blkdev = dev;
+    blkdev->file_size = blk_getlength(blkdev->blk);
+    xenstore_write_be_int64(&blkdev->xendev, "sectors",
+                            blkdev->file_size / blkdev->file_blk);
+    xen_be_set_state(&blkdev->xendev, blkdev->xendev.be_state);
 }
 
 struct XenDevOps xen_blkdev_ops = {

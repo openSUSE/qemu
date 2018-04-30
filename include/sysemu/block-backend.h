@@ -227,6 +227,8 @@ int blk_pwrite_compressed(BlockBackend *blk, int64_t offset, const void *buf,
                           int count);
 int blk_truncate(BlockBackend *blk, int64_t offset, Error **errp);
 int blk_pdiscard(BlockBackend *blk, int64_t offset, int count);
+void  blk_legacy_resize_cb(BlockBackend *blk);
+void xen_blk_resize_cb(void *dev);
 int blk_save_vmstate(BlockBackend *blk, const uint8_t *buf,
                      int64_t pos, int size);
 int blk_load_vmstate(BlockBackend *blk, uint8_t *buf, int64_t pos, int size);
