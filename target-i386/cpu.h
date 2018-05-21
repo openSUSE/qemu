@@ -303,6 +303,7 @@
 #define MSR_IA32_APICBASE_BASE          (0xfffff<<12)
 #define MSR_TSC_ADJUST                  0x0000003b
 #define MSR_IA32_SPEC_CTRL              0x48
+#define MSR_VIRT_SSBD                   0xc001011f
 #define MSR_IA32_TSCDEADLINE            0x6e0
 
 #define MSR_MTRRcap			0xfe
@@ -816,6 +817,7 @@ typedef struct CPUX86State {
     uint64_t mcg_status;
     uint64_t msr_ia32_misc_enable;
     uint64_t spec_ctrl;
+    uint64_t virt_ssbd;
 
     /* exception/interrupt handling */
     int error_code;
