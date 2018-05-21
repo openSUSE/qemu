@@ -326,6 +326,7 @@
 #define MSR_IA32_FEATURE_CONTROL        0x0000003a
 #define MSR_TSC_ADJUST                  0x0000003b
 #define MSR_IA32_SPEC_CTRL              0x48
+#define MSR_VIRT_SSBD                   0xc001011f
 #define MSR_IA32_TSCDEADLINE            0x6e0
 
 #define MSR_P6_PERFCTR0                 0xc1
@@ -941,6 +942,7 @@ typedef struct CPUX86State {
     uint32_t smbase;
 
     uint64_t spec_ctrl;
+    uint64_t virt_ssbd;
 
     /* End of state preserved by INIT (dummy marker).  */
     struct {} end_init_save;
