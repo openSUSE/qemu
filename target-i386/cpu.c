@@ -310,7 +310,7 @@ static const char *cpuid_ibpb_ebx_feature_name[] = {
     "ibpb", NULL, NULL, NULL,
     NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL,
+    NULL, "virt-ssbd", NULL, NULL,
     NULL, NULL, NULL, NULL,
 };
 
