@@ -183,7 +183,7 @@ int ne2000_can_receive(NetClientState *nc)
 ssize_t ne2000_receive(NetClientState *nc, const uint8_t *buf, size_t size_)
 {
     NE2000State *s = qemu_get_nic_opaque(nc);
-    int size = size_;
+    size_t size = size_;
     uint8_t *p;
     unsigned int total_len, next, avail, len, index, mcast_idx;
     uint8_t buf1[60];
@@ -191,7 +191,7 @@ ssize_t ne2000_receive(NetClientState *nc, const uint8_t *buf, size_t size_)
         { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 
 #if defined(DEBUG_NE2000)
-    printf("NE2000: received len=%d\n", size);
+    printf("NE2000: received len=%zu\n", size);
 #endif
 
     if (s->cmd & E8390_STOP || ne2000_buffer_full(s))
