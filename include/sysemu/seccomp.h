@@ -21,7 +21,6 @@
 #define QEMU_SECCOMP_SET_SPAWN       (1 << 3)
 #define QEMU_SECCOMP_SET_RESOURCECTL (1 << 4)
 
-#include <seccomp.h>
+int parse_sandbox(void *opaque, QemuOpts *opts, Error **errp);
 
-int seccomp_start(uint32_t seccomp_opts);
 #endif
