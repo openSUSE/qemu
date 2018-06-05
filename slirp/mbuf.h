@@ -33,8 +33,6 @@
 #ifndef _MBUF_H_
 #define _MBUF_H_
 
-#define MINCSIZE 4096	/* Amount to increase mbuf if too small */
-
 /*
  * Macros for type conversion
  * mtod(m,t) -	convert mbuf pointer to data pointer of correct type
@@ -48,6 +46,22 @@
  * is alloced.  Therefore, m_free[m] must check for M_EXT and if set
  * free the m_ext.  This is inefficient memory-wise, but who cares.
  */
+
+/* XXX should union some of these! */
+/* header at beginning of each mbuf: */
+struct m_hdr {
+	struct	mbuf *mh_next;		/* Linked list of mbufs */
+	struct	mbuf *mh_prev;
+	struct	mbuf *mh_nextpkt;	/* Next packet in queue/record */
+	struct	mbuf *mh_prevpkt; /* Flags aren't used in the output queue */
+	int	mh_flags;	  /* Misc flags */
+
+	int	mh_size;		/* Size of mbuf, from m_dat or m_ext */
+	struct	socket *mh_so;
+
+	caddr_t	mh_data;		/* Current location of data */
+	int	mh_len;			/* Amount of data in this mbuf, from m_data */
+};
 
 /*
  * How much room is in the mbuf, from m_data to the end of the mbuf
