@@ -48,4 +48,8 @@ void xen_hvm_modified_memory(ram_addr_t start, ram_addr_t length);
 
 void xen_register_framebuffer(struct MemoryRegion *mr);
 
+void xen_blk_resize_cb(void *dev);
+
+char *xen_blk_get_attached_dev_id(void *dev);
+
 #endif /* QEMU_HW_XEN_H */

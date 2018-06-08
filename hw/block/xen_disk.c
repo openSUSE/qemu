@@ -761,6 +761,7 @@ static int blk_connect(struct XenDevice *xendev)
     int order, ring_ref;
     unsigned int ring_size, max_grants;
     unsigned int i;
+    Error *errp = NULL;
 
     trace_xen_disk_connect(xendev->name);
 
@@ -821,6 +822,13 @@ static int blk_connect(struct XenDevice *xendev)
         blk_ref(blkdev->blk);
     }
     blk_attach_dev_legacy(blkdev->blk, blkdev);
+    if (!monitor_add_blk(blkdev->blk, g_strdup(blkdev->dev), &errp)) {
+        xen_pv_printf(&blkdev->xendev, 0, "error: %s\n",
+                      error_get_pretty(errp));
+        error_free(errp);
+        return -1;
+    }
+
     blkdev->file_size = blk_getlength(blkdev->blk);
     if (blkdev->file_size < 0) {
         BlockDriverState *bs = blk_bs(blkdev->blk);
@@ -971,6 +979,7 @@ static void blk_disconnect(struct XenDevice *xendev)
     if (blkdev->blk) {
         blk_set_aio_context(blkdev->blk, qemu_get_aio_context());
         blk_detach_dev(blkdev->blk, blkdev);
+        monitor_remove_blk(blkdev->blk);
         blk_unref(blkdev->blk);
         blkdev->blk = NULL;
     }
@@ -1016,6 +1025,21 @@ static void blk_event(struct XenDevice *xendev)
     struct XenBlkDev *blkdev = container_of(xendev, struct XenBlkDev, xendev);
 
     qemu_bh_schedule(blkdev->bh);
+}
+
+void xen_blk_resize_cb(void *dev)
+{
+    struct XenBlkDev *blkdev = dev;
+    blkdev->file_size = blk_getlength(blkdev->blk);
+    xenstore_write_be_int64(&blkdev->xendev, "sectors",
+                            blkdev->file_size / blkdev->file_blk);
+    xen_be_set_state(&blkdev->xendev, blkdev->xendev.be_state);
+}
+
+char *xen_blk_get_attached_dev_id(void *dev)
+{
+    struct XenBlkDev *blkdev = dev;
+    return g_strdup_printf("xen-qdisk-%i", blkdev->xendev.dev);
 }
 
 struct XenDevOps xen_blkdev_ops = {

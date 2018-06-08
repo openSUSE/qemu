@@ -12,3 +12,12 @@
 void xenstore_store_pv_console_info(int i, Chardev *chr)
 {
 }
+
+void xen_blk_resize_cb(void *dev)
+{
+}
+
+char *xen_blk_get_attached_dev_id(void *dev)
+{
+    return g_strdup("");
+}
