@@ -229,4 +229,6 @@ void blk_io_limits_enable(BlockBackend *blk, const char *group);
 void blk_io_limits_update_group(BlockBackend *blk, const char *group);
 void blk_set_force_allow_inactivate(BlockBackend *blk);
 
+void blk_legacy_resize_cb(BlockBackend *blk);
+
 #endif

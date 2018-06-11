@@ -2918,6 +2918,7 @@ void qmp_block_resize(bool has_device, const char *device,
 {
     Error *local_err = NULL;
     BlockBackend *blk = NULL;
+    BlockBackend *cb_blk = NULL;
     BlockDriverState *bs;
     AioContext *aio_context;
     int ret;
@@ -2928,6 +2929,10 @@ void qmp_block_resize(bool has_device, const char *device,
     if (local_err) {
         error_propagate(errp, local_err);
         return;
+    }
+
+    if (has_device) {
+        cb_blk = blk_by_name(device);
     }
 
     aio_context = bdrv_get_aio_context(bs);
@@ -2956,6 +2961,9 @@ void qmp_block_resize(bool has_device, const char *device,
 
     bdrv_drained_begin(bs);
     ret = blk_truncate(blk, size, PREALLOC_MODE_OFF, errp);
+    if (!ret && cb_blk) {
+        blk_legacy_resize_cb(cb_blk);
+    }
     bdrv_drained_end(bs);
 
 out:
