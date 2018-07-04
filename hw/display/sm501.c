@@ -671,6 +671,8 @@ static void sm501_2d_operation(SM501State * s)
     uint32_t color = s->twoD_foreground;
     int format_flags = (s->twoD_stretch >> 20) & 0x3;
     int addressing = (s->twoD_stretch >> 16) & 0xF;
+    int rop_mode = (s->twoD_control >> 15) & 0x1; /* 1 for rop2, else rop3 */
+    int rop = s->twoD_control & 0xFF;
 
     /* get frame buffer info */
     uint8_t * src = s->local_mem + (s->twoD_source_base & 0x03FFFFFF);
@@ -702,7 +704,13 @@ static void sm501_2d_operation(SM501State * s)
                     index_s = ((src_y + y) * src_width + src_x + x) * _bpp; \
                     index_d = ((dst_y + y) * dst_width + dst_x + x) * _bpp; \
                 }                                                           \
-                *(_pixel_type*)&dst[index_d] = *(_pixel_type*)&src[index_s];\
+                if (rop_mode == 1 && rop == 5) {                              \
+                    /* Invert dest */                                         \
+                    val = ~*(_pixel_type *)&dst[index_d];                     \
+                } else {                                                      \
+                    val = *(_pixel_type *)&src[index_s];                      \
+                }                                                             \
+                *(_pixel_type *)&dst[index_d] = val;                          \
             }                                                               \
         }                                                                   \
     }
