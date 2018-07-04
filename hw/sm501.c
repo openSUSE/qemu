@@ -567,6 +567,11 @@ static inline int get_bpp(SM501State *s, int crt)
     return 1 << (bpp & 3);
 }
 
+static ram_addr_t get_fb_addr(SM501State *s, int crt)
+{
+    return (crt ? s->dc_crt_fb_addr : s->dc_panel_fb_addr) & 0x3FFFFF0;
+}
+
 /**
  * Check the availability of hardware cursor.
  * @param crt  0 for PANEL, 1 for CRT.
@@ -1043,6 +1048,9 @@ static void sm501_disp_ctrl_write(void *opaque, hwaddr addr,
         break;
     case SM501_DC_PANEL_FB_ADDR:
 	s->dc_panel_fb_addr = value & 0x8FFFFFF0;
+        if (value & 0x8000000) {
+            qemu_log_mask(LOG_UNIMP, "Panel external memory not supported\n");
+        }
 	break;
     case SM501_DC_PANEL_FB_OFFSET:
 	s->dc_panel_fb_offset = value & 0x3FF03FF0;
@@ -1099,6 +1107,9 @@ static void sm501_disp_ctrl_write(void *opaque, hwaddr addr,
 	break;
     case SM501_DC_CRT_FB_ADDR:
 	s->dc_crt_fb_addr = value & 0x8FFFFFF0;
+        if (value & 0x8000000) {
+            qemu_log_mask(LOG_UNIMP, "CRT external memory not supported\n");
+        }
 	break;
     case SM501_DC_CRT_FB_OFFSET:
 	s->dc_crt_fb_offset = value & 0x3FF03FF0;
@@ -1402,7 +1413,8 @@ static void sm501_update_display(void *opaque)
     }
 
     /* draw each line according to conditions */
-    for (y = 0, offset = 0; y < height; y++, offset += width * src_bpp) {
+    offset = get_fb_addr(s, crt);
+    for (y = 0; y < height; y++, offset += width * src_bpp) {
         int update, update_hwc;
         ram_addr_t page0 = offset;
         ram_addr_t page1 = offset + width * src_bpp - 1;
