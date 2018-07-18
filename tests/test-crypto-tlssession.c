@@ -227,7 +227,7 @@ static void test_crypto_tls_session(const void *opaque)
                 clientShake = true;
             }
         }
-    } while (!clientShake && !serverShake);
+    } while (!clientShake || !serverShake);
 
 
     /* Finally make sure the server validation does what
