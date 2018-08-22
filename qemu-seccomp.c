@@ -15,6 +15,7 @@
 #include "qemu/osdep.h"
 #include <seccomp.h>
 #include "sysemu/seccomp.h"
+#include <linux/seccomp.h>
 
 /* For some architectures (notably ARM) cacheflush is not supported until
  * libseccomp 2.2.3, but configure enforces that we are using a more recent
@@ -102,12 +103,40 @@ static const struct QemuSeccompSyscall blacklist[] = {
     { SCMP_SYS(sched_get_priority_min), QEMU_SECCOMP_SET_RESOURCECTL },
 };
 
+static inline __attribute__((unused)) int
+qemu_seccomp(unsigned int operation, unsigned int flags, void *args)
+{
+#ifdef __NR_seccomp
+    return syscall(__NR_seccomp, operation, flags, args);
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
+}
+
+static uint32_t qemu_seccomp_get_kill_action(void)
+{
+#if defined(SECCOMP_GET_ACTION_AVAIL) && defined(SCMP_ACT_KILL_PROCESS) && \
+    defined(SECCOMP_RET_KILL_PROCESS)
+    {
+        uint32_t action = SECCOMP_RET_KILL_PROCESS;
+
+        if (qemu_seccomp(SECCOMP_GET_ACTION_AVAIL, 0, &action) == 0) {
+            return SCMP_ACT_KILL_PROCESS;
+        }
+    }
+#endif
+
+    return SCMP_ACT_TRAP;
+}
+
 
 int seccomp_start(uint32_t seccomp_opts)
 {
     int rc = 0;
     unsigned int i = 0;
     scmp_filter_ctx ctx;
+    uint32_t action = qemu_seccomp_get_kill_action();
 
     ctx = seccomp_init(SCMP_ACT_ALLOW);
     if (ctx == NULL) {
@@ -120,7 +149,7 @@ int seccomp_start(uint32_t seccomp_opts)
             continue;
         }
 
-        rc = seccomp_rule_add_array(ctx, SCMP_ACT_KILL, blacklist[i].num,
+        rc = seccomp_rule_add_array(ctx, action, blacklist[i].num,
                                     blacklist[i].narg, blacklist[i].arg_cmp);
         if (rc < 0) {
             goto seccomp_return;
