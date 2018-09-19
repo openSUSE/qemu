@@ -32,6 +32,7 @@
 #include "qdev-addr.h"
 #include "qemu/range.h"
 #include "ui/pixel_ops.h"
+#include "qemu/bswap.h"
 
 /*
  * Status: 2010/05/07
@@ -772,9 +773,11 @@ static void sm501_2d_operation(SM501State * s)
             FILL_RECT(1, uint8_t);
             break;
         case 1:
+            color = cpu_to_le16(color);
             FILL_RECT(2, uint16_t);
             break;
         case 2:
+            color = cpu_to_le32(color);
             FILL_RECT(4, uint32_t);
             break;
         }
