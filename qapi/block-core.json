@@ -2309,7 +2309,7 @@
 #
 # @cache-clean-interval:  clean unused entries in the L2 and refcount
 #                         caches. The interval is in seconds. The default value
-#                         is 0 and it disables this feature (since 2.5)
+#                         is 600, and 0 disables this feature. (since 2.5)
 #
 # Since: 2.9
 ##
