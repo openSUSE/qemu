@@ -60,6 +60,7 @@
 #include "hw/usb.h"
 #include "qemu/config-file.h"
 #include "qemu/error-report.h"
+#include "qemu/uuid.h"
 #include "trace.h"
 #include "hw/nmi.h"
 

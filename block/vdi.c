@@ -57,6 +57,7 @@
 #include "migration/migration.h"
 #include "qemu/coroutine.h"
 #include "qemu/cutils.h"
+#include "qemu/uuid.h"
 
 #if defined(CONFIG_UUID)
 #include <uuid/uuid.h>
