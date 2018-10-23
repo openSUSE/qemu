@@ -24,6 +24,10 @@
 #include "qemu/thread.h"
 #include "qmp-commands.h"
 
+#ifdef CONFIG_SECCOMP
+#include "sysemu/seccomp.h"
+#endif
+
 //#define DEBUG_MIGRATION
 
 #ifdef DEBUG_MIGRATION
@@ -662,6 +666,10 @@ static void *buffered_file_thread(void *opaque)
     int64_t max_size = 0;
     bool last_round = false;
     int ret;
+
+#ifdef CONFIG_SECCOMP
+    seccomp_start(!!0);
+#endif
 
     qemu_mutex_lock_iothread();
     DPRINTF("beginning savevm\n");

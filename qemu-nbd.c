@@ -17,6 +17,7 @@
  */
 
 #include "qemu-common.h"
+#include "qemu/compiler.h"
 #include "block/block.h"
 #include "block/nbd.h"
 
@@ -33,6 +34,10 @@
 #include <libgen.h>
 #include <pthread.h>
 
+#ifdef CONFIG_SECCOMP
+#include "sysemu/seccomp.h"
+#endif
+
 #define SOCKET_PATH         "/var/lock/qemu-nbd-%s"
 #define QEMU_NBD_OPT_CACHE  1
 #define QEMU_NBD_OPT_AIO    2
@@ -45,6 +50,10 @@ static int persistent = 0;
 static enum { RUNNING, TERMINATE, TERMINATING, TERMINATED } state;
 static int shared = 1;
 static int nb_fds;
+
+#ifdef CONFIG_SECCOMP
+int seccomp_start(_Bool enabled) { return 0; }
+#endif
 
 static void usage(const char *name)
 {

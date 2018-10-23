@@ -30,6 +30,10 @@
 #include "vnc-jobs.h"
 #include "qemu/sockets.h"
 
+#ifdef CONFIG_SECCOMP
+#include "sysemu/seccomp.h"
+#endif
+
 /*
  * Locking:
  *
@@ -312,6 +316,10 @@ static void vnc_queue_clear(VncJobQueue *q)
 static void *vnc_worker_thread(void *arg)
 {
     VncJobQueue *queue = arg;
+
+#ifdef CONFIG_SECCOMP
+    seccomp_start(!!0);
+#endif
 
     qemu_thread_get_self(&queue->thread);
 

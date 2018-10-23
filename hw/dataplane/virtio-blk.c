@@ -22,6 +22,10 @@
 #include "hw/virtio-blk.h"
 #include "hw/dataplane/virtio-blk.h"
 
+#ifdef CONFIG_SECCOMP
+#include "sysemu/seccomp.h"
+#endif
+
 enum {
     SEG_MAX = 126,                  /* maximum number of I/O segments */
     VRING_MAX = SEG_MAX + 2,        /* maximum number of vring descriptors */
@@ -355,6 +359,10 @@ static void handle_io(EventHandler *handler)
 static void *data_plane_thread(void *opaque)
 {
     VirtIOBlockDataPlane *s = opaque;
+
+#ifdef CONFIG_SECCOMP
+    seccomp_start(!!0);
+#endif
 
     do {
         event_poll(&s->event_poll);

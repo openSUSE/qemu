@@ -970,7 +970,7 @@ static int parse_sandbox(QemuOpts *opts, void *opaque)
     /* FIXME: change this to true for 1.3 */
     if (qemu_opt_get_bool(opts, "enable", false)) {
 #ifdef CONFIG_SECCOMP
-        if (seccomp_start() < 0) {
+        if (seccomp_start(!!1) < 0) {
             qerror_report(ERROR_CLASS_GENERIC_ERROR,
                           "failed to install seccomp syscall filter in the kernel");
             return -1;
@@ -2947,6 +2947,12 @@ int main(int argc, char **argv, char **envp)
             case QEMU_OPTION_nouserconfig:
                 userconfig = false;
                 break;
+            case QEMU_OPTION_sandbox:
+                opts = qemu_opts_parse(qemu_find_opts("sandbox"), optarg, 1);
+                if (!opts) {
+                    exit(1);
+                }
+                break;
             }
         }
     }
@@ -2957,6 +2963,10 @@ int main(int argc, char **argv, char **envp)
         if (ret < 0) {
             exit(1);
         }
+    }
+
+    if (qemu_opts_foreach(qemu_find_opts("sandbox"), parse_sandbox, NULL, 0)) {
+        exit(1);
     }
 
     /* second pass of option parsing */
@@ -3843,12 +3853,6 @@ int main(int argc, char **argv, char **envp)
             case QEMU_OPTION_qtest_log:
                 qtest_log = optarg;
                 break;
-            case QEMU_OPTION_sandbox:
-                opts = qemu_opts_parse(qemu_find_opts("sandbox"), optarg, 1);
-                if (!opts) {
-                    exit(1);
-                }
-                break;
             case QEMU_OPTION_add_fd:
 #ifndef _WIN32
                 opts = qemu_opts_parse(qemu_find_opts("add-fd"), optarg, 0);
@@ -3876,10 +3880,6 @@ int main(int argc, char **argv, char **envp)
 
     if (qemu_init_main_loop()) {
         fprintf(stderr, "qemu_init_main_loop failed\n");
-        exit(1);
-    }
-
-    if (qemu_opts_foreach(qemu_find_opts("sandbox"), parse_sandbox, NULL, 0)) {
         exit(1);
     }
 

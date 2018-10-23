@@ -28,10 +28,15 @@
 #include "qemu/option.h"
 #include "qemu/error-report.h"
 #include "qemu/osdep.h"
+#include "qemu/compiler.h"
 #include "sysemu/sysemu.h"
 #include "block/block_int.h"
 #include <getopt.h>
 #include <stdio.h>
+
+#ifdef CONFIG_SECCOMP
+#include "sysemu/seccomp.h"
+#endif
 
 #ifdef _WIN32
 #include <windows.h>
@@ -45,6 +50,10 @@ typedef struct img_cmd_t {
 /* Default to cache=writeback as data integrity is not important for qemu-tcg. */
 #define BDRV_O_FLAGS BDRV_O_CACHE_WB
 #define BDRV_DEFAULT_CACHE "writeback"
+
+#ifdef CONFIG_SECCOMP
+int seccomp_start(_Bool enabled) { return 0; }
+#endif
 
 static void format_print(void *opaque, const char *name)
 {

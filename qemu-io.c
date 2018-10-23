@@ -16,9 +16,14 @@
 
 #include "qemu-common.h"
 #include "qemu/main-loop.h"
+#include "qemu/compiler.h"
 #include "block/block_int.h"
 #include "cmd.h"
 #include "trace/control.h"
+
+#ifdef CONFIG_SECCOMP
+#include "sysemu/seccomp.h"
+#endif
 
 #define VERSION	"0.0.1"
 
@@ -28,6 +33,10 @@ char *progname;
 static BlockDriverState *bs;
 
 static int misalign;
+
+#ifdef CONFIG_SECCOMP
+int seccomp_start(_Bool enabled){ return 0; }
+#endif
 
 /*
  * Parse the pattern argument to various sub-commands.

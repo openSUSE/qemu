@@ -232,11 +232,22 @@ static const struct QemuSeccompSyscall seccomp_whitelist[] = {
     { SCMP_SYS(shmget), 241 }
 };
 
-int seccomp_start(void)
+int seccomp_start(_Bool enabled)
 {
+    static _Bool is_enabled = !!0;
     int rc = 0;
     unsigned int i = 0;
     scmp_filter_ctx ctx;
+
+    if (!is_enabled && !enabled)
+    {
+        return rc;
+    }
+
+    if (enabled)
+    {
+        is_enabled = !!1;
+    }
 
     ctx = seccomp_init(SCMP_ACT_KILL);
     if (ctx == NULL) {

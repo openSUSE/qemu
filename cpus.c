@@ -38,6 +38,10 @@
 #include "qemu/main-loop.h"
 #include "qemu/bitmap.h"
 
+#ifdef CONFIG_SECCOMP
+#include "sysemu/seccomp.h"
+#endif
+
 #ifndef _WIN32
 #include "qemu/compatfd.h"
 #endif
@@ -748,6 +752,10 @@ static void *qemu_kvm_cpu_thread_fn(void *arg)
     CPUState *cpu = ENV_GET_CPU(env);
     int r;
 
+#ifdef CONFIG_SECCOMP
+    seccomp_start(!!0);
+#endif
+
     qemu_mutex_lock(&qemu_global_mutex);
     qemu_thread_get_self(cpu->thread);
     cpu->thread_id = qemu_get_thread_id();
@@ -790,6 +798,10 @@ static void *qemu_dummy_cpu_thread_fn(void *arg)
     sigset_t waitset;
     int r;
 
+#ifdef CONFIG_SECCOMP
+    seccomp_start(!!0);
+#endif
+
     qemu_mutex_lock_iothread();
     qemu_thread_get_self(cpu->thread);
     cpu->thread_id = qemu_get_thread_id();
@@ -831,6 +843,10 @@ static void *qemu_tcg_cpu_thread_fn(void *arg)
 {
     CPUState *cpu = arg;
     CPUArchState *env;
+
+#ifdef CONFIG_SECCOMP
+    seccomp_start(!!0);
+#endif
 
     qemu_tcg_init_cpu_signals();
     qemu_thread_get_self(cpu->thread);

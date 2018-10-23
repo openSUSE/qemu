@@ -36,6 +36,10 @@
 #include "monitor/monitor.h"
 #include "hw/ccid.h"
 
+#ifdef CONFIG_SECCOMP
+#include "sysemu/seccomp.h"
+#endif
+
 #define DPRINTF(card, lvl, fmt, ...) \
 do {\
     if (lvl <= card->debug) {\
@@ -234,6 +238,10 @@ static void *handle_apdu_thread(void* arg)
     VReaderStatus reader_status;
     EmulEvent *event;
 
+#ifdef CONFIG_SECCOMP
+    seccomp_start(!!0);
+#endif
+
     while (1) {
         qemu_mutex_lock(&card->handle_apdu_mutex);
         qemu_cond_wait(&card->handle_apdu_cond, &card->handle_apdu_mutex);
@@ -280,6 +288,10 @@ static void *event_thread(void *arg)
     uint8_t atr[MAX_ATR_SIZE];
     VEvent *event = NULL;
     EmulatedState *card = arg;
+
+#ifdef CONFIG_SECCOMP
+    seccomp_start(!!0);
+#endif
 
     while (1) {
         const char *reader_name;

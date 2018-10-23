@@ -18,11 +18,16 @@
 #include "qemu/queue.h"
 #include "qemu/thread.h"
 #include "qemu/osdep.h"
+#include "qemu/compiler.h"
 #include "block/coroutine.h"
 #include "trace.h"
 #include "block/block_int.h"
 #include "qemu/event_notifier.h"
 #include "block/thread-pool.h"
+
+#ifdef CONFIG_SECCOMP
+#include "sysemu/seccomp.h"
+#endif
 
 static void do_spawn_thread(void);
 
@@ -74,6 +79,10 @@ static int pending_cancellations; /* whether we need a cond_broadcast */
 
 static void *worker_thread(void *unused)
 {
+#ifdef CONFIG_SECCOMP
+    seccomp_start(!!0);
+#endif
+
     qemu_mutex_lock(&lock);
     pending_threads--;
     do_spawn_thread();

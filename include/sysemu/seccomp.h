@@ -18,5 +18,5 @@
 #include <seccomp.h>
 #include "qemu/osdep.h"
 
-int seccomp_start(void);
+int seccomp_start(_Bool enabled);
 #endif
