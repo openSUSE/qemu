@@ -2926,14 +2926,14 @@ void gdbserver_fork(CPUArchState *env)
     cpu_watchpoint_remove_all(env, BP_GDB);
 }
 #else
-static int gdb_chr_can_receive(void *opaque)
+static size_t gdb_chr_can_receive(void *opaque)
 {
   /* We can handle an arbitrarily large amount of data.
    Pick the maximum packet size, which is as good as anything.  */
   return MAX_PACKET_LENGTH;
 }
 
-static void gdb_chr_receive(void *opaque, const uint8_t *buf, int size)
+static void gdb_chr_receive(void *opaque, const uint8_t *buf, size_t size)
 {
     int i;
 
@@ -2965,7 +2965,7 @@ static void gdb_monitor_output(GDBState *s, const char *msg, int len)
     put_packet(s, buf);
 }
 
-static int gdb_monitor_write(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t gdb_monitor_write(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     const char *p = (const char *)buf;
     int max_sz;

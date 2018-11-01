@@ -294,8 +294,8 @@ static int csrhci_data_len(const uint8_t *pkt)
     exit(-1);
 }
 
-static int csrhci_write(struct CharDriverState *chr,
-                const uint8_t *buf, int len)
+static size_t csrhci_write(struct CharDriverState *chr,
+                const uint8_t *buf, size_t len)
 {
     struct csrhci_s *s = (struct csrhci_s *) chr->opaque;
     int plen = s->in_len;

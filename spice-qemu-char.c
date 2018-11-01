@@ -160,11 +160,11 @@ static void vmc_unregister_interface(SpiceCharDriver *scd)
 }
 
 
-static int spice_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t spice_chr_write(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     SpiceCharDriver *s = chr->opaque;
 
-    dprintf(s, 2, "%s: %d\n", __func__, len);
+    dprintf(s, 2, "%s: %zu\n", __func__, len);
     vmc_register_interface(s);
     assert(s->datalen == 0);
     if (s->bufsize < len) {

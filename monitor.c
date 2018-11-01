@@ -4191,7 +4191,7 @@ cleanup:
     }
 }
 
-static int monitor_can_read(void *opaque)
+static size_t monitor_can_read(void *opaque)
 {
     Monitor *mon = opaque;
 
@@ -4540,7 +4540,7 @@ out:
 /**
  * monitor_control_read(): Read and handle QMP input
  */
-static void monitor_control_read(void *opaque, const uint8_t *buf, int size)
+static void monitor_control_read(void *opaque, const uint8_t *buf, size_t size)
 {
     Monitor *old_mon = cur_mon;
 
@@ -4551,7 +4551,7 @@ static void monitor_control_read(void *opaque, const uint8_t *buf, int size)
     cur_mon = old_mon;
 }
 
-static void monitor_read(void *opaque, const uint8_t *buf, int size)
+static void monitor_read(void *opaque, const uint8_t *buf, size_t size)
 {
     Monitor *old_mon = cur_mon;
     int i;

@@ -104,7 +104,7 @@ do { fprintf(stderr, "serial: " fmt , ## __VA_ARGS__); } while (0)
 do {} while (0)
 #endif
 
-static void serial_receive1(void *opaque, const uint8_t *buf, int size);
+static void serial_receive1(void *opaque, const uint8_t *buf, size_t size);
 
 static void fifo_clear(SerialState *s, int fifo)
 {
@@ -536,7 +536,7 @@ static uint64_t serial_ioport_read(void *opaque, hwaddr addr, unsigned size)
     return ret;
 }
 
-static int serial_can_receive(SerialState *s)
+static size_t serial_can_receive(SerialState *s)
 {
     if(s->fcr & UART_FCR_FE) {
         if(s->recv_fifo.count < UART_FIFO_LENGTH)
@@ -569,13 +569,13 @@ static void fifo_timeout_int (void *opaque) {
     }
 }
 
-static int serial_can_receive1(void *opaque)
+static size_t serial_can_receive1(void *opaque)
 {
     SerialState *s = opaque;
     return serial_can_receive(s);
 }
 
-static void serial_receive1(void *opaque, const uint8_t *buf, int size)
+static void serial_receive1(void *opaque, const uint8_t *buf, size_t size)
 {
     SerialState *s = opaque;
 

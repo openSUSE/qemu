@@ -51,7 +51,7 @@ static void net_socket_accept(void *opaque);
 static void net_socket_writable(void *opaque);
 
 /* Only read packets from socket when peer can receive them */
-static int net_socket_can_send(void *opaque)
+static size_t net_socket_can_send(void *opaque)
 {
     NetSocketState *s = opaque;
 

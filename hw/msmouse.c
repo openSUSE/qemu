@@ -53,7 +53,7 @@ static void msmouse_event(void *opaque,
     qemu_chr_be_write(chr, bytes, 4);
 }
 
-static int msmouse_chr_write (struct CharDriverState *s, const uint8_t *buf, int len)
+static size_t msmouse_chr_write (struct CharDriverState *s, const uint8_t *buf, size_t len)
 {
     /* Ignore writes to mouse port */
     return len;

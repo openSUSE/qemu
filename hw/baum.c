@@ -430,7 +430,7 @@ static int baum_eat_packet(BaumDriverState *baum, const uint8_t *buf, int len)
 }
 
 /* The other end is writing some data.  Store it and try to interpret */
-static int baum_write(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t baum_write(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     BaumDriverState *baum = chr->opaque;
     int tocopy, cur, eaten, orig_len = len;

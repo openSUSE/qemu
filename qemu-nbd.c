@@ -273,7 +273,7 @@ out:
     return (void *) EXIT_FAILURE;
 }
 
-static int nbd_can_accept(void *opaque)
+static size_t nbd_can_accept(void *opaque)
 {
     return nb_fds < shared;
 }

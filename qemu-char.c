@@ -139,7 +139,7 @@ void qemu_chr_generic_open(CharDriverState *s)
     }
 }
 
-int qemu_chr_fe_write(CharDriverState *s, const uint8_t *buf, int len)
+size_t qemu_chr_fe_write(CharDriverState *s, const uint8_t *buf, size_t len)
 {
     return s->chr_write(s, buf, len);
 }
@@ -151,14 +151,19 @@ int qemu_chr_fe_ioctl(CharDriverState *s, int cmd, void *arg)
     return s->chr_ioctl(s, cmd, arg);
 }
 
-int qemu_chr_be_can_write(CharDriverState *s)
+size_t qemu_chr_be_can_write(CharDriverState *s)
 {
+    int res;
+
     if (!s->chr_can_read)
         return 0;
-    return s->chr_can_read(s->handler_opaque);
+
+    res = s->chr_can_read(s->handler_opaque);
+    assert(res >= 0);
+    return res;
 }
 
-void qemu_chr_be_write(CharDriverState *s, uint8_t *buf, int len)
+void qemu_chr_be_write(CharDriverState *s, uint8_t *buf, size_t len)
 {
     if (s->chr_read) {
         s->chr_read(s->handler_opaque, buf, len);
@@ -216,7 +221,7 @@ void qemu_chr_add_handlers(CharDriverState *s,
     }
 }
 
-static int null_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t null_chr_write(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     return len;
 }
@@ -259,7 +264,7 @@ typedef struct {
 } MuxDriver;
 
 
-static int mux_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t mux_chr_write(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     MuxDriver *d = chr->opaque;
     int ret;
@@ -410,7 +415,7 @@ static void mux_chr_accept_input(CharDriverState *chr)
 #endif
 }
 
-static int mux_chr_can_read(void *opaque)
+static size_t mux_chr_can_read(void *opaque)
 {
     CharDriverState *chr = opaque;
     MuxDriver *d = chr->opaque;
@@ -423,7 +428,7 @@ static int mux_chr_can_read(void *opaque)
     return 0;
 }
 
-static void mux_chr_read(void *opaque, const uint8_t *buf, int size)
+static void mux_chr_read(void *opaque, const uint8_t *buf, size_t size)
 {
     CharDriverState *chr = opaque;
     MuxDriver *d = chr->opaque;
@@ -562,17 +567,17 @@ static int stdio_nb_clients;
 
 typedef struct {
     int fd_in, fd_out;
-    int max_size;
+    size_t max_size;
 } FDCharDriver;
 
 
-static int fd_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t fd_chr_write(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     FDCharDriver *s = chr->opaque;
     return send_all(s->fd_out, buf, len);
 }
 
-static int fd_chr_read_poll(void *opaque)
+static size_t fd_chr_read_poll(void *opaque)
 {
     CharDriverState *chr = opaque;
     FDCharDriver *s = chr->opaque;
@@ -585,7 +590,8 @@ static void fd_chr_read(void *opaque)
 {
     CharDriverState *chr = opaque;
     FDCharDriver *s = chr->opaque;
-    int size, len;
+    int size;
+    size_t len;
     uint8_t buf[READ_BUF_LEN];
 
     len = sizeof(buf);
@@ -702,7 +708,7 @@ static CharDriverState *qemu_chr_open_pipe(QemuOpts *opts)
 static uint8_t term_fifo[TERM_FIFO_MAX_SIZE];
 static int term_fifo_size;
 
-static int stdio_read_poll(void *opaque)
+static size_t stdio_read_poll(void *opaque)
 {
     CharDriverState *chr = opaque;
 
@@ -885,7 +891,7 @@ typedef struct {
 static void pty_chr_update_read_handler(CharDriverState *chr);
 static void pty_chr_state(CharDriverState *chr, int connected);
 
-static int pty_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t pty_chr_write(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     PtyCharDriver *s = chr->opaque;
 
@@ -897,7 +903,7 @@ static int pty_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
     return send_all(s->fd, buf, len);
 }
 
-static int pty_chr_read_poll(void *opaque)
+static size_t pty_chr_read_poll(void *opaque)
 {
     CharDriverState *chr = opaque;
     PtyCharDriver *s = chr->opaque;
@@ -1581,7 +1587,7 @@ static int win_chr_init(CharDriverState *chr, const char *filename)
     return -1;
 }
 
-static int win_chr_write(CharDriverState *chr, const uint8_t *buf, int len1)
+static size_t win_chr_write(CharDriverState *chr, const uint8_t *buf, size_t len1)
 {
     WinCharState *s = chr->opaque;
     DWORD len, ret, size, err;
@@ -1832,7 +1838,7 @@ static CharDriverState *qemu_chr_open_win_file_out(QemuOpts *opts)
     return qemu_chr_open_win_file(fd_out);
 }
 
-static int win_stdio_write(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t win_stdio_write(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     HANDLE  hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
     DWORD   dwSize;
@@ -2053,14 +2059,14 @@ typedef struct {
     int max_size;
 } NetCharDriver;
 
-static int udp_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t udp_chr_write(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     NetCharDriver *s = chr->opaque;
 
     return send(s->fd, (const void *)buf, len, 0);
 }
 
-static int udp_chr_read_poll(void *opaque)
+static size_t udp_chr_read_poll(void *opaque)
 {
     CharDriverState *chr = opaque;
     NetCharDriver *s = chr->opaque;
@@ -2171,7 +2177,7 @@ typedef struct {
 
 static void tcp_chr_accept(void *opaque);
 
-static int tcp_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t tcp_chr_write(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     TCPCharDriver *s = chr->opaque;
     if (s->connected) {
@@ -2182,7 +2188,7 @@ static int tcp_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
     }
 }
 
-static int tcp_chr_read_poll(void *opaque)
+static size_t tcp_chr_read_poll(void *opaque)
 {
     CharDriverState *chr = opaque;
     TCPCharDriver *s = chr->opaque;
@@ -2606,7 +2612,7 @@ typedef struct {
     uint8_t *outbuf;
 } MemoryDriver;
 
-static int mem_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t mem_chr_write(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     MemoryDriver *d = chr->opaque;
 
@@ -2679,12 +2685,12 @@ static size_t ringbuf_count(const CharDriverState *chr)
     return d->prod - d->cons;
 }
 
-static int ringbuf_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t ringbuf_chr_write(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     RingBufCharDriver *d = chr->opaque;
     int i;
 
-    if (!buf || (len < 0)) {
+    if (!buf) {
         return -1;
     }
 

@@ -66,7 +66,7 @@ typedef struct TAPState {
 
 static int launch_script(const char *setup_script, const char *ifname, int fd);
 
-static int tap_can_send(void *opaque);
+static size_t tap_can_send(void *opaque);
 static void tap_send(void *opaque);
 static void tap_writable(void *opaque);
 
@@ -170,7 +170,7 @@ static ssize_t tap_receive(NetClientState *nc, const uint8_t *buf, size_t size)
     return tap_write_packet(s, iov, 1);
 }
 
-static int tap_can_send(void *opaque)
+static size_t tap_can_send(void *opaque)
 {
     TAPState *s = opaque;
 

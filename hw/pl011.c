@@ -189,7 +189,7 @@ static void pl011_write(void *opaque, hwaddr offset,
     }
 }
 
-static int pl011_can_receive(void *opaque)
+static size_t pl011_can_receive(void *opaque)
 {
     pl011_state *s = (pl011_state *)opaque;
 

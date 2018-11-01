@@ -250,7 +250,7 @@ static const MemoryRegionOps ivshmem_mmio_ops = {
     },
 };
 
-static void ivshmem_receive(void *opaque, const uint8_t *buf, int size)
+static void ivshmem_receive(void *opaque, const uint8_t *buf, size_t size)
 {
     IVShmemState *s = opaque;
 
@@ -259,7 +259,7 @@ static void ivshmem_receive(void *opaque, const uint8_t *buf, int size)
     IVSHMEM_DPRINTF("ivshmem_receive 0x%02x\n", *buf);
 }
 
-static int ivshmem_can_receive(void * opaque)
+static size_t ivshmem_can_receive(void * opaque)
 {
     return 8;
 }
@@ -269,7 +269,7 @@ static void ivshmem_event(void *opaque, int event)
     IVSHMEM_DPRINTF("ivshmem_event %d\n", event);
 }
 
-static void fake_irqfd(void *opaque, const uint8_t *buf, int size) {
+static void fake_irqfd(void *opaque, const uint8_t *buf, size_t size) {
 
     EventfdEntry *entry = opaque;
     PCIDevice *pdev = entry->pdev;
@@ -411,7 +411,7 @@ static void increase_dynamic_storage(IVShmemState *s, int new_min_size) {
     }
 }
 
-static void ivshmem_read(void *opaque, const uint8_t * buf, int flags)
+static void ivshmem_read(void *opaque, const uint8_t * buf, size_t flags)
 {
     IVShmemState *s = opaque;
     int incoming_fd, tmp_fd;

@@ -83,7 +83,7 @@ static void guest_close(VirtIOSerialPort *port)
 }
 
 /* Readiness of the guest to accept data on a port */
-static int chr_can_read(void *opaque)
+static size_t chr_can_read(void *opaque)
 {
     VirtConsole *vcon = opaque;
 
@@ -91,7 +91,7 @@ static int chr_can_read(void *opaque)
 }
 
 /* Send data from a char device over to the guest */
-static void chr_read(void *opaque, const uint8_t *buf, int size)
+static void chr_read(void *opaque, const uint8_t *buf, size_t size)
 {
     VirtConsole *vcon = opaque;
 

@@ -42,7 +42,7 @@ typedef struct SCLPConsole {
 /* character layer call-back functions */
 
 /* Return number of bytes that fit into iov buffer */
-static int chr_can_read(void *opaque)
+static size_t chr_can_read(void *opaque)
 {
     SCLPConsole *scon = opaque;
 
@@ -68,7 +68,7 @@ static void receive_from_chr_layer(SCLPConsole *scon, const uint8_t *buf,
 }
 
 /* Send data from a char device over to the guest */
-static void chr_read(void *opaque, const uint8_t *buf, int size)
+static void chr_read(void *opaque, const uint8_t *buf, size_t size)
 {
     SCLPConsole *scon = opaque;
 

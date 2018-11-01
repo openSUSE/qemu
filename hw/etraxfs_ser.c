@@ -156,7 +156,7 @@ static const MemoryRegionOps ser_ops = {
     }
 };
 
-static void serial_receive(void *opaque, const uint8_t *buf, int size)
+static void serial_receive(void *opaque, const uint8_t *buf, size_t size)
 {
     struct etrax_serial *s = opaque;
     int i;
@@ -177,10 +177,10 @@ static void serial_receive(void *opaque, const uint8_t *buf, int size)
     ser_update_irq(s);
 }
 
-static int serial_can_receive(void *opaque)
+static size_t serial_can_receive(void *opaque)
 {
     struct etrax_serial *s = opaque;
-    int r;
+    size_t r;
 
     /* Is the receiver enabled?  */
     if (!(s->regs[RW_REC_CTRL] & (1 << 3))) {

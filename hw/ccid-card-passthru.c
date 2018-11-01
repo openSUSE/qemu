@@ -104,7 +104,7 @@ static void ccid_card_vscard_send_init(PassthruState *s)
                          (uint8_t *)&msg, sizeof(msg));
 }
 
-static int ccid_card_vscard_can_read(void *opaque)
+static size_t ccid_card_vscard_can_read(void * opaque)
 {
     PassthruState *card = opaque;
 
@@ -203,14 +203,14 @@ static void ccid_card_vscard_drop_connection(PassthruState *card)
     card->vscard_in_pos = card->vscard_in_hdr = 0;
 }
 
-static void ccid_card_vscard_read(void *opaque, const uint8_t *buf, int size)
+static void ccid_card_vscard_read(void *opaque, const uint8_t *buf, size_t size)
 {
     PassthruState *card = opaque;
     VSCMsgHeader *hdr;
 
     if (card->vscard_in_pos + size > VSCARD_IN_SIZE) {
         error_report(
-            "no room for data: pos %d +  size %d > %d. dropping connection.",
+            "no room for data: pos %d +  size %zu > %d. dropping connection.",
             card->vscard_in_pos, size, VSCARD_IN_SIZE);
         ccid_card_vscard_drop_connection(card);
         return;

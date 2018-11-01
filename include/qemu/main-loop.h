@@ -168,8 +168,8 @@ void qemu_del_wait_object(HANDLE handle, WaitObjectFunc *func, void *opaque);
 
 /* async I/O support */
 
-typedef void IOReadHandler(void *opaque, const uint8_t *buf, int size);
-typedef int IOCanReadHandler(void *opaque);
+typedef void IOReadHandler(void *opaque, const uint8_t *buf, size_t size);
+typedef size_t IOCanReadHandler(void *opaque);
 
 /**
  * qemu_set_fd_handler2: Register a file descriptor with the main loop

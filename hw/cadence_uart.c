@@ -227,7 +227,7 @@ static void uart_parameters_setup(UartState *s)
     qemu_chr_fe_ioctl(s->chr, CHR_IOCTL_SERIAL_SET_PARAMS, &ssp);
 }
 
-static int uart_can_receive(void *opaque)
+static size_t uart_can_receive(void *opaque)
 {
     UartState *s = (UartState *)opaque;
 

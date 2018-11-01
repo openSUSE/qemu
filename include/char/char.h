@@ -55,7 +55,7 @@ typedef void IOEventHandler(void *opaque, int event);
 
 struct CharDriverState {
     void (*init)(struct CharDriverState *s);
-    int (*chr_write)(struct CharDriverState *s, const uint8_t *buf, int len);
+    size_t (*chr_write)(struct CharDriverState *s, const uint8_t *buf, size_t len);
     void (*chr_update_read_handler)(struct CharDriverState *s);
     int (*chr_ioctl)(struct CharDriverState *s, int cmd, void *arg);
     int (*get_msgfd)(struct CharDriverState *s);
@@ -163,7 +163,7 @@ void qemu_chr_fe_printf(CharDriverState *s, const char *fmt, ...)
  *
  * Returns: the number of bytes consumed
  */
-int qemu_chr_fe_write(CharDriverState *s, const uint8_t *buf, int len);
+size_t qemu_chr_fe_write(CharDriverState *s, const uint8_t *buf, size_t len);
 
 /**
  * @qemu_chr_fe_ioctl:
@@ -201,7 +201,7 @@ int qemu_chr_fe_get_msgfd(CharDriverState *s);
  *
  * Returns: the number of bytes the front end can receive via @qemu_chr_be_write
  */
-int qemu_chr_be_can_write(CharDriverState *s);
+size_t qemu_chr_be_can_write(CharDriverState *s);
 
 /**
  * @qemu_chr_be_write:
@@ -213,7 +213,7 @@ int qemu_chr_be_can_write(CharDriverState *s);
  * @buf a buffer to receive data from the front end
  * @len the number of bytes to receive from the front end
  */
-void qemu_chr_be_write(CharDriverState *s, uint8_t *buf, int len);
+void qemu_chr_be_write(CharDriverState *s, uint8_t *buf, size_t len);
 
 
 /**

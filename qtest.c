@@ -372,7 +372,7 @@ static void qtest_process_inbuf(CharDriverState *chr, GString *inbuf)
     }
 }
 
-static void qtest_read(void *opaque, const uint8_t *buf, int size)
+static void qtest_read(void *opaque, const uint8_t *buf, size_t size)
 {
     CharDriverState *chr = opaque;
 
@@ -380,7 +380,7 @@ static void qtest_read(void *opaque, const uint8_t *buf, int size)
     qtest_process_inbuf(chr, inbuf);
 }
 
-static int qtest_can_read(void *opaque)
+static size_t qtest_can_read(void *opaque)
 {
     return 1024;
 }

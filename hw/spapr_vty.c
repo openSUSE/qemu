@@ -12,7 +12,7 @@ typedef struct VIOsPAPRVTYDevice {
     uint8_t buf[VTERM_BUFSIZE];
 } VIOsPAPRVTYDevice;
 
-static int vty_can_receive(void *opaque)
+static size_t vty_can_receive(void *opaque)
 {
     VIOsPAPRVTYDevice *dev = (VIOsPAPRVTYDevice *)opaque;
 

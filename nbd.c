@@ -985,7 +985,7 @@ void nbd_export_close_all(void)
     }
 }
 
-static int nbd_can_read(void *opaque);
+static size_t nbd_can_read(void *opaque);
 static void nbd_read(void *opaque);
 static void nbd_restart_write(void *opaque);
 
@@ -1215,7 +1215,7 @@ out:
     nbd_client_close(client);
 }
 
-static int nbd_can_read(void *opaque)
+static size_t nbd_can_read(void *opaque)
 {
     NBDClient *client = opaque;
 

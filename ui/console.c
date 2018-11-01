@@ -1114,7 +1114,7 @@ void console_select(unsigned int index)
     }
 }
 
-static int console_puts(CharDriverState *chr, const uint8_t *buf, int len)
+static size_t console_puts(CharDriverState *chr, const uint8_t *buf, size_t len)
 {
     QemuConsole *s = chr->opaque;
     int i;
