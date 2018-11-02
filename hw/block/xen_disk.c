@@ -110,7 +110,6 @@ static void ioreq_reset(struct ioreq *ioreq)
     memset(&ioreq->req, 0, sizeof(ioreq->req));
     ioreq->status = 0;
     ioreq->start = 0;
-    ioreq->buf = NULL;
     ioreq->size = 0;
     ioreq->presync = 0;
 
@@ -135,6 +134,9 @@ static struct ioreq *ioreq_start(struct XenBlkDev *blkdev)
         /* allocate new struct */
         ioreq = g_malloc0(sizeof(*ioreq));
         ioreq->blkdev = blkdev;
+        ioreq->buf = qemu_memalign(XC_PAGE_SIZE,
+                                   BLKIF_MAX_SEGMENTS_PER_REQUEST *
+                                   XC_PAGE_SIZE);
         blkdev->requests_total++;
         qemu_iovec_init(&ioreq->v, 1);
     } else {
@@ -317,14 +319,12 @@ static void qemu_aio_complete(void *opaque, int ret)
         if (ret == 0) {
             ioreq_grant_copy(ioreq);
         }
-        qemu_vfree(ioreq->buf);
         break;
     case BLKIF_OP_WRITE:
     case BLKIF_OP_FLUSH_DISKCACHE:
         if (!ioreq->req.nr_segments) {
             break;
         }
-        qemu_vfree(ioreq->buf);
         break;
     default:
         break;
@@ -392,12 +392,10 @@ static int ioreq_runio_qemu_aio(struct ioreq *ioreq)
 {
     struct XenBlkDev *blkdev = ioreq->blkdev;
 
-    ioreq->buf = qemu_memalign(XC_PAGE_SIZE, ioreq->size);
     if (ioreq->req.nr_segments &&
         (ioreq->req.operation == BLKIF_OP_WRITE ||
          ioreq->req.operation == BLKIF_OP_FLUSH_DISKCACHE) &&
         ioreq_grant_copy(ioreq)) {
-        qemu_vfree(ioreq->buf);
         goto err;
     }
 
@@ -1007,6 +1005,7 @@ static int blk_free(struct XenDevice *xendev)
         ioreq = QLIST_FIRST(&blkdev->freelist);
         QLIST_REMOVE(ioreq, list);
         qemu_iovec_destroy(&ioreq->v);
+        qemu_vfree(ioreq->buf);
         g_free(ioreq);
     }
 
