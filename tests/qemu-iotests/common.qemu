@@ -76,7 +76,7 @@ _timed_wait_for()
     timeout=yes
 
     QEMU_STATUS[$h]=0
-    while IFS= read -t ${QEMU_COMM_TIMEOUT} resp <&${QEMU_OUT[$h]}
+    while IFS= read -t $((${QEMU_COMM_TIMEOUT}*3)) resp <&${QEMU_OUT[$h]}
     do
         if [ -z "${silent}" ] && [ -z "${mismatch_only}" ]; then
             echo "${resp}" | _filter_testdir | _filter_qemu \
