@@ -85,7 +85,7 @@ _timed_wait_for()
     timeout=yes
 
     QEMU_STATUS[$h]=0
-    read_timeout="-t ${QEMU_COMM_TIMEOUT}"
+    read_timeout="-t $((${QEMU_COMM_TIMEOUT}*3))"
     if [ -n "${GDB_OPTIONS}" ]; then
         read_timeout=
     fi
