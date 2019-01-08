@@ -3362,7 +3362,7 @@ void qmp_xen_save_devices_state(const char *filename, bool has_live, bool live,
          * So call bdrv_inactivate_all (release locks) here to let the other
          * side of the migration take control of the images.
          */
-        if (live && !saved_vm_running) {
+        if (!saved_vm_running) {
             migration_block_inactivate();
         }
     }
