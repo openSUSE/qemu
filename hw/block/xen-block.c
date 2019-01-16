@@ -418,6 +418,9 @@ static void xen_block_realize(XenDevice *xendev, Error **errp)
 
     xen_block_set_size(blockdev);
 
+    if (!monitor_add_blk(conf->blk, blockdev->drive->id, errp)) {
+        return;
+    }
     blockdev->dataplane =
         xen_block_dataplane_create(xendev, blk, conf->logical_block_size,
                                    blockdev->props.iothread);
