@@ -674,7 +674,15 @@ static inline int xen_domain_create(xc_interface *xc, uint32_t ssidref,
                                     xen_domain_handle_t handle, uint32_t flags,
                                     uint32_t *pdomid)
 {
+#if CONFIG_XEN_CTRL_INTERFACE_VERSION < 41200
     return xc_domain_create(xc, ssidref, handle, flags, pdomid, NULL);
+#else
+    struct xen_domctl_createdomain create;
+    create.ssidref = ssidref;
+    memcpy(&(create.handle), handle, sizeof(xen_domain_handle_t));
+    create.flags = flags;
+    return xc_domain_create(xc, pdomid, &create);
+#endif
 }
 #endif
 #endif
