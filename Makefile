@@ -913,6 +913,7 @@ ifneq ($(DESCS),)
 			"$(DESTDIR)$(qemu_datadir)/firmware/$$x"; \
 	done
 endif
+ifneq ($(or $(CONFIG_GTK),$(CONFIG_SDL)),)
 	for s in $(ICON_SIZES); do \
 		mkdir -p "$(DESTDIR)$(qemu_icondir)/hicolor/$${s}/apps"; \
 		$(INSTALL_DATA) $(SRC_PATH)/ui/icons/qemu_$${s}.png \
@@ -927,6 +928,7 @@ endif
 	mkdir -p "$(DESTDIR)$(qemu_desktopdir)"
 	$(INSTALL_DATA) $(SRC_PATH)/ui/qemu.desktop \
 		"$(DESTDIR)$(qemu_desktopdir)/qemu.desktop"
+endif
 ifdef CONFIG_GTK
 	$(MAKE) -C po $@
 endif
