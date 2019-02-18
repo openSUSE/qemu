@@ -95,6 +95,8 @@ struct sPAPRMachineState {
     char *kvm_type;
     MemoryHotplugState hotplug_memory;
 
+    char *host_model;
+    char *host_serial;
     uint32_t nr_servers;
     ICPState *icps;
 };

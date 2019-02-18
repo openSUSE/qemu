@@ -946,13 +946,30 @@ static void *spapr_build_fdt(sPAPRMachineState *spapr,
      * Add info to guest to indentify which host is it being run on
      * and what is the uuid of the guest
      */
-    if (kvmppc_get_host_model(&buf)) {
-        _FDT(fdt_setprop_string(fdt, 0, "host-model", buf));
-        g_free(buf);
+    if (spapr->host_model && !g_str_equal(spapr->host_model, "none")) {
+        if (g_str_equal(spapr->host_model, "passthrough")) {
+            /* -M host-model=passthrough */
+            if (kvmppc_get_host_model(&buf)) {
+                _FDT(fdt_setprop_string(fdt, 0, "host-model", buf));
+                g_free(buf);
+            }
+        } else {
+            /* -M host-model=<user-string> */
+            _FDT(fdt_setprop_string(fdt, 0, "host-model", spapr->host_model));
+        }
     }
-    if (kvmppc_get_host_serial(&buf)) {
-        _FDT(fdt_setprop_string(fdt, 0, "host-serial", buf));
-        g_free(buf);
+
+    if (spapr->host_serial && !g_str_equal(spapr->host_serial, "none")) {
+        if (g_str_equal(spapr->host_serial, "passthrough")) {
+            /* -M host-serial=passthrough */
+            if (kvmppc_get_host_serial(&buf)) {
+                _FDT(fdt_setprop_string(fdt, 0, "host-serial", buf));
+                g_free(buf);
+            }
+        } else {
+            /* -M host-serial=<user-string> */
+            _FDT(fdt_setprop_string(fdt, 0, "host-serial", spapr->host_serial));
+        }
     }
 
     buf = qemu_uuid_unparse_strdup(&qemu_uuid);
@@ -2406,6 +2423,36 @@ static void spapr_set_modern_hotplug_events(Object *obj, bool value,
     spapr->use_hotplug_event_source = value;
 }
 
+static char *spapr_get_host_model(Object *obj, Error **errp)
+{
+    sPAPRMachineState *spapr = SPAPR_MACHINE(obj);
+
+    return g_strdup(spapr->host_model);
+}
+
+static void spapr_set_host_model(Object *obj, const char *value, Error **errp)
+{
+    sPAPRMachineState *spapr = SPAPR_MACHINE(obj);
+
+    g_free(spapr->host_model);
+    spapr->host_model = g_strdup(value);
+}
+
+static char *spapr_get_host_serial(Object *obj, Error **errp)
+{
+    sPAPRMachineState *spapr = SPAPR_MACHINE(obj);
+
+    return g_strdup(spapr->host_serial);
+}
+
+static void spapr_set_host_serial(Object *obj, const char *value, Error **errp)
+{
+    sPAPRMachineState *spapr = SPAPR_MACHINE(obj);
+
+    g_free(spapr->host_serial);
+    spapr->host_serial = g_strdup(value);
+}
+
 static void spapr_machine_initfn(Object *obj)
 {
     sPAPRMachineState *spapr = SPAPR_MACHINE(obj);
@@ -2426,6 +2473,17 @@ static void spapr_machine_initfn(Object *obj)
                                     " place of standard EPOW events when possible"
                                     " (required for memory hot-unplug support)",
                                     NULL);
+
+    object_property_add_str(obj, "host-model",
+        spapr_get_host_model, spapr_set_host_model,
+        &error_abort);
+    object_property_set_description(obj, "host-model",
+        "Set host's model-id to use - none|passthrough|string", &error_abort);
+    object_property_add_str(obj, "host-serial",
+        spapr_get_host_serial, spapr_set_host_serial,
+        &error_abort);
+    object_property_set_description(obj, "host-serial",
+        "Set host's system-id to use - none|passthrough|string", &error_abort);
 }
 
 static void spapr_machine_finalizefn(Object *obj)
@@ -3203,7 +3261,12 @@ static void spapr_machine_2_8_instance_options(MachineState *machine)
 
 static void spapr_machine_2_8_class_options(MachineClass *mc)
 {
+    static GlobalProperty compat[] = {
+        { TYPE_SPAPR_MACHINE, "host-model", "passthrough" },
+        { TYPE_SPAPR_MACHINE, "host-serial", "passthrough" },
+    };
     spapr_machine_2_9_class_options(mc);
+    compat_props_add(mc->compat_props, compat, G_N_ELEMENTS(compat));
     SET_MACHINE_COMPAT(mc, SPAPR_COMPAT_2_8);
     mc->numa_mem_align_shift = 23;
 }
