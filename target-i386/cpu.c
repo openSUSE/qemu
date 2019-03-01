@@ -152,7 +152,7 @@ static const char *cpuid_7_0_ebx_feature_name[] = {
 static const char *cpuid_7_0_edx_feature_name[] = {
     NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL,
-    NULL, NULL, NULL, NULL,
+    NULL, NULL, "md-clear", NULL,
     NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL,
     NULL, NULL, NULL, NULL,

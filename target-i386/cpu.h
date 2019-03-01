@@ -542,6 +542,7 @@ typedef uint32_t FeatureWordArray[FEATURE_WORDS];
 #define CPUID_7_0_EBX_RDSEED   (1 << 18)
 #define CPUID_7_0_EBX_ADX      (1 << 19)
 #define CPUID_7_0_EBX_SMAP     (1 << 20)
+#define CPUID_7_0_EDX_MD_CLEAR      (1U << 10) /* Microarchitectural Data Clear */
 #define CPUID_7_0_EDX_SPEC_CTRL     (1U << 26) /* Speculation Control */
 #define CPUID_7_0_EDX_SPEC_CTRL_SSBD  (1U << 31) /* Speculative Store Bypass Disable */
 
