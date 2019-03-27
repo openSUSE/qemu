@@ -1240,38 +1240,8 @@ static void *spapr_build_fdt(sPAPRMachineState *spapr,
     _FDT(fdt_setprop_string(fdt, 0, "model", "IBM pSeries (emulated by qemu)"));
     _FDT(fdt_setprop_string(fdt, 0, "compatible", "qemu,pseries"));
 
-    /*
-     * Add info to guest to indentify which host is it being run on
-     * and what is the uuid of the guest
-     */
-    if (spapr->host_model && !g_str_equal(spapr->host_model, "none")) {
-        if (g_str_equal(spapr->host_model, "passthrough")) {
-            /* -M host-model=passthrough */
-            if (kvmppc_get_host_model(&buf)) {
-                _FDT(fdt_setprop_string(fdt, 0, "host-model", buf));
-                g_free(buf);
-            }
-        } else {
-            /* -M host-model=<user-string> */
-            _FDT(fdt_setprop_string(fdt, 0, "host-model", spapr->host_model));
-        }
-    }
-
-    if (spapr->host_serial && !g_str_equal(spapr->host_serial, "none")) {
-        if (g_str_equal(spapr->host_serial, "passthrough")) {
-            /* -M host-serial=passthrough */
-            if (kvmppc_get_host_serial(&buf)) {
-                _FDT(fdt_setprop_string(fdt, 0, "host-serial", buf));
-                g_free(buf);
-            }
-        } else {
-            /* -M host-serial=<user-string> */
-            _FDT(fdt_setprop_string(fdt, 0, "host-serial", spapr->host_serial));
-        }
-    }
-
+    /* Guest UUID & Name*/
     buf = qemu_uuid_unparse_strdup(&qemu_uuid);
-
     _FDT(fdt_setprop_string(fdt, 0, "vm,uuid", buf));
     if (qemu_uuid_set) {
         _FDT(fdt_setprop_string(fdt, 0, "system-id", buf));
@@ -1281,6 +1251,21 @@ static void *spapr_build_fdt(sPAPRMachineState *spapr,
     if (qemu_get_vm_name()) {
         _FDT(fdt_setprop_string(fdt, 0, "ibm,partition-name",
                                 qemu_get_vm_name()));
+    }
+
+    /* Host Model & Serial Number */
+    if (spapr->host_model) {
+        _FDT(fdt_setprop_string(fdt, 0, "host-model", spapr->host_model));
+    } else if (smc->broken_host_serial_model && kvmppc_get_host_model(&buf)) {
+        _FDT(fdt_setprop_string(fdt, 0, "host-model", buf));
+        g_free(buf);
+    }
+
+    if (spapr->host_serial) {
+        _FDT(fdt_setprop_string(fdt, 0, "host-serial", spapr->host_serial));
+    } else if (smc->broken_host_serial_model && kvmppc_get_host_serial(&buf)) {
+        _FDT(fdt_setprop_string(fdt, 0, "host-serial", buf));
+        g_free(buf);
     }
 
     _FDT(fdt_setprop_cell(fdt, 0, "#address-cells", 2));
@@ -3119,12 +3104,12 @@ static void spapr_instance_init(Object *obj)
         spapr_get_host_model, spapr_set_host_model,
         &error_abort);
     object_property_set_description(obj, "host-model",
-        "Set host's model-id to use - none|passthrough|string", &error_abort);
+        "Host model to advertise in guest device tree", &error_abort);
     object_property_add_str(obj, "host-serial",
         spapr_get_host_serial, spapr_set_host_serial,
         &error_abort);
     object_property_set_description(obj, "host-serial",
-        "Set host's system-id to use - none|passthrough|string", &error_abort);
+        "Host serial number to advertise in guest device tree", &error_abort);
 }
 
 static void spapr_machine_finalizefn(Object *obj)
@@ -4019,14 +4004,13 @@ static const TypeInfo spapr_machine_info = {
  */
 static void spapr_machine_3_1_instance_options(MachineState *machine)
 {
-    sPAPRMachineState *spapr = SPAPR_MACHINE(machine);
-    spapr->host_model = g_strdup("passthrough");
-    spapr->host_serial = g_strdup("passthrough");
 }
 
 static void spapr_machine_3_1_class_options(MachineClass *mc)
 {
     /* Defaults for the latest behaviour inherited from the base class */
+    sPAPRMachineClass *smc = SPAPR_MACHINE_CLASS(mc);
+    smc->broken_host_serial_model = true;
 }
 
 DEFINE_SPAPR_MACHINE(3_1, "3.1", true);
