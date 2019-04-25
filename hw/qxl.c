@@ -703,6 +703,9 @@ static void interface_release_resource(QXLInstance *sin,
     QXLReleaseRing *ring;
     uint64_t *item, id;
 
+    if (!ext.info) {
+        return;
+    }
     if (ext.group_id == MEMSLOT_GROUP_HOST) {
         /* host group -> vga mode update request */
         qemu_spice_destroy_update(&qxl->ssd, (void *)(intptr_t)ext.info->id);
