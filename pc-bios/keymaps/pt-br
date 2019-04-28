@@ -232,7 +232,6 @@ dead_horn 0x24 shift altgr
 k 0x25
 K 0x25 shift
 kra 0x25 altgr
-ampersand 0x25 shift altgr
 
 # evdev 38 (0x26), QKeyCode "l", number 0x26
 l 0x26
