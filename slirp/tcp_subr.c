@@ -639,46 +639,39 @@ tcp_emu(struct socket *so, struct mbuf *m)
 			struct socket *tmpso;
 			struct sockaddr_in addr;
 			socklen_t addrlen = sizeof(struct sockaddr_in);
-			struct sbuf *so_rcv = &so->so_rcv;
+                       char *eol = g_strstr_len(m->m_data, m->m_len, "\r\n");
 
-    if (m->m_len > so_rcv->sb_datalen - (so_rcv->sb_wptr - so_rcv->sb_data)) {
+        if (!eol) {
         return 1;
     }
 
-			memcpy(so_rcv->sb_wptr, m->m_data, m->m_len);
-			so_rcv->sb_wptr += m->m_len;
-			so_rcv->sb_rptr += m->m_len;
-			m_inc(m, m->m_len + 1);
-			m->m_data[m->m_len] = 0; /* NULL terminate */
-			if (strchr(m->m_data, '\r') || strchr(m->m_data, '\n')) {
-				if (sscanf(so_rcv->sb_data, "%u%*[ ,]%u", &n1, &n2) == 2) {
-					HTONS(n1);
-					HTONS(n2);
-					/* n2 is the one on our host */
-					for (tmpso = slirp->tcb.so_next;
-					     tmpso != &slirp->tcb;
-					     tmpso = tmpso->so_next) {
-						if (tmpso->so_laddr.s_addr == so->so_laddr.s_addr &&
-						    tmpso->so_lport == n2 &&
-						    tmpso->so_faddr.s_addr == so->so_faddr.s_addr &&
-						    tmpso->so_fport == n1) {
-							if (getsockname(tmpso->s,
-								(struct sockaddr *)&addr, &addrlen) == 0)
-							   n2 = addr.sin_port;
-							break;
-						}
+            *eol = '\0';
+            if (sscanf(m->m_data, "%u%*[ ,]%u", &n1, &n2) == 2) {
+                HTONS(n1);
+                HTONS(n2);
+                /* n2 is the one on our host */
+                for (tmpso = slirp->tcb.so_next; tmpso != &slirp->tcb;
+                     tmpso = tmpso->so_next) {
+                    if (tmpso->so_laddr.s_addr == so->so_laddr.s_addr &&
+                        tmpso->so_lport == n2 &&
+                        tmpso->so_faddr.s_addr == so->so_faddr.s_addr &&
+                        tmpso->so_fport == n1) {
+                        if (getsockname(tmpso->s, (struct sockaddr *)&addr,
+                                        &addrlen) == 0)
+                            n2 = addr.sin_port;
+                        break;
 					}
-                                        NTOHS(n1);
-                                        NTOHS(n2);
-                                        so_rcv->sb_cc = snprintf(so_rcv->sb_data,
-                                                                 so_rcv->sb_datalen,
-                                                                 "%d,%d\r\n", n1, n2);
-                                        so_rcv->sb_rptr = so_rcv->sb_data;
-                                        so_rcv->sb_wptr = so_rcv->sb_data + so_rcv->sb_cc;
 				}
+                NTOHS(n1);
+                NTOHS(n2);
+                m_inc(m, snprintf(NULL, 0, "%d,%d\r\n", n1, n2) + 1);
+                m->m_len = snprintf(m->m_data, M_ROOM(m), "%d,%d\r\n", n1, n2);
+                assert(m->m_len < M_ROOM(m));
+            } else {
+                *eol = '\r';
 			}
-			m_free(m);
-			return 0;
+
+			return 1;
 		}
 
         case EMU_FTP: /* ftp */
