@@ -1722,8 +1722,21 @@ static void usb_mtp_write_metadata(MTPState *s, uint64_t dlen)
     assert(!s->write_pending);
     assert(p != NULL);
 
+/*
+ * We are about to access a packed struct. We are confident that the pointer
+ * address won't be unaligned, so we ignore GCC warnings.
+ */
+#if defined(CONFIG_PRAGMA_DIAGNOSTIC_AVAILABLE) && QEMU_GNUC_PREREQ(9, 0)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Waddress-of-packed-member"
+#endif
+
     filename = utf16_to_str(MIN(dataset->length, filename_chars),
                             dataset->filename);
+
+#if defined(CONFIG_PRAGMA_DIAGNOSTIC_AVAILABLE) && QEMU_GNUC_PREREQ(9, 0)
+#pragma GCC diagnostic pop
+#endif
 
     if (strchr(filename, '/')) {
         usb_mtp_queue_result(s, RES_PARAMETER_NOT_SUPPORTED, d->trans,
