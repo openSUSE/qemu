@@ -3340,6 +3340,7 @@ static void usb_xhci_init(XHCIState *xhci)
     usb_bus_new(&xhci->bus, sizeof(xhci->bus), &xhci_bus_ops, dev);
 
     for (i = 0; i < usbports; i++) {
+        g_assert(i < MAX(MAXPORTS_2, MAXPORTS_3));
         speedmask = 0;
         if (i < xhci->numports_2) {
             if (xhci_get_flag(xhci, XHCI_FLAG_SS_FIRST)) {
