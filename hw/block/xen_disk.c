@@ -789,10 +789,17 @@ static int blk_connect(struct XenDevice *xendev)
         Error *local_err = NULL;
         QDict *options = NULL;
 
+        options = qdict_new();
+
         if (strcmp(blkdev->fileproto, "<unset>")) {
-            options = qdict_new();
             qdict_put_str(options, "driver", blkdev->fileproto);
         }
+
+        /*
+         * It is necessary to turn file locking off as an emulated device
+         * may have already opened the same image file.
+         */
+        qdict_put_str(options, "file.locking", "off");
 
         /* setup via xenbus -> create new block driver instance */
         xen_pv_printf(xendev, 2, "create new bdrv (xenbus setup)\n");
