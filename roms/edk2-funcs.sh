@@ -116,7 +116,15 @@ qemu_edk2_get_cross_prefix()
     # force soft-float cross-compiler on Debian
     printf 'arm-linux-gnueabi-'
   else
-    printf '%s-linux-gnu-\n' "$gcc_arch"
+    if [ "$emulation_target" == arm ]; then
+      printf '%s-suse-linux-gnueabi-\n' "$gcc_arch"
+    else
+      if [ "$gcc_arch" == i686 ]; then
+        printf '%s-suse-linux-\n' "i586"
+      else
+        printf '%s-suse-linux-\n' "$gcc_arch"
+      fi
+    fi
   fi
 }
 
