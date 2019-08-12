@@ -1489,8 +1489,12 @@ static int ram_save_host_page(RAMState *rs, PageSearchStatus *pss,
                               bool last_stage)
 {
     int tmppages, pages = 0;
-    size_t pagesize_bits =
-        qemu_ram_pagesize(pss->block) >> TARGET_PAGE_BITS;
+    size_t pagesize_bits;
+
+    if (migrate_postcopy_ram())
+        pagesize_bits = qemu_ram_pagesize(pss->block) >> TARGET_PAGE_BITS;
+    else
+        pagesize_bits = qemu_host_page_size >> TARGET_PAGE_BITS;
 
     do {
         tmppages = ram_save_target_page(rs, pss, last_stage);
