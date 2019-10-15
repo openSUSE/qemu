@@ -206,7 +206,8 @@ _send_qemu_cmd $QEMU_HANDLE \
     'return'
 _run_cmd $QEMU_IMG commit -b "${TEST_IMG}.b" "${TEST_IMG}.c"
 
-_cleanup_qemu
+_send_qemu_cmd $QEMU_HANDLE "{ 'execute': 'quit' }" ''
+wait=1 _cleanup_qemu
 
 _launch_qemu
 
@@ -258,7 +259,8 @@ _send_qemu_cmd $QEMU_HANDLE \
 
 _run_cmd $QEMU_IO "${TEST_IMG}" -c 'write 0 512'
 
-_cleanup_qemu
+_send_qemu_cmd $QEMU_HANDLE "{ 'execute': 'quit' }" ''
+wait=1 _cleanup_qemu
 
 echo
 echo "== Detecting -U and force-share conflicts =="
