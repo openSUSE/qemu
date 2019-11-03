@@ -205,7 +205,7 @@ opensbi64-sifive_u:
 	cp opensbi/build/platform/sifive/fu540/firmware/fw_jump.bin ../pc-bios/opensbi-riscv64-sifive_u-fw_jump.bin
 
 bios-microvm:
-	$(MAKE) -C qboot
+	$(MAKE) -C qboot CROSS_COMPILE=$(x86_64_cross_prefix) CC=gcc
 	cp qboot/bios.bin ../pc-bios/bios-microvm.bin
 
 clean:
