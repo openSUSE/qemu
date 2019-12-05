@@ -298,5 +298,6 @@ void init_dirty_bitmap_incoming_migration(void);
 
 void migration_make_urgent_request(void);
 void migration_consume_urgent_request(void);
+bool migration_rate_limit(void);
 
 #endif
