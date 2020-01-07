@@ -892,6 +892,9 @@ tcp_emu(struct socket *so, struct mbuf *m)
 				break;
 
 			 case 5:
+				if (bptr == m->m_data + m->m_len - 1)
+					return 1; /* We need two bytes */
+
 				/*
 				 * The difference between versions 1.0 and
 				 * 2.0 is here. For future versions of
@@ -907,6 +910,10 @@ tcp_emu(struct socket *so, struct mbuf *m)
 				/* This is the field containing the port
 				 * number that RA-player is listening to.
 				 */
+
+				if (bptr == m->m_data + m->m_len - 1)
+					return 1; /* We need two bytes */
+
 				lport = (((u_char*)bptr)[0] << 8)
 				+ ((u_char *)bptr)[1];
 				if (lport < 6970)
