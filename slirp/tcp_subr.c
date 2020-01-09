@@ -703,7 +703,7 @@ tcp_emu(struct socket *so, struct mbuf *m)
 			n4 =  (laddr & 0xff);
 
 			m->m_len = bptr - m->m_data; /* Adjust length */
-                        m->m_len += snprintf(bptr, m->m_size - m->m_len,
+                        m->m_len += snprintf(bptr, M_FREEROOM(m),
                                              "ORT %d,%d,%d,%d,%d,%d\r\n%s",
                                              n1, n2, n3, n4, n5, n6, x==7?buff:"");
 			return 1;
@@ -736,7 +736,7 @@ tcp_emu(struct socket *so, struct mbuf *m)
 			n4 =  (laddr & 0xff);
 
 			m->m_len = bptr - m->m_data; /* Adjust length */
-			m->m_len += snprintf(bptr, m->m_size - m->m_len,
+			m->m_len += snprintf(bptr, M_FREEROOM(m),
                                              "27 Entering Passive Mode (%d,%d,%d,%d,%d,%d)\r\n%s",
                                              n1, n2, n3, n4, n5, n6, x==7?buff:"");
 
@@ -762,7 +762,7 @@ tcp_emu(struct socket *so, struct mbuf *m)
 		if (m->m_data[m->m_len-1] == '\0' && lport != 0 &&
 		    (so = tcp_listen(slirp, INADDR_ANY, 0, so->so_laddr.s_addr,
 		                     htons(lport), SS_FACCEPTONCE)) != NULL)
-                    m->m_len = snprintf(m->m_data, m->m_size, "%d",
+                    m->m_len = snprintf(m->m_data, M_ROOM(m), "%d",
                                         ntohs(so->so_fport)) + 1;
 		return 1;
 
