@@ -71,6 +71,7 @@ typedef char *caddr_t;
 
 
 #include "debug.h"
+#include "util.h"
 
 #include "qemu/queue.h"
 #include "qemu/sockets.h"
