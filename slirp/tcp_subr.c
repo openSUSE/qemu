@@ -703,9 +703,9 @@ tcp_emu(struct socket *so, struct mbuf *m)
 			n4 =  (laddr & 0xff);
 
 			m->m_len = bptr - m->m_data; /* Adjust length */
-                        m->m_len += snprintf(bptr, M_FREEROOM(m),
-                                             "ORT %d,%d,%d,%d,%d,%d\r\n%s",
-                                             n1, n2, n3, n4, n5, n6, x==7?buff:"");
+                        m->m_len += slirp_fmt(bptr, M_FREEROOM(m),
+                                              "ORT %d,%d,%d,%d,%d,%d\r\n%s",
+                                              n1, n2, n3, n4, n5, n6, x==7?buff:"");
 			return 1;
 		} else if ((bptr = (char *)strstr(m->m_data, "27 Entering")) != NULL) {
 			/*
@@ -736,9 +736,9 @@ tcp_emu(struct socket *so, struct mbuf *m)
 			n4 =  (laddr & 0xff);
 
 			m->m_len = bptr - m->m_data; /* Adjust length */
-			m->m_len += snprintf(bptr, M_FREEROOM(m),
-                                             "27 Entering Passive Mode (%d,%d,%d,%d,%d,%d)\r\n%s",
-                                             n1, n2, n3, n4, n5, n6, x==7?buff:"");
+			m->m_len += slirp_fmt(bptr, M_FREEROOM(m),
+                                              "27 Entering Passive Mode (%d,%d,%d,%d,%d,%d)\r\n%s",
+                                              n1, n2, n3, n4, n5, n6, x==7?buff:"");
 
 			return 1;
 		}
@@ -762,8 +762,8 @@ tcp_emu(struct socket *so, struct mbuf *m)
 		if (m->m_data[m->m_len-1] == '\0' && lport != 0 &&
 		    (so = tcp_listen(slirp, INADDR_ANY, 0, so->so_laddr.s_addr,
 		                     htons(lport), SS_FACCEPTONCE)) != NULL)
-                    m->m_len = snprintf(m->m_data, M_ROOM(m), "%d",
-                                        ntohs(so->so_fport)) + 1;
+                    m->m_len = slirp_fmt0(m->m_data, M_ROOM(m), "%d",
+                                          ntohs(so->so_fport));
 		return 1;
 
 	 case EMU_IRC:
@@ -783,10 +783,10 @@ tcp_emu(struct socket *so, struct mbuf *m)
 				return 1;
 			}
 			m->m_len = bptr - m->m_data; /* Adjust length */
-                        m->m_len += snprintf(bptr, M_FREEROOM(m),
-                                             "DCC CHAT chat %lu %u%c\n",
-                                             (unsigned long)ntohl(so->so_faddr.s_addr),
-                                             ntohs(so->so_fport), 1);
+                        m->m_len += slirp_fmt(bptr, M_FREEROOM(m),
+                                              "DCC CHAT chat %lu %u%c\n",
+                                              (unsigned long)ntohl(so->so_faddr.s_addr),
+                                              ntohs(so->so_fport), 1);
 		} else if (sscanf(bptr, "DCC SEND %256s %u %u %u", buff, &laddr, &lport, &n1) == 4) {
 			if ((so = tcp_listen(slirp, INADDR_ANY, 0,
 			                     htonl(laddr), htons(lport),
@@ -794,10 +794,10 @@ tcp_emu(struct socket *so, struct mbuf *m)
 				return 1;
 			}
 			m->m_len = bptr - m->m_data; /* Adjust length */
-                        m->m_len += snprintf(bptr, M_FREEROOM(m),
-                                             "DCC SEND %s %lu %u %u%c\n", buff,
-                                             (unsigned long)ntohl(so->so_faddr.s_addr),
-                                             ntohs(so->so_fport), n1, 1);
+                        m->m_len += slirp_fmt(bptr, M_FREEROOM(m),
+                                              "DCC SEND %s %lu %u %u%c\n", buff,
+                                              (unsigned long)ntohl(so->so_faddr.s_addr),
+                                              ntohs(so->so_fport), n1, 1);
 		} else if (sscanf(bptr, "DCC MOVE %256s %u %u %u", buff, &laddr, &lport, &n1) == 4) {
 			if ((so = tcp_listen(slirp, INADDR_ANY, 0,
 			                     htonl(laddr), htons(lport),
@@ -805,10 +805,10 @@ tcp_emu(struct socket *so, struct mbuf *m)
 				return 1;
 			}
 			m->m_len = bptr - m->m_data; /* Adjust length */
-                        m->m_len += snprintf(bptr, M_FREEROOM(m),
-                                             "DCC MOVE %s %lu %u %u%c\n", buff,
-                                             (unsigned long)ntohl(so->so_faddr.s_addr),
-                                             ntohs(so->so_fport), n1, 1);
+                        m->m_len += slirp_fmt(bptr, M_FREEROOM(m),
+                                              "DCC MOVE %s %lu %u %u%c\n", buff,
+                                              (unsigned long)ntohl(so->so_faddr.s_addr),
+                                              ntohs(so->so_fport), n1, 1);
 		}
 		return 1;
 
