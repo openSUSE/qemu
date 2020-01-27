@@ -132,6 +132,7 @@ void free(void *ptr);
 #endif
 
 #include "debug.h"
+#include "util.h"
 
 #include "qemu/queue.h"
 #include "qemu/sockets.h"
