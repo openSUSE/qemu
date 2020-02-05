@@ -239,7 +239,7 @@ static uint8_t *xen_map_cache_unlocked(hwaddr phys_addr, hwaddr size,
     hwaddr address_offset;
     hwaddr cache_size = size;
     hwaddr test_bit_size;
-    bool translated = false;
+    bool translated G_GNUC_UNUSED = false;
     bool dummy = false;
 
 tryagain:
