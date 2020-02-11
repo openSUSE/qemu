@@ -6424,7 +6424,9 @@ static void x86_cpu_realizefn(DeviceState *dev, Error **errp)
             g_free(name);
             goto out;
         }
+    }
 
+    if (cpu->max_features && accel_uses_host_cpuid()) {
         if (enable_cpu_pm) {
             host_cpuid(5, 0, &cpu->mwait.eax, &cpu->mwait.ebx,
                        &cpu->mwait.ecx, &cpu->mwait.edx);
