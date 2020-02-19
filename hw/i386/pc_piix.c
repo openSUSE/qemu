@@ -1043,6 +1043,8 @@ DEFINE_PC_MACHINE(isapc, "isapc", pc_init_isa,
 #ifdef CONFIG_XEN
 static void xenfv_machine_options(MachineClass *m)
 {
+    /* compat with pc_i440fx_3_1_machine_options */
+    pc_i440fx_3_1_machine_options(m);
     m->desc = "Xen Fully-virtualized PC";
     m->max_cpus = HVM_MAX_VCPUS;
     m->default_machine_opts = "accel=xen";
