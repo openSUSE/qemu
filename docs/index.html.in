@@ -7,6 +7,7 @@
     <body>
         <h1>QEMU @@VERSION@@ Documentation</h1>
         <ul>
+            <li><a href="/usr/share/doc/packages/qemu-kvm/kvm-supported.html">SUSE Support Statements</a></li>
             <li><a href="system/index.html">System Emulation User's Guide</a></li>
             <li><a href="user/index.html">User Mode Emulation User's Guide</a></li>
             <li><a href="tools/index.html">Tools Guide</a></li>
