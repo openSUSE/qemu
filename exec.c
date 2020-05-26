@@ -3632,6 +3632,7 @@ void *address_space_map(AddressSpace *as,
     if (!memory_access_is_direct(mr, is_write)) {
         if (atomic_xchg(&bounce.in_use, true)) {
             rcu_read_unlock();
+            *plen = 0;
             return NULL;
         }
         /* Avoid unbounded allocations */
