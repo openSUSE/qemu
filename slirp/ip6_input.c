@@ -49,6 +49,13 @@ void ip6_input(struct mbuf *m)
         goto bad;
     }
 
+    // Check if the message size is big enough to hold what's
+    // set in the payload length header. If not this is an invalid
+    // packet
+    if (m->m_len < ntohs(ip6->ip_pl) + sizeof(struct ip6)) {
+        goto bad;
+    }
+
     /* check ip_ttl for a correct ICMP reply */
     if (ip6->ip_hl == 0) {
         icmp6_send_error(m, ICMP6_TIMXCEED, ICMP6_TIMXCEED_INTRANS);
