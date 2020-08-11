@@ -44,6 +44,7 @@
 #include "hw/pci/pci_bus.h"
 #include "hw/ppc/spapr_drc.h"
 #include "sysemu/device_tree.h"
+#include "qemu/log.h"
 
 #include "hw/vfio/vfio.h"
 
@@ -717,6 +718,12 @@ static PCIINTxRoute spapr_route_intx_pin_to_irq(void *opaque, int pin)
     return route;
 }
 
+static uint64_t spapr_msi_read(void *opaque, hwaddr addr, unsigned size)
+{
+    qemu_log_mask(LOG_GUEST_ERROR, "%s: invalid access\n", __func__);
+    return 0;
+}
+
 /*
  * MSI/MSIX memory region implementation.
  * The handler handles both MSI and MSIX.
@@ -736,8 +743,11 @@ static void spapr_msi_write(void *opaque, hwaddr addr,
 }
 
 static const MemoryRegionOps spapr_msi_ops = {
-    /* There is no .read as the read result is undefined by PCI spec */
-    .read = NULL,
+    /*
+     * .read result is undefined by PCI spec.
+     * define .read method to avoid assert failure in memory_region_init_io
+     */
+    .read = spapr_msi_read,
     .write = spapr_msi_write,
     .endianness = DEVICE_LITTLE_ENDIAN
 };
