@@ -900,9 +900,9 @@ bool qht_resize(struct qht *ht, size_t n_elems)
 }
 
 /* pass @stats to qht_statistics_destroy() when done */
-void qht_statistics_init(const struct qht *ht, struct qht_stats *stats)
+void qht_statistics_init(struct qht *ht, struct qht_stats *stats)
 {
-    const struct qht_map *map;
+    struct qht_map *map;
     int i;
 
     map = atomic_rcu_read(&ht->map);
@@ -919,8 +919,8 @@ void qht_statistics_init(const struct qht *ht, struct qht_stats *stats)
     stats->head_buckets = map->n_buckets;
 
     for (i = 0; i < map->n_buckets; i++) {
-        const struct qht_bucket *head = &map->buckets[i];
-        const struct qht_bucket *b;
+        struct qht_bucket *head = &map->buckets[i];
+        struct qht_bucket *b;
         unsigned int version;
         size_t buckets;
         size_t entries;
