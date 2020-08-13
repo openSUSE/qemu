@@ -484,10 +484,10 @@ bool qht_reset_size(struct qht *ht, size_t n_elems)
 }
 
 static inline
-void *qht_do_lookup(const struct qht_bucket *head, qht_lookup_func_t func,
+void *qht_do_lookup(struct qht_bucket *head, qht_lookup_func_t func,
                     const void *userp, uint32_t hash)
 {
-    const struct qht_bucket *b = head;
+    struct qht_bucket *b = head;
     int i;
 
     do {
@@ -511,7 +511,7 @@ void *qht_do_lookup(const struct qht_bucket *head, qht_lookup_func_t func,
 }
 
 static __attribute__((noinline))
-void *qht_lookup__slowpath(const struct qht_bucket *b, qht_lookup_func_t func,
+void *qht_lookup__slowpath(struct qht_bucket *b, qht_lookup_func_t func,
                            const void *userp, uint32_t hash)
 {
     unsigned int version;
@@ -524,10 +524,10 @@ void *qht_lookup__slowpath(const struct qht_bucket *b, qht_lookup_func_t func,
     return ret;
 }
 
-void *qht_lookup_custom(const struct qht *ht, const void *userp, uint32_t hash,
+void *qht_lookup_custom(struct qht *ht, const void *userp, uint32_t hash,
                         qht_lookup_func_t func)
 {
-    const struct qht_bucket *b;
+    struct qht_bucket *b;
     const struct qht_map *map;
     unsigned int version;
     void *ret;
@@ -547,7 +547,7 @@ void *qht_lookup_custom(const struct qht *ht, const void *userp, uint32_t hash,
     return qht_lookup__slowpath(b, func, userp, hash);
 }
 
-void *qht_lookup(const struct qht *ht, const void *userp, uint32_t hash)
+void *qht_lookup(struct qht *ht, const void *userp, uint32_t hash)
 {
     return qht_lookup_custom(ht, userp, hash, ht->cmp);
 }
