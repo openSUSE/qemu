@@ -370,7 +370,7 @@ uint32_t HELPER(stsi)(CPUS390XState *env, uint64_t a0, uint64_t r0, uint64_t r1)
                            MIN(sizeof(sysib.sysib_322.vm[0].name),
                                strlen(qemu_name)));
                 strncpy((char *)sysib.sysib_322.ext_names[0], qemu_name,
-                        sizeof(sysib.sysib_322.ext_names[0]));
+                        sizeof(sysib.sysib_322.ext_names[0] - 1));
             } else {
                 ebcdic_put(sysib.sysib_322.vm[0].name, "TCGguest", 8);
                 strcpy((char *)sysib.sysib_322.ext_names[0], "TCGguest");
