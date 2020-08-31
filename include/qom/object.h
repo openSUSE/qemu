@@ -974,7 +974,7 @@ GSList *object_class_get_list_sorted(const char *implements_type,
  * Increase the reference count of a object.  A object cannot be freed as long
  * as its reference count is greater than zero.
  */
-void object_ref(Object *obj);
+void object_ref(void *obj);
 
 /**
  * object_unref:
@@ -983,7 +983,7 @@ void object_ref(Object *obj);
  * Decrease the reference count of a object.  A object cannot be freed as long
  * as its reference count is greater than zero.
  */
-void object_unref(Object *obj);
+void object_unref(void *obj);
 
 /**
  * object_property_add:
