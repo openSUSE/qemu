@@ -225,6 +225,8 @@
 #
 # @addr: Address on which to listen.
 # @tls-creds: (optional) ID of the TLS credentials object. Since 2.6
+# @max-connections: The maximum number of connections to allow at the same
+#                   time, 0 for unlimited. (since 5.2; default: 0)
 #
 # Returns: error if the server is already running.
 #
@@ -232,7 +234,8 @@
 ##
 { 'command': 'nbd-server-start',
   'data': { 'addr': 'SocketAddressLegacy',
-            '*tls-creds': 'str'} }
+            '*tls-creds': 'str',
+            '*max-connections': 'uint32' } }
 
 ##
 # @nbd-server-add:

@@ -327,6 +327,7 @@ void nbd_client_get(NBDClient *client);
 void nbd_client_put(NBDClient *client);
 
 void nbd_server_start(SocketAddress *addr, const char *tls_creds,
+                      uint32_t max_connections,
                       Error **errp);
 
 void nbd_export_bitmap(NBDExport *exp, const char *bitmap,
