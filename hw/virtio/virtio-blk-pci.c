@@ -55,7 +55,7 @@ static void virtio_blk_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
         vpci_dev->nvectors = dev->vdev.conf.num_queues + 1;
     }
 
-    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus));
+    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus), &error_abort);
     object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 

@@ -16,6 +16,7 @@
 #include "hw/ssi/ssi.h"
 #include "migration/vmstate.h"
 #include "qemu/module.h"
+#include "qapi/error.h"
 
 struct SSIBus {
     BusState parent_obj;
@@ -159,7 +160,7 @@ static int ssi_auto_connect_slave(Object *child, void *opaque)
     }
 
     cs_line = qdev_get_gpio_in_named(DEVICE(dev), SSI_GPIO_CS, 0);
-    qdev_set_parent_bus(DEVICE(dev), BUS(arg->bus));
+    qdev_set_parent_bus(DEVICE(dev), BUS(arg->bus), &error_abort);
     **arg->cs_linep = cs_line;
     (*arg->cs_linep)++;
     return 0;

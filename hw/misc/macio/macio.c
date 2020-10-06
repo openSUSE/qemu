@@ -100,7 +100,7 @@ static void macio_init_child_obj(MacIOState *s, const char *childname,
 {
     object_initialize_child(OBJECT(s), childname, child, childsize, childtype,
                             &error_abort, NULL);
-    qdev_set_parent_bus(DEVICE(child), BUS(&s->macio_bus));
+    qdev_set_parent_bus(DEVICE(child), BUS(&s->macio_bus), &error_abort);
 }
 
 static void macio_common_realize(PCIDevice *d, Error **errp)
@@ -355,7 +355,7 @@ static void macio_newworld_realize(PCIDevice *d, Error **errp)
         object_property_set_link(OBJECT(&s->pmu), OBJECT(sysbus_dev), "gpio",
                                  &error_abort);
         qdev_prop_set_bit(DEVICE(&s->pmu), "has-adb", ns->has_adb);
-        qdev_set_parent_bus(DEVICE(&s->pmu), BUS(&s->macio_bus));
+        qdev_set_parent_bus(DEVICE(&s->pmu), BUS(&s->macio_bus), &error_abort);
 
         object_property_set_bool(OBJECT(&s->pmu), true, "realized", &err);
         if (err) {
@@ -371,7 +371,7 @@ static void macio_newworld_realize(PCIDevice *d, Error **errp)
         /* CUDA */
         object_initialize_child(OBJECT(s), "cuda", &s->cuda, sizeof(s->cuda),
                                 TYPE_CUDA, &error_abort, NULL);
-        qdev_set_parent_bus(DEVICE(&s->cuda), BUS(&s->macio_bus));
+        qdev_set_parent_bus(DEVICE(&s->cuda), BUS(&s->macio_bus), &error_abort);
         qdev_prop_set_uint64(DEVICE(&s->cuda), "timebase-frequency",
                              s->frequency);
 

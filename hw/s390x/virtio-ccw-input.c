@@ -20,7 +20,7 @@ static void virtio_ccw_input_realize(VirtioCcwDevice *ccw_dev, Error **errp)
     VirtIOInputCcw *dev = VIRTIO_INPUT_CCW(ccw_dev);
     DeviceState *vdev = DEVICE(&dev->vdev);
 
-    qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus));
+    qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus), &error_abort);
     object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 

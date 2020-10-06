@@ -19,6 +19,7 @@
 #include "hw/9pfs/virtio-9p.h"
 #include "hw/qdev-properties.h"
 #include "qemu/module.h"
+#include "qapi/error.h"
 
 /*
  * virtio-9p-pci: This extends VirtioPCIProxy.
@@ -38,7 +39,7 @@ static void virtio_9p_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
     V9fsPCIState *dev = VIRTIO_9P_PCI(vpci_dev);
     DeviceState *vdev = DEVICE(&dev->vdev);
 
-    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus));
+    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus), &error_abort);
     object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 

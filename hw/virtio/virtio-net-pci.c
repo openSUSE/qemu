@@ -52,7 +52,7 @@ static void virtio_net_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
 
     virtio_net_set_netclient_name(&dev->vdev, qdev->id,
                                   object_get_typename(OBJECT(qdev)));
-    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus));
+    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus), &error_abort);
     object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 

@@ -383,7 +383,7 @@ void sysbus_init_child_obj(Object *parent, const char *childname, void *child,
 {
     object_initialize_child(parent, childname, child, childsize, childtype,
                             &error_abort, NULL);
-    qdev_set_parent_bus(DEVICE(child), sysbus_get_default());
+    qdev_set_parent_bus(DEVICE(child), sysbus_get_default(), &error_abort);
 }
 
 static void sysbus_register_types(void)

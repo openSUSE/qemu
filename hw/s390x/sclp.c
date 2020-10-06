@@ -350,7 +350,7 @@ static void sclp_realize(DeviceState *dev, Error **errp)
      * as we can't find a fitting bus via the qom tree, we have to add the
      * event facility to the sysbus, so e.g. a sclp console can be created.
      */
-    qdev_set_parent_bus(DEVICE(sclp->event_facility), sysbus_get_default());
+    qdev_set_parent_bus(DEVICE(sclp->event_facility), sysbus_get_default(), &error_abort);
 
     ret = s390_set_memory_limit(machine->maxram_size, &hw_limit);
     if (ret == -E2BIG) {

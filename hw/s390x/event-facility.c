@@ -464,12 +464,12 @@ static void init_event_facility(Object *obj)
     new = object_new(TYPE_SCLP_QUIESCE);
     object_property_add_child(obj, TYPE_SCLP_QUIESCE, new, NULL);
     object_unref(new);
-    qdev_set_parent_bus(DEVICE(new), BUS(&event_facility->sbus));
+    qdev_set_parent_bus(DEVICE(new), BUS(&event_facility->sbus), &error_abort);
 
     new = object_new(TYPE_SCLP_CPU_HOTPLUG);
     object_property_add_child(obj, TYPE_SCLP_CPU_HOTPLUG, new, NULL);
     object_unref(new);
-    qdev_set_parent_bus(DEVICE(new), BUS(&event_facility->sbus));
+    qdev_set_parent_bus(DEVICE(new), BUS(&event_facility->sbus), &error_abort);
     /* the facility will automatically realize the devices via the bus */
 }
 

@@ -15,6 +15,7 @@
 #include "hw/qdev-properties.h"
 #include "hw/virtio/vhost-user-fs.h"
 #include "virtio-pci.h"
+#include "qapi/error.h"
 
 struct VHostUserFSPCI {
     VirtIOPCIProxy parent_obj;
@@ -43,7 +44,7 @@ static void vhost_user_fs_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
         vpci_dev->nvectors = dev->vdev.conf.num_request_queues + 1;
     }
 
-    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus));
+    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus), &error_abort);
     object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 

@@ -17,6 +17,7 @@
 #include "hw/qdev-properties.h"
 #include "hw/virtio/vhost-vsock.h"
 #include "qemu/module.h"
+#include "qapi/error.h"
 
 typedef struct VHostVSockPCI VHostVSockPCI;
 
@@ -44,7 +45,7 @@ static void vhost_vsock_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
     VHostVSockPCI *dev = VHOST_VSOCK_PCI(vpci_dev);
     DeviceState *vdev = DEVICE(&dev->vdev);
 
-    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus));
+    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus), &error_abort);
     object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 

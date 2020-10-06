@@ -93,9 +93,19 @@ static void bus_add_child(BusState *bus, DeviceState *child)
                              NULL);
 }
 
-void qdev_set_parent_bus(DeviceState *dev, BusState *bus)
+static bool bus_check_address(BusState *bus, DeviceState *child, Error **errp)
+{
+    BusClass *bc = BUS_GET_CLASS(bus);
+    return !bc->check_address || bc->check_address(bus, child, errp);
+}
+
+bool qdev_set_parent_bus(DeviceState *dev, BusState *bus, Error **errp)
 {
     bool replugging = dev->parent_bus != NULL;
+
+    if (!bus_check_address(bus, dev, errp)) {
+        return false;
+    }
 
     if (replugging) {
         /* Keep a reference to the device while it's not plugged into
@@ -112,6 +122,7 @@ void qdev_set_parent_bus(DeviceState *dev, BusState *bus)
     if (replugging) {
         object_unref(OBJECT(dev));
     }
+    return true;
 }
 
 /* Create a new device.  This only initializes the device state
@@ -157,7 +168,7 @@ DeviceState *qdev_try_create(BusState *bus, const char *type)
         bus = sysbus_get_default();
     }
 
-    qdev_set_parent_bus(dev, bus);
+    qdev_set_parent_bus(dev, bus, &error_abort);
     object_unref(OBJECT(dev));
     return dev;
 }

@@ -63,7 +63,7 @@ static void q35_host_realize(DeviceState *dev, Error **errp)
                                 s->mch.address_space_io,
                                 0, TYPE_PCIE_BUS);
     PC_MACHINE(qdev_get_machine())->bus = pci->bus;
-    qdev_set_parent_bus(DEVICE(&s->mch), BUS(pci->bus));
+    qdev_set_parent_bus(DEVICE(&s->mch), BUS(pci->bus), &error_abort);
     qdev_init_nofail(DEVICE(&s->mch));
 }
 

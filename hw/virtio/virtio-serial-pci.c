@@ -21,6 +21,7 @@
 #include "hw/virtio/virtio-serial.h"
 #include "qemu/module.h"
 #include "virtio-pci.h"
+#include "qapi/error.h"
 
 typedef struct VirtIOSerialPCI VirtIOSerialPCI;
 
@@ -65,7 +66,7 @@ static void virtio_serial_pci_realize(VirtIOPCIProxy *vpci_dev, Error **errp)
         g_free(bus_name);
     }
 
-    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus));
+    qdev_set_parent_bus(vdev, BUS(&vpci_dev->bus), &error_abort);
     object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 

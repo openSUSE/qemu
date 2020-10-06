@@ -98,7 +98,7 @@ static void gpex_host_realize(DeviceState *dev, Error **errp)
                                      pci_swizzle_map_irq_fn, s, &s->io_mmio,
                                      &s->io_ioport, 0, 4, TYPE_PCIE_BUS);
 
-    qdev_set_parent_bus(DEVICE(&s->gpex_root), BUS(pci->bus));
+    qdev_set_parent_bus(DEVICE(&s->gpex_root), BUS(pci->bus), &error_abort);
     pci_bus_set_route_irq_fn(pci->bus, gpex_route_intx_pin_to_irq);
     qdev_init_nofail(DEVICE(&s->gpex_root));
 }

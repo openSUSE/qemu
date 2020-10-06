@@ -15,6 +15,7 @@
 #include "hw/qdev-properties.h"
 #include "hw/virtio/virtio-serial.h"
 #include "virtio-ccw.h"
+#include "qapi/error.h"
 
 static void virtio_ccw_serial_realize(VirtioCcwDevice *ccw_dev, Error **errp)
 {
@@ -33,7 +34,7 @@ static void virtio_ccw_serial_realize(VirtioCcwDevice *ccw_dev, Error **errp)
         g_free(bus_name);
     }
 
-    qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus));
+    qdev_set_parent_bus(vdev, BUS(&ccw_dev->bus), &error_abort);
     object_property_set_bool(OBJECT(vdev), true, "realized", errp);
 }
 

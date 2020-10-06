@@ -1548,7 +1548,7 @@ static void amdvi_realize(DeviceState *dev, Error **err)
 
     /* This device should take care of IOMMU PCI properties */
     x86_iommu->type = TYPE_AMD;
-    qdev_set_parent_bus(DEVICE(&s->pci), &bus->qbus);
+    qdev_set_parent_bus(DEVICE(&s->pci), &bus->qbus, &error_abort);
     object_property_set_bool(OBJECT(&s->pci), true, "realized", err);
     ret = pci_add_capability(&s->pci.dev, AMDVI_CAPAB_ID_SEC, 0,
                                          AMDVI_CAPAB_SIZE, err);

@@ -70,7 +70,7 @@ AUXBus *aux_init_bus(DeviceState *parent, const char *name)
     bus = AUX_BUS(qbus_create(TYPE_AUX_BUS, parent, name));
     auxtoi2c = object_new_with_props(TYPE_AUXTOI2C, OBJECT(bus), "i2c",
                                      &error_abort, NULL);
-    qdev_set_parent_bus(DEVICE(auxtoi2c), BUS(bus));
+    qdev_set_parent_bus(DEVICE(auxtoi2c), BUS(bus), &error_abort);
 
     bus->bridge = AUXTOI2C(auxtoi2c);
 
@@ -275,7 +275,7 @@ DeviceState *aux_create_slave(AUXBus *bus, const char *type)
 
     dev = DEVICE(object_new(type));
     assert(dev);
-    qdev_set_parent_bus(dev, &bus->qbus);
+    qdev_set_parent_bus(dev, &bus->qbus, &error_abort);
     return dev;
 }
 
