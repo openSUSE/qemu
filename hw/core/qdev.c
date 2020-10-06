@@ -937,7 +937,25 @@ static void device_set_realized(Object *obj, bool value, Error **errp)
             }
        }
 
+       atomic_store_release(&dev->realized, value);
+
     } else if (!value && dev->realized) {
+
+        /*
+         * Change the value so that any concurrent users are aware
+         * that the device is going to be unrealized
+         *
+         * TODO: change .realized property to enum that states
+         * each phase of the device realization/unrealization
+         */
+
+        atomic_set(&dev->realized, value);
+        /*
+         * Ensure that concurrent users see this update prior to
+         * any other changes done by unrealize.
+         */
+        smp_wmb();
+
         Error **local_errp = NULL;
         QLIST_FOREACH(bus, &dev->child_bus, sibling) {
             local_errp = local_err ? NULL : &local_err;
@@ -959,7 +977,6 @@ static void device_set_realized(Object *obj, bool value, Error **errp)
         goto fail;
     }
 
-    dev->realized = value;
     return;
 
 child_realize_fail:

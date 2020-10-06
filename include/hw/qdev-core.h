@@ -143,6 +143,8 @@ struct NamedGPIOList {
 /**
  * DeviceState:
  * @realized: Indicates whether the device has been fully constructed.
+ *            When accessed outsize big qemu lock, must be accessed with
+ *            atomic_load_acquire()
  *
  * This structure should not be accessed directly.  We declare it here
  * so that it can be embedded in individual device state structures.
