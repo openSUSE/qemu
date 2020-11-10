@@ -126,11 +126,17 @@ int scsi_cdb_length(uint8_t *buf);
 #define SG_ERR_DID_NO_CONNECT  0x01
 #define SG_ERR_DID_BUS_BUSY    0x02
 #define SG_ERR_DID_TIME_OUT    0x03
-
+#define SG_ERR_DID_BAD_TARGET  0x04
+#define SG_ERR_DID_ABORT       0x05
+#define SG_ERR_DID_ERROR       0x07
+#define SG_ERR_DID_RESET       0x08
+#define SG_ERR_DID_TRANSPORT_DISRUPTED 0x0e
+#define SG_ERR_DID_TARGET_FAILURE 0x10
+#define SG_ERR_DID_NEXUS_FAILURE 0x11
 #define SG_ERR_DRIVER_SENSE    0x08
 
-int sg_io_sense_from_errno(int errno_value, struct sg_io_hdr *io_hdr,
-                           SCSISense *sense);
+uint32_t sg_io_sense_from_errno(int errno_value, struct sg_io_hdr *io_hdr,
+                                SCSISense *sense);
 #endif
 
 #endif

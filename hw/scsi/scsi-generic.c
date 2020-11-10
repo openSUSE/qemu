@@ -72,7 +72,7 @@ static void scsi_free_request(SCSIRequest *req)
 /* Helper function for command completion.  */
 static void scsi_command_complete_noio(SCSIGenericReq *r, int ret)
 {
-    int status;
+    uint32_t status;
     SCSISense sense;
 
     assert(r->req.aiocb == NULL);
@@ -82,7 +82,7 @@ static void scsi_command_complete_noio(SCSIGenericReq *r, int ret)
         goto done;
     }
     status = sg_io_sense_from_errno(-ret, &r->io_header, &sense);
-    if (status == CHECK_CONDITION) {
+    if ((status & 0xff) == CHECK_CONDITION) {
         if (r->io_header.driver_status & SG_ERR_DRIVER_SENSE) {
             r->req.sense_len = r->io_header.sb_len_wr;
         } else {
@@ -90,7 +90,8 @@ static void scsi_command_complete_noio(SCSIGenericReq *r, int ret)
         }
     }
 
-    trace_scsi_generic_command_complete_noio(r, r->req.tag, status);
+    trace_scsi_generic_command_complete_noio(r, r->req.tag, status & 0xff,
+                                             (status >> 8) & 0xff);
 
     scsi_req_complete(&r->req, status);
 done:
@@ -235,6 +236,7 @@ static int scsi_generic_emulate_block_limits(SCSIGenericReq *r, SCSIDevice *s)
     * the hardware in scsi_command_complete_noio. Clean
     * up the io_header to avoid reporting it.
     */
+    r->io_header.host_status = 0;
     r->io_header.driver_status = 0;
     r->io_header.status = 0;
 
