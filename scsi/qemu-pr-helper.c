@@ -133,7 +133,7 @@ static int do_sgio_worker(void *opaque)
     PRHelperSGIOData *data = opaque;
     struct sg_io_hdr io_hdr;
     int ret;
-    int status;
+    uint32_t status;
     SCSISense sense_code;
 
     memset(data->sense, 0, PR_HELPER_SENSE_SIZE);
@@ -150,13 +150,13 @@ static int do_sgio_worker(void *opaque)
     ret = ioctl(data->fd, SG_IO, &io_hdr);
     status = sg_io_sense_from_errno(ret < 0 ? errno : 0, &io_hdr,
                                     &sense_code);
-    if (status == GOOD) {
+    if ((status & 0xff) == GOOD) {
         data->sz -= io_hdr.resid;
     } else {
         data->sz = 0;
     }
 
-    if (status == CHECK_CONDITION &&
+    if ((status & 0xff) == CHECK_CONDITION &&
         !(io_hdr.driver_status & SG_ERR_DRIVER_SENSE)) {
         scsi_build_sense(data->sense, sense_code);
     }

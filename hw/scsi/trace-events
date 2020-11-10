@@ -329,7 +329,7 @@ scsi_disk_new_request(uint32_t lun, uint32_t tag, const char *line) "Command: lu
 scsi_disk_aio_sgio_command(uint32_t tag, uint8_t cmd, uint64_t lba, int len, uint32_t timeout) "disk aio sgio: tag=0x%x cmd 0x%x (sector %" PRId64 ", count %d) timeout %u"
 
 # hw/scsi/scsi-generic.c
-scsi_generic_command_complete_noio(void *req, uint32_t tag, int statuc) "Command complete %p tag=0x%x status=%d"
+scsi_generic_command_complete_noio(void *req, uint32_t tag, uint8_t status, uint8_t host_status) "Command complete %p tag=0x%x status=0x%x host_status=0x%x"
 scsi_generic_read_complete(uint32_t tag, int len) "Data ready tag=0x%x len=%d"
 scsi_generic_read_data(uint32_t tag, uint32_t timeout) "scsi_read_data tag=0x%x timeout %u"
 scsi_generic_write_complete(int ret) "scsi_write_complete() ret = %d"

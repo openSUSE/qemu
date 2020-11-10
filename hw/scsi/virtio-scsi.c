@@ -486,9 +486,46 @@ static void virtio_scsi_command_complete(SCSIRequest *r, uint32_t status,
         return;
     }
 
-    req->resp.cmd.response = VIRTIO_SCSI_S_OK;
-    req->resp.cmd.status = status;
-    if (req->resp.cmd.status == GOOD) {
+    switch ((status >> 8) & 0xff) {
+    case SG_ERR_DID_OK:
+        req->resp.cmd.response = VIRTIO_SCSI_S_OK;
+        break;
+    case SG_ERR_DID_ERROR:
+        req->resp.cmd.response = VIRTIO_SCSI_S_OVERRUN;
+        break;
+    case SG_ERR_DID_NO_CONNECT:
+        req->resp.cmd.response = VIRTIO_SCSI_S_INCORRECT_LUN;
+        break;
+    case SG_ERR_DID_ABORT:
+    case SG_ERR_DID_TIME_OUT:
+        req->resp.cmd.response = VIRTIO_SCSI_S_ABORTED;
+        break;
+    case SG_ERR_DID_BAD_TARGET:
+        req->resp.cmd.response = VIRTIO_SCSI_S_BAD_TARGET;
+        break;
+    case SG_ERR_DID_RESET:
+        req->resp.cmd.response = VIRTIO_SCSI_S_RESET;
+        break;
+    case SG_ERR_DID_BUS_BUSY:
+        req->resp.cmd.response = VIRTIO_SCSI_S_BUSY;
+        break;
+    case SG_ERR_DID_TRANSPORT_DISRUPTED:
+        req->resp.cmd.response = VIRTIO_SCSI_S_TRANSPORT_FAILURE;
+        break;
+    case SG_ERR_DID_TARGET_FAILURE:
+        req->resp.cmd.response = VIRTIO_SCSI_S_TARGET_FAILURE;
+        break;
+    case SG_ERR_DID_NEXUS_FAILURE:
+        req->resp.cmd.response = VIRTIO_SCSI_S_NEXUS_FAILURE;
+        break;
+    default:
+        req->resp.cmd.response = VIRTIO_SCSI_S_FAILURE;
+        break;
+    }
+
+    req->resp.cmd.status = (status & 0xff);
+    if (req->resp.cmd.status == GOOD &&
+        req->resp.cmd.response == VIRTIO_SCSI_S_OK) {
         req->resp.cmd.resid = virtio_tswap32(vdev, resid);
     } else {
         req->resp.cmd.resid = 0;
