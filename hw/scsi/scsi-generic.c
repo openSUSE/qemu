@@ -122,6 +122,8 @@ static int execute_command(BlockBackend *blk,
     r->io_header.mx_sb_len = sizeof(r->req.sense);
     r->io_header.sbp = r->req.sense;
     r->io_header.timeout = s->io_timeout;
+    if (r->io_header.timeout < 5000)
+        r->io_header.timeout = 5000;
     r->io_header.usr_ptr = r;
     r->io_header.flags |= SG_FLAG_DIRECT_IO;
 
@@ -516,6 +518,8 @@ int scsi_SG_IO_FROM_DEV(BlockBackend *blk, uint8_t *cmd, uint8_t cmd_size,
     io_header.mx_sb_len = sizeof(sensebuf);
     io_header.sbp = sensebuf;
     io_header.timeout = timeout;
+    if (io_header.timeout < 5000)
+        io_header.timeout = 5000;
 
     trace_scsi_generic_ioctl_sgio_command(cmd[0], io_header.timeout);
     ret = blk_ioctl(blk, SG_IO, &io_header);

@@ -45,7 +45,7 @@
 
 #define DEFAULT_DISCARD_GRANULARITY (4 * KiB)
 #define DEFAULT_MAX_UNMAP_SIZE      (1 * GiB)
-#define DEFAULT_IO_TIMEOUT          UINT_MAX    /* Infinity */
+#define DEFAULT_IO_TIMEOUT          30000       /* 30 seconds */
 #define DEFAULT_MAX_IO_SIZE         INT_MAX     /* 2 GB - 1 block */
 
 #define TYPE_SCSI_DISK_BASE         "scsi-disk-base"
@@ -2694,6 +2694,8 @@ static BlockAIOCB *scsi_block_do_sgio(SCSIBlockReq *req,
     io_header->mx_sb_len = sizeof(r->req.sense);
     io_header->sbp = r->req.sense;
     io_header->timeout = s->qdev.io_timeout;
+    if (io_header->timeout < 5000)
+            io_header->timeout = 5000;
     io_header->usr_ptr = r;
     io_header->flags |= SG_FLAG_DIRECT_IO;
     trace_scsi_disk_aio_sgio_command(r->req.tag, req->cdb[0], lba,
