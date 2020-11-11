@@ -251,7 +251,10 @@ static void scsi_read_complete(void * opaque, int ret)
 
     aio_context_acquire(blk_get_aio_context(s->conf.blk));
 
-    if (ret || r->req.io_canceled) {
+    if (ret || r->req.io_canceled ||
+        r->io_header.status ||
+        r->io_header.driver_status ||
+        r->io_header.host_status) {
         scsi_command_complete_noio(r, ret);
         goto done;
     }
@@ -361,7 +364,10 @@ static void scsi_write_complete(void * opaque, int ret)
 
     aio_context_acquire(blk_get_aio_context(s->conf.blk));
 
-    if (ret || r->req.io_canceled) {
+    if (ret || r->req.io_canceled ||
+        r->io_header.status ||
+        r->io_header.driver_status ||
+        r->io_header.host_status) {
         scsi_command_complete_noio(r, ret);
         goto done;
     }
