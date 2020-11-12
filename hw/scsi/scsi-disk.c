@@ -431,6 +431,8 @@ static bool scsi_handle_rw_error(SCSIDiskReq *r, int error, bool acct_failed)
     BlockErrorAction action = blk_get_error_action(s->qdev.conf.blk,
                                                    is_read, error);
 
+    trace_scsi_disk_rw_error(r->req.tag, (r->status & 0xff), (r->status >> 8),
+                             error, action);
     if (action == BLOCK_ERROR_ACTION_REPORT) {
         if (acct_failed) {
             block_acct_failed(blk_get_stats(s->qdev.conf.blk), &r->acct);
