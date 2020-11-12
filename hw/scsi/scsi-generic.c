@@ -125,6 +125,8 @@ static int execute_command(BlockBackend *blk,
     r->io_header.usr_ptr = r;
     r->io_header.flags |= SG_FLAG_DIRECT_IO;
 
+    trace_scsi_generic_aio_sgio_command(r->req.tag, r->req.cmd.buf[0],
+                                        r->io_header.timeout);
     r->req.aiocb = blk_aio_ioctl(blk, SG_IO, &r->io_header, complete, r);
     if (r->req.aiocb == NULL) {
         return -EIO;
@@ -327,7 +329,7 @@ static void scsi_read_data(SCSIRequest *req)
     SCSIDevice *s = r->req.dev;
     int ret;
 
-    trace_scsi_generic_read_data(req->tag);
+    trace_scsi_generic_read_data(req->tag, s->io_timeout);
 
     /* The request is used as the AIO opaque value, so add a ref.  */
     scsi_req_ref(&r->req);
@@ -380,7 +382,7 @@ static void scsi_write_data(SCSIRequest *req)
     SCSIDevice *s = r->req.dev;
     int ret;
 
-    trace_scsi_generic_write_data(req->tag);
+    trace_scsi_generic_write_data(req->tag, s->io_timeout);
     if (r->len == 0) {
         r->len = r->buflen;
         scsi_req_data(&r->req, r->len);
@@ -515,8 +517,12 @@ int scsi_SG_IO_FROM_DEV(BlockBackend *blk, uint8_t *cmd, uint8_t cmd_size,
     io_header.sbp = sensebuf;
     io_header.timeout = timeout;
 
+    trace_scsi_generic_ioctl_sgio_command(cmd[0], io_header.timeout);
     ret = blk_ioctl(blk, SG_IO, &io_header);
-    if (ret < 0 || io_header.driver_status || io_header.host_status) {
+    if (ret < 0 || io_header.status ||
+        io_header.driver_status || io_header.host_status) {
+        trace_scsi_generic_ioctl_sgio_done(cmd[0], ret, io_header.status,
+                                           io_header.host_status);
         return -1;
     }
     return 0;
