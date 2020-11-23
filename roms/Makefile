@@ -191,7 +191,7 @@ MESON = meson
 NINJA = ninja
 qboot:
 	mkdir -p qboot/build
-	$(MESON) setup $(if $(wildcard qboot/build/meson-private),--wipe,) qboot qboot/build
+	$(MESON) setup $(if $(x86_64_cross_prefix),--cross-file qboot/cross.ini,) $(if $(wildcard qboot/build/meson-private),--wipe,) qboot qboot/build
 	$(NINJA) -C qboot/build
 	cp qboot/build/bios.bin ../pc-bios/qboot.rom
 
