@@ -122,6 +122,10 @@ void ncsi_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
     uint32_t checksum;
     uint32_t *pchecksum;
 
+    if (pkt_len < ETH_HLEN + sizeof(struct ncsi_pkt_hdr)) {
+        return; /* packet too short */
+    }
+
     memset(ncsi_reply, 0, sizeof(ncsi_reply));
 
     memset(reh->h_dest, 0xff, ETH_ALEN);

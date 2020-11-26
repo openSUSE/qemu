@@ -793,6 +793,10 @@ static void arp_input(Slirp *slirp, const uint8_t *pkt, int pkt_len)
         return;
     }
 
+    if (pkt_len < ETH_HLEN + sizeof(struct slirp_arphdr)) {
+        return; /* packet too short */
+    }
+
     ar_op = ntohs(ah->ar_op);
     switch(ar_op) {
     case ARPOP_REQUEST:
