@@ -307,6 +307,8 @@ void ide_atapi_cmd_reply_end(IDEState *s)
             s->packet_transfer_size -= size;
             s->elementary_transfer_size -= size;
             s->io_buffer_index += size;
+            assert(size <= s->io_buffer_total_len);
+            assert(s->io_buffer_index <= s->io_buffer_total_len);
             ide_transfer_start(s, s->io_buffer + s->io_buffer_index - size,
                                size, ide_atapi_cmd_reply_end);
             ide_set_irq(s->bus);
