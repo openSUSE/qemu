@@ -2045,7 +2045,6 @@ EOF
   # check we support --no-pie first...
   if compile_prog "-Werror -fno-pie" "-no-pie"; then
     CFLAGS_NOPIE="-fno-pie"
-    LDFLAGS_NOPIE="-nopie"
   fi
 
   if compile_prog "-fPIE -DPIE" "-pie"; then
@@ -7515,7 +7514,6 @@ if test "$sparse" = "yes" ; then
   echo "QEMU_CFLAGS  += -Wbitwise -Wno-transparent-union -Wno-old-initializer -Wno-non-pointer-null" >> $config_host_mak
 fi
 echo "LDFLAGS=$LDFLAGS" >> $config_host_mak
-echo "LDFLAGS_NOPIE=$LDFLAGS_NOPIE" >> $config_host_mak
 echo "QEMU_LDFLAGS=$QEMU_LDFLAGS" >> $config_host_mak
 echo "LD_REL_FLAGS=$LD_REL_FLAGS" >> $config_host_mak
 echo "LD_I386_EMULATION=$ld_i386_emulation" >> $config_host_mak
