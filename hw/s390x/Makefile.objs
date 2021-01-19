@@ -35,3 +35,4 @@ obj-$(CONFIG_KVM) += pv.o
 obj-y += s390-ccw.o
 obj-y += ap-device.o
 obj-y += ap-bridge.o
+obj-$(CONFIG_VFIO) += s390-pci-vfio.o
