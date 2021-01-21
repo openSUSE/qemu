@@ -129,6 +129,23 @@ ObjectPropertyInfoList *qmp_device_list_properties(const char *typename,
     ObjectPropertyIterator iter;
     ObjectPropertyInfoList *prop_list = NULL;
 
+#ifdef CONFIG_MODULES
+    if (!strcmp(typename, "virtio-gpu-pci") || !strcmp(typename, "virtio-gpu-ccw")) {
+        if (module_load_check("virtio-gpu-device")) {
+            ObjectPropertyInfo *info;
+            info = g_new0(ObjectPropertyInfo, 1);
+            info->name = g_strdup("dummy");
+            info->type = g_strdup("dummy");
+            info->has_description = false;
+            info->description = NULL;
+            info->default_value = 0;
+            info->has_default_value = 0;
+            QAPI_LIST_PREPEND(prop_list, info);
+            return prop_list;
+        }
+    }
+#endif
+
     klass = module_object_class_by_name(typename);
     if (klass == NULL) {
         error_set(errp, ERROR_CLASS_DEVICE_NOT_FOUND,

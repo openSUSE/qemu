@@ -274,6 +274,13 @@ int qdev_device_help(QemuOpts *opts)
     int i;
 
     driver = qemu_opt_get(opts, "driver");
+#ifdef CONFIG_MODULES
+    if (driver && !strcmp(driver, "virtio-gpu")) {
+        if (module_load_check("virtio-gpu-device")) {
+            return 0;
+        }
+    }
+#endif
     if (driver && is_help_option(driver)) {
         qdev_print_devinfos(false);
         return 1;
@@ -646,6 +653,14 @@ DeviceState *qdev_device_add(QemuOpts *opts, Error **errp)
         return NULL;
     }
 
+#ifdef CONFIG_MODULES
+    if (!strcmp(driver, "virtio-gpu-pci") || !strcmp(driver, "virtio-gpu-ccw")) {
+        if (module_load_check("virtio-gpu-device")) {
+            error_setg(errp, "loadable module for %s not available!", driver);
+            return NULL;
+        }
+    }
+#endif
     /* create device */
     dev = qdev_new(driver);
 
