@@ -516,6 +516,18 @@ static void object_initialize_with_type(Object *obj, size_t size, TypeImpl *type
     object_post_init_with_type(obj, type);
 }
 
+#ifdef CONFIG_MODULES
+int module_load_check(const char *name)
+{
+    TypeImpl *type = type_get_by_name(name);
+    if (!type) {
+        module_load_qom_one(name);
+        type = type_get_by_name(name);
+    }
+    return type == NULL;
+}
+#endif
+
 void object_initialize(void *data, size_t size, const char *typename)
 {
     TypeImpl *type = type_get_by_name(typename);
