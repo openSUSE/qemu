@@ -237,6 +237,12 @@ static bool type_is_ancestor(TypeImpl *type, TypeImpl *target_type)
             return true;
         }
 
+
+        if (type->parent && !strcmp(type->parent, "chardev-spiceport")) {
+            if (!type->parent_type && !type_get_by_name(type->parent)) {
+                return false;
+            }
+        }
         type = type_get_parent(type);
     }
 
