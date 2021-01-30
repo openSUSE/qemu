@@ -10,6 +10,7 @@ Welcome to QEMU's documentation!
    :maxdepth: 2
    :caption: Contents:
 
+   supported.rst
    about/index
    system/index
    user/index
