@@ -507,7 +507,6 @@ static void virtio_scsi_command_complete(SCSIRequest *r, uint32_t status,
         req->resp.cmd.response = VIRTIO_SCSI_S_INCORRECT_LUN;
         break;
     case SG_ERR_DID_ABORT:
-    case SG_ERR_DID_TIME_OUT:
         req->resp.cmd.response = VIRTIO_SCSI_S_ABORTED;
         break;
     case SG_ERR_DID_BAD_TARGET:
@@ -517,6 +516,7 @@ static void virtio_scsi_command_complete(SCSIRequest *r, uint32_t status,
         req->resp.cmd.response = VIRTIO_SCSI_S_RESET;
         break;
     case SG_ERR_DID_BUS_BUSY:
+    case SG_ERR_DID_TIME_OUT:
         req->resp.cmd.response = VIRTIO_SCSI_S_BUSY;
         break;
     case SG_ERR_DID_TRANSPORT_DISRUPTED:
