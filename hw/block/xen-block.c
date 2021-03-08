@@ -1009,6 +1009,15 @@ static void xen_block_device_destroy(XenBackendInstance *backend,
 
     object_unparent(OBJECT(xendev));
 
+    /*
+     * Drain all pending RCU callbacks as object_unparent() frees `xendev'
+     * in a RCU callback.
+     * And due to the property "drive" still existing in `xendev', we
+     * can't destroy the XenBlockDrive associated with `xendev' with
+     * xen_block_drive_destroy() below.
+     */
+    drain_call_rcu();
+
     if (iothread) {
         Error *local_err = NULL;
 
