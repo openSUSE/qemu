@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include "hw.h"
 #include "serial.h"
+#include "qemu/log.h"
 #include "ui/console.h"
 #include "devices.h"
 #include "sysbus.h"
