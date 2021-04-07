@@ -365,6 +365,11 @@ static void do_dma_pdma_cb(ESPState *s)
     s->dma_left -= len;
     s->async_buf += len;
     s->async_len -= len;
+
+    if (!s->current_req) {
+        return;
+    }
+
     if (to_device) {
         s->ti_size += len;
     } else {
@@ -413,6 +418,9 @@ static void esp_do_dma(ESPState *s)
         s->cmdlen = 0;
         s->do_cmd = 0;
         do_cmd(s, s->cmdbuf);
+        return;
+    }
+    if (!s->current_req) {
         return;
     }
     if (s->async_len == 0) {
