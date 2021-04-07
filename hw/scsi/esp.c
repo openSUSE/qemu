@@ -253,6 +253,9 @@ static void esp_do_dma(ESPState *s)
         s->dma_memory_read(s->dma_opaque, &s->cmdbuf[s->cmdlen], len);
         return;
     }
+    if (!s->current_req) {
+        return;
+    }
     if (s->async_len == 0) {
         /* Defer until data is available.  */
         return;
