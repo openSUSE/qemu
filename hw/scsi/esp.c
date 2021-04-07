@@ -93,6 +93,7 @@ void esp_request_cancelled(SCSIRequest *req)
         scsi_req_unref(s->current_req);
         s->current_req = NULL;
         s->current_dev = NULL;
+        s->async_len = 0;
     }
 }
 
@@ -133,7 +134,6 @@ static int get_cmd_cb(ESPState *s)
     if (s->current_req) {
         /* Started a new command before the old one finished.  Cancel it.  */
         scsi_req_cancel(s->current_req);
-        s->async_len = 0;
     }
 
     s->current_dev = scsi_device_find(&s->bus, 0, target, 0);
