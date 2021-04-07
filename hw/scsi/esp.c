@@ -246,8 +246,10 @@ static void handle_satn(ESPState *s)
     }
     s->pdma_cb = satn_pdma_cb;
     len = get_cmd(s, buf, sizeof(buf));
-    if (len)
+    if (len) {
+        s->do_cmd = 0;
         do_cmd(s, buf);
+    }
 }
 
 static void s_without_satn_pdma_cb(ESPState *s)
@@ -272,6 +274,7 @@ static void handle_s_without_atn(ESPState *s)
     s->pdma_cb = s_without_satn_pdma_cb;
     len = get_cmd(s, buf, sizeof(buf));
     if (len) {
+        s->do_cmd = 0;
         do_busid_cmd(s, buf, 0);
     }
 }
