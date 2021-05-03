@@ -658,7 +658,7 @@ static void usb_hid_handle_data(USBDevice *dev, USBPacket *p)
 {
     USBHIDState *us = USB_HID(dev);
     HIDState *hs = &us->hid;
-    uint8_t buf[p->iov.size];
+    uint8_t *buf = g_malloc(p->iov.size);
     int len = 0;
 
     switch (p->pid) {
@@ -669,6 +669,7 @@ static void usb_hid_handle_data(USBDevice *dev, USBPacket *p)
             }
             if (!hid_has_events(hs)) {
                 p->status = USB_RET_NAK;
+                g_free(buf);
                 return;
             }
             hid_set_next_idle(hs);
@@ -688,6 +689,8 @@ static void usb_hid_handle_data(USBDevice *dev, USBPacket *p)
         p->status = USB_RET_STALL;
         break;
     }
+
+    g_free(buf);
 }
 
 static void usb_hid_handle_destroy(USBDevice *dev)

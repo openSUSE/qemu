@@ -304,7 +304,7 @@ static void usb_wacom_handle_control(USBDevice *dev, USBPacket *p,
 static void usb_wacom_handle_data(USBDevice *dev, USBPacket *p)
 {
     USBWacomState *s = (USBWacomState *) dev;
-    uint8_t buf[p->iov.size];
+    uint8_t *buf = g_malloc(p->iov.size);
     int len = 0;
 
     switch (p->pid) {
@@ -312,6 +312,7 @@ static void usb_wacom_handle_data(USBDevice *dev, USBPacket *p)
         if (p->ep->nr == 1) {
             if (!(s->changed || s->idle)) {
                 p->status = USB_RET_NAK;
+                g_free(buf);
                 return;
             }
             s->changed = 0;
@@ -327,6 +328,8 @@ static void usb_wacom_handle_data(USBDevice *dev, USBPacket *p)
     default:
         p->status = USB_RET_STALL;
     }
+
+    g_free(buf);
 }
 
 static void usb_wacom_handle_destroy(USBDevice *dev)
