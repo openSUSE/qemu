@@ -321,6 +321,9 @@ static void *spapr_create_fdt_skel(hwaddr initrd_base,
                                    uint32_t epow_irq)
 {
     void *fdt;
+    sPAPRMachineClass *smc = SPAPR_MACHINE_GET_CLASS(qdev_get_machine());
+    MachineState *machine = MACHINE(qdev_get_machine());
+    sPAPRMachineState *spapr = SPAPR_MACHINE(machine);
     uint32_t start_prop = cpu_to_be32(initrd_base);
     uint32_t end_prop = cpu_to_be32(initrd_base + initrd_size);
     GString *hypertas = g_string_sized_new(256);
@@ -362,11 +365,16 @@ static void *spapr_create_fdt_skel(hwaddr initrd_base,
      * Add info to guest to indentify which host is it being run on
      * and what is the uuid of the guest
      */
-    if (kvmppc_get_host_model(&buf)) {
+    if (spapr->host_model) {
+        _FDT((fdt_property_string(fdt, "host-model", spapr->host_model)));
+    } else if (smc->broken_host_serial_model && kvmppc_get_host_model(&buf)) {
         _FDT((fdt_property_string(fdt, "host-model", buf)));
         g_free(buf);
     }
-    if (kvmppc_get_host_serial(&buf)) {
+
+    if (spapr->host_serial) {
+        _FDT((fdt_property_string(fdt, "host-serial", spapr->host_serial)));
+    } else if (smc->broken_host_serial_model && kvmppc_get_host_serial(&buf)) {
         _FDT((fdt_property_string(fdt, "host-serial", buf)));
         g_free(buf);
     }
@@ -2087,6 +2095,37 @@ static void spapr_set_kvm_type(Object *obj, const char *value, Error **errp)
     spapr->kvm_type = g_strdup(value);
 }
 
+static char *spapr_get_host_model(Object *obj, Error **errp)
+{
+    sPAPRMachineState *spapr = SPAPR_MACHINE(obj);
+
+    return g_strdup(spapr->host_model);
+}
+
+static void spapr_set_host_model(Object *obj, const char *value, Error **errp)
+{
+    sPAPRMachineState *spapr = SPAPR_MACHINE(obj);
+
+    g_free(spapr->host_model);
+    spapr->host_model = g_strdup(value);
+}
+
+static char *spapr_get_host_serial(Object *obj, Error **errp)
+{
+    sPAPRMachineState *spapr = SPAPR_MACHINE(obj);
+
+    return g_strdup(spapr->host_serial);
+}
+
+static void spapr_set_host_serial(Object *obj, const char *value, Error **errp)
+{
+    sPAPRMachineState *spapr = SPAPR_MACHINE(obj);
+
+    g_free(spapr->host_serial);
+    spapr->host_serial = g_strdup(value);
+}
+
+
 static void spapr_machine_initfn(Object *obj)
 {
     sPAPRMachineState *spapr = SPAPR_MACHINE(obj);
@@ -2097,6 +2136,17 @@ static void spapr_machine_initfn(Object *obj)
     object_property_set_description(obj, "kvm-type",
                                     "Specifies the KVM virtualization mode (HV, PR)",
                                     NULL);
+
+    object_property_add_str(obj, "host-model",
+        spapr_get_host_model, spapr_set_host_model,
+        &error_abort);
+    object_property_set_description(obj, "host-model",
+        "Host model to advertise in guest device tree", &error_abort);
+    object_property_add_str(obj, "host-serial",
+        spapr_get_host_serial, spapr_set_host_serial,
+        &error_abort);
+    object_property_set_description(obj, "host-serial",
+        "Host serial number to advertise in guest device tree", &error_abort);
 }
 
 static void spapr_machine_finalizefn(Object *obj)
@@ -2378,6 +2428,7 @@ static void spapr_machine_2_5_class_options(MachineClass *mc)
 
     spapr_machine_2_6_class_options(mc);
     smc->use_ohci_by_default = true;
+    smc->broken_host_serial_model = true;
     SET_MACHINE_COMPAT(mc, SPAPR_COMPAT_2_5);
 }
 

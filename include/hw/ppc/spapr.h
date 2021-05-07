@@ -37,6 +37,7 @@ struct sPAPRMachineClass {
     /*< public >*/
     bool dr_lmb_enabled;       /* enable dynamic-reconfig/hotplug of LMBs */
     bool use_ohci_by_default;  /* use USB-OHCI instead of XHCI */
+    bool broken_host_serial_model; /* present real host info to the guest */
 };
 
 /**
@@ -78,6 +79,8 @@ struct sPAPRMachineState {
 
     /*< public >*/
     char *kvm_type;
+    char *host_model;
+    char *host_serial;
     MemoryHotplugState hotplug_memory;
 };
 
