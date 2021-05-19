@@ -185,6 +185,7 @@ Usage: qemu-binfmt-conf.sh [--qemu-path PATH][--debian][--systemd CPU]
        --help:          display this usage
        --qemu-path:     set path to qemu interpreter ($QEMU_PATH)
        --qemu-suffix:   add a suffix to the default interpreter name
+                        (default: "-binfmt")
        --debian:        don't write into /proc,
                         instead generate update-binfmts templates
        --systemd:       don't write into /proc,
@@ -316,9 +317,9 @@ qemu_set_binfmts() {
             continue
         fi
 
-        qemu="$QEMU_PATH/qemu-$cpu-binfmt"
+        qemu="$QEMU_PATH/qemu-$cpu"
         if [ "$cpu" = "i486" ] ; then
-            qemu="$QEMU_PATH/qemu-i386-binfmt"
+            qemu="$QEMU_PATH/qemu-i386"
         fi
 
         qemu="$qemu$QEMU_SUFFIX"
@@ -338,7 +339,7 @@ QEMU_PATH=/usr/bin
 CREDENTIAL=no
 PERSISTENT=no
 PRESERVE_ARG0=no
-QEMU_SUFFIX=""
+QEMU_SUFFIX="-binfmt"
 
 options=$(getopt -o ds:Q:S:e:hc:p:g: -l debian,systemd:,qemu-path:,qemu-suffix:,exportdir:,help,credential:,persistent:,preserve-argv0: -- "$@")
 eval set -- "$options"
