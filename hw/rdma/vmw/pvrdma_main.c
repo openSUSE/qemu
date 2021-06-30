@@ -71,6 +71,11 @@ static int init_dev_ring(PvrdmaRing *ring, struct pvrdma_ring **ring_state,
     pr_dbg("Initializing device ring %s\n", name);
     pr_dbg("pdir_dma=0x%llx\n", (long long unsigned int)dir_addr);
     pr_dbg("num_pages=%d\n", num_pages);
+    if (!num_pages) {
+        pr_err("Ring pages count must be strictly positive\n");
+        return -EINVAL;
+    }
+
     dir = rdma_pci_dma_map(pci_dev, dir_addr, TARGET_PAGE_SIZE);
     if (!dir) {
         pr_err("Failed to map to page directory\n");
