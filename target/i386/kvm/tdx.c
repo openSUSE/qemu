@@ -18,6 +18,7 @@
 #include "standard-headers/asm-x86/kvm_para.h"
 #include "sysemu/kvm.h"
 #include "sysemu/sysemu.h"
+#include "sysemu/tdx.h"
 
 #include "exec/address-spaces.h"
 #include "exec/ramblock.h"
@@ -1745,4 +1746,12 @@ void tdx_handle_exit(X86CPU *cpu, struct kvm_tdx_exit *tdx_exit)
         warn_report("unknown tdx exit type 0x%x", tdx_exit->type);
         break;
     }
+}
+
+bool tdx_debug_enabled(void)
+{
+    if (!is_tdx_vm())
+        return false;
+
+    return tdx_guest->attributes & TDX_TD_ATTRIBUTES_DEBUG;
 }
