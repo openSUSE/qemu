@@ -112,6 +112,8 @@ struct KVMState
     struct KVMDirtyRingReaper reaper;
     NotifyVmexitOption notify_vmexit;
     uint32_t notify_window;
+
+    set_memory_region_debug_ops set_mr_debug_ops;
 };
 
 void kvm_memory_listener_register(KVMState *s, KVMMemoryListener *kml,
