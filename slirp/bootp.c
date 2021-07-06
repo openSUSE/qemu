@@ -98,21 +98,21 @@ static BOOTPClient *find_addr(Slirp *slirp, struct in_addr *paddr,
     return bc;
 }
 
-static void dhcp_decode(const struct bootp_t *bp, int *pmsg_type,
+static void dhcp_decode(const struct bootp_t *bp,
+                        const uint8_t *bp_end, int *pmsg_type,
                         struct in_addr *preq_addr)
 {
-    const uint8_t *p, *p_end;
+    const uint8_t *p;
     int len, tag;
 
     *pmsg_type = 0;
     preq_addr->s_addr = htonl(0L);
 
     p = bp->bp_vend;
-    p_end = p + DHCP_OPT_LEN;
     if (memcmp(p, rfc1533_cookie, 4) != 0)
         return;
     p += 4;
-    while (p < p_end) {
+    while (p < bp_end) {
         tag = p[0];
         if (tag == RFC1533_PAD) {
             p++;
@@ -120,10 +120,10 @@ static void dhcp_decode(const struct bootp_t *bp, int *pmsg_type,
             break;
         } else {
             p++;
-            if (p >= p_end)
+            if (p >= bp_end)
                 break;
             len = *p++;
-            if (p + len > p_end) {
+            if (p + len > bp_end) {
                 break;
             }
             DPRINTF("dhcp: tag=%d len=%d\n", tag, len);
@@ -150,7 +150,9 @@ static void dhcp_decode(const struct bootp_t *bp, int *pmsg_type,
     }
 }
 
-static void bootp_reply(Slirp *slirp, const struct bootp_t *bp)
+static void bootp_reply(Slirp *slirp,
+                        const struct bootp_t *bp,
+                        const uint8_t *bp_end)
 {
     BOOTPClient *bc = NULL;
     struct mbuf *m;
@@ -163,7 +165,7 @@ static void bootp_reply(Slirp *slirp, const struct bootp_t *bp)
     uint8_t client_ethaddr[ETH_ALEN];
 
     /* extract exact DHCP msg type */
-    dhcp_decode(bp, &dhcp_msg_type, &preq_addr);
+    dhcp_decode(bp, bp_end, &dhcp_msg_type, &preq_addr);
     DPRINTF("bootp packet op=%d msgtype=%d", bp->bp_op, dhcp_msg_type);
     if (preq_addr.s_addr != htonl(0L))
         DPRINTF(" req_addr=%08" PRIx32 "\n", ntohl(preq_addr.s_addr));
@@ -185,9 +187,10 @@ static void bootp_reply(Slirp *slirp, const struct bootp_t *bp)
         return;
     }
     m->m_data += IF_MAXLINKHDR;
+    m_inc(m, sizeof(struct bootp_t) + DHCP_OPT_LEN);
     rbp = (struct bootp_t *)m->m_data;
     m->m_data += sizeof(struct udpiphdr);
-    memset(rbp, 0, sizeof(struct bootp_t));
+    memset(rbp, 0, sizeof(struct bootp_t) + DHCP_OPT_LEN);
 
     if (dhcp_msg_type == DHCPDISCOVER) {
         if (preq_addr.s_addr != htonl(0L)) {
@@ -241,7 +244,7 @@ static void bootp_reply(Slirp *slirp, const struct bootp_t *bp)
     rbp->bp_siaddr = saddr.sin_addr; /* Server IP address */
 
     q = rbp->bp_vend;
-    end = (uint8_t *)&rbp[1];
+    end = rbp->bp_vend + DHCP_OPT_LEN;
     memcpy(q, rfc1533_cookie, 4);
     q += 4;
 
@@ -370,6 +373,6 @@ void bootp_input(struct mbuf *m)
     struct bootp_t *bp = mtod(m, struct bootp_t *);
 
     if (bp->bp_op == BOOTP_REQUEST) {
-        bootp_reply(m->slirp, bp);
+        bootp_reply(m->slirp, bp, m_end(m));
     }
 }

@@ -247,3 +247,8 @@ void *mtod_check(struct mbuf *m, size_t len)
 
     return NULL;
 }
+
+void *m_end(struct mbuf *m)
+{
+    return m->m_data + m->m_len;
+}
