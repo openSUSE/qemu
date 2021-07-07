@@ -29,7 +29,10 @@ void udp6_input(struct mbuf *m)
     ip = mtod(m, struct ip6 *);
     m->m_len -= iphlen;
     m->m_data += iphlen;
-    uh = mtod(m, struct udphdr *);
+    uh = mtod_check(m, sizeof(struct udphdr));
+    if (uh == NULL) {
+        goto bad;
+    }
     m->m_len += iphlen;
     m->m_data -= iphlen;
 
