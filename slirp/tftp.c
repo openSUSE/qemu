@@ -439,7 +439,11 @@ static void tftp_handle_error(Slirp *slirp, struct sockaddr_storage *srcsas,
 
 void tftp_input(struct sockaddr_storage *srcsas, struct mbuf *m)
 {
-  struct tftp_t *tp = (struct tftp_t *)m->m_data;
+  struct tftp_t *tp = mtod_check(m, offsetof(struct tftp_t, x.tp_buf));
+
+  if (tp == NULL) {
+    return;
+  }
 
   switch(ntohs(tp->tp_op)) {
   case TFTP_RRQ:
