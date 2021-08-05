@@ -1992,6 +1992,7 @@ EOF
 
   if compile_prog "-Werror -fno-pie" "-nopie"; then
     CFLAGS_NOPIE="-fno-pie"
+    LDFLAGS_NOPIE="-no-pie"
   fi
 fi
 
