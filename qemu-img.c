@@ -2553,10 +2553,8 @@ static int img_convert(int argc, char **argv)
 
     if (out_baseimg_param) {
         if (!qemu_opt_get(opts, BLOCK_OPT_BACKING_FMT)) {
-            error_report("Use of backing file requires explicit "
-                         "backing format");
-            ret = -1;
-            goto out;
+            warn_report("Deprecated use of backing file without explicit "
+                        "backing format");
         }
     }
 
