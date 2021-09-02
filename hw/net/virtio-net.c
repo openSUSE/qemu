@@ -1094,10 +1094,13 @@ static ssize_t virtio_net_receive(NetClientState *nc, const uint8_t *buf, size_t
     VirtIONet *n = qemu_get_nic_opaque(nc);
     VirtIONetQueue *q = virtio_net_get_subqueue(nc);
     VirtIODevice *vdev = VIRTIO_DEVICE(n);
+    VirtQueueElement *elems[VIRTQUEUE_MAX_SIZE];
+    size_t lens[VIRTQUEUE_MAX_SIZE];
     struct iovec mhdr_sg[VIRTQUEUE_MAX_SIZE];
     struct virtio_net_hdr_mrg_rxbuf mhdr;
     unsigned mhdr_cnt = 0;
-    size_t offset, i, guest_offset;
+    size_t offset, i, guest_offset, j;
+    ssize_t err;
 
     if (!virtio_net_can_receive(nc)) {
         return -1;
@@ -1120,6 +1123,12 @@ static ssize_t virtio_net_receive(NetClientState *nc, const uint8_t *buf, size_t
 
         total = 0;
 
+        if (i == VIRTQUEUE_MAX_SIZE) {
+            error_report(vdev, "virtio-net unexpected long buffer chain");
+            err = size;
+            goto err;
+        }
+
         elem = virtqueue_pop(q->rx_vq, sizeof(VirtQueueElement));
         if (!elem) {
             if (i) {
@@ -1131,14 +1140,16 @@ static ssize_t virtio_net_receive(NetClientState *nc, const uint8_t *buf, size_t
                              n->guest_hdr_len, n->host_hdr_len,
                              vdev->guest_features);
             }
-            return -1;
+            err = -1;
+            goto err;
         }
 
         if (elem->in_num < 1) {
             error_report(vdev,
                          "virtio-net receive queue contains no in buffers");
             g_free(elem);
-            return -1;
+            err = -1;
+            goto err;
         }
 
         sg = elem->in_sg;
@@ -1170,12 +1181,13 @@ static ssize_t virtio_net_receive(NetClientState *nc, const uint8_t *buf, size_t
         if (!n->mergeable_rx_bufs && offset < size) {
             virtqueue_discard(q->rx_vq, elem, total);
             g_free(elem);
-            return size;
+            err = size;
+            goto err;
         }
 
-        /* signal other side */
-        virtqueue_fill(q->rx_vq, elem, total, i++);
-        g_free(elem);
+        elems[i] = elem;
+        lens[i] = total;
+        i++;
     }
 
     if (mhdr_cnt) {
@@ -1185,10 +1197,23 @@ static ssize_t virtio_net_receive(NetClientState *nc, const uint8_t *buf, size_t
                      &mhdr.num_buffers, sizeof mhdr.num_buffers);
     }
 
+    for (j = 0; j < i; j++) {
+        /* signal other side */
+        virtqueue_fill(q->rx_vq, elems[j], lens[j], j);
+        g_free(elems[j]);
+    }
+
     virtqueue_flush(q->rx_vq, i);
     virtio_notify(vdev, q->rx_vq);
 
     return size;
+
+err:
+    for (j = 0; j < i; j++) {
+        g_free(elems[j]);
+    }
+
+    return err;
 }
 
 static int32_t virtio_net_flush_tx(VirtIONetQueue *q);
