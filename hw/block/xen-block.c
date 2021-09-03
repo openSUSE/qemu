@@ -143,6 +143,7 @@ static void xen_block_unrealize(XenDevice *xendev)
         XEN_BLOCK_DEVICE_GET_CLASS(xendev);
     const char *type = object_get_typename(OBJECT(blockdev));
     XenBlockVdev *vdev = &blockdev->props.vdev;
+    BlockConf *conf = &blockdev->props.conf;
 
     if (vdev->type == XEN_BLOCK_VDEV_TYPE_INVALID) {
         return;
@@ -155,6 +156,8 @@ static void xen_block_unrealize(XenDevice *xendev)
 
     xen_block_dataplane_destroy(blockdev->dataplane);
     blockdev->dataplane = NULL;
+
+    monitor_remove_blk(conf->blk);
 
     if (blockdev_class->unrealize) {
         blockdev_class->unrealize(blockdev);
