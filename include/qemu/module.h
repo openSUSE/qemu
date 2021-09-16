@@ -73,6 +73,7 @@ bool module_load_one(const char *prefix, const char *lib_name, bool mayfail);
 void module_load_qom_one(const char *type);
 void module_load_qom_all(void);
 void module_allow_arch(const char *arch);
+bool s390x_blocklist(const char *name);
 
 /**
  * DOC: module info annotation macros

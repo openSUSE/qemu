@@ -119,6 +119,35 @@ static const QemuModinfo module_info_stub[] = { {
 static const QemuModinfo *module_info = module_info_stub;
 static const char *module_arch;
 
+bool s390x_blocklist(const char *name)
+{
+    const char *blocklist[] = {
+        "hw-display-qxl",
+        "hw-display-virtio-vga",
+        "hw-display-virtio-vga-gl",
+        "hw-usb-host",
+        "hw-usb-redirect",
+        "hw-usb-smartcard"
+    };
+
+    const size_t len = sizeof(blocklist) / sizeof(blocklist[0]);
+
+    if (strcmp(module_arch, "x86_64") == 0 ||
+        strcmp(module_arch, "i386") == 0 ||
+        strcmp(module_arch, "arm") == 0 ||
+        strcmp(module_arch, "aarch64") == 0) {
+        return false;
+    }
+
+    for (size_t i = 0; i < len; i++) {
+        if (strcmp(blocklist[i], name) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void module_init_info(const QemuModinfo *info)
 {
     module_info = info;
@@ -131,6 +160,10 @@ void module_allow_arch(const char *arch)
 
 static bool module_check_arch(const QemuModinfo *modinfo)
 {
+    if (modinfo->name && s390x_blocklist(modinfo->name)) {
+        return false;
+    }
+
     if (modinfo->arch) {
         if (!module_arch) {
             /* no arch set -> ignore all */
