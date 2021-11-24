@@ -54,6 +54,12 @@
     } while (0)
 
 
+/* Anonymous BlockBackend for empty drive */
+static BlockBackend *blk_create_empty_drive(void)
+{
+    return blk_new(0, BLK_PERM_ALL);
+}
+
 /********************************************************/
 /* qdev floppy bus                                      */
 
@@ -547,8 +553,7 @@ static int floppy_drive_init(DeviceState *qdev)
     }
 
     if (!dev->conf.blk) {
-        /* Anonymous BlockBackend for an empty drive */
-        dev->conf.blk = blk_new(0, BLK_PERM_ALL);
+        dev->conf.blk = blk_create_empty_drive();
         ret = blk_attach_dev(dev->conf.blk, qdev);
         assert(ret == 0);
     }
