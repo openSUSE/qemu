@@ -489,7 +489,7 @@ static void mem_info_la57(Monitor *mon, CPUArchState *env)
                 cpu_physical_memory_read_debug(pdp_addr + l2 * 8, &pdpe, 8);
                 pdpe = le64_to_cpu(pdpe);
                 end = (l0 << 48) + (l1 << 39) + (l2 << 30);
-                if (pdpe & PG_PRESENT_MASK) {
+                if (!(pdpe & PG_PRESENT_MASK)) {
                     prot = 0;
                     mem_print(mon, env, &start, &last_prot, end, prot);
                     continue;
@@ -508,7 +508,7 @@ static void mem_info_la57(Monitor *mon, CPUArchState *env)
                     cpu_physical_memory_read_debug(pd_addr + l3 * 8, &pde, 8);
                     pde = le64_to_cpu(pde);
                     end = (l0 << 48) + (l1 << 39) + (l2 << 30) + (l3 << 21);
-                    if (pde & PG_PRESENT_MASK) {
+                    if (!(pde & PG_PRESENT_MASK)) {
                         prot = 0;
                         mem_print(mon, env, &start, &last_prot, end, prot);
                         continue;
