@@ -34,6 +34,24 @@
 
 static void nvme_process_sq(void *opaque);
 
+static inline bool nvme_addr_is_iomem(NvmeCtrl *n, hwaddr addr)
+{
+    PCIDevice *pci_dev = &n->parent_obj;
+    hwaddr regs_hi, regs_lo, msix_hi, msix_lo;
+
+    /*
+     * The purpose of this check is to guard against invalid "local" access
+     * to the iomem (i.e. controller registers, MSIX-related space).
+     */
+    regs_lo = n->iomem.addr;
+    regs_hi = regs_lo + int128_get64(n->iomem.size);
+    msix_lo = pci_dev->msix_exclusive_bar.addr;
+    msix_hi = msix_lo + int128_get64(pci_dev->msix_exclusive_bar.size);
+
+    return (addr >= regs_lo && addr < regs_hi) ||
+           (addr >= msix_lo && addr < msix_hi);
+}
+
 static int nvme_check_sqid(NvmeCtrl *n, uint16_t sqid)
 {
     return sqid < n->num_queues && n->sq[sqid] != NULL ? 0 : -1;
@@ -90,6 +108,9 @@ static uint16_t nvme_map_prp(QEMUSGList *qsg, uint64_t prp1, uint64_t prp2,
         return NVME_INVALID_FIELD | NVME_DNR;
     }
 
+    if (nvme_addr_is_iomem(n, prp1)) {
+        return NVME_DATA_TRAS_ERROR;
+    }
     pci_dma_sglist_init(qsg, &n->parent_obj, num_prps);
     qemu_sglist_add(qsg, prp1, trans_len);
     len -= trans_len;
@@ -126,6 +147,9 @@ static uint16_t nvme_map_prp(QEMUSGList *qsg, uint64_t prp1, uint64_t prp2,
                 }
 
                 trans_len = MIN(len, n->page_size);
+                if (nvme_addr_is_iomem(n, prp_ent)) {
+                    return NVME_DATA_TRAS_ERROR;
+                }
                 qemu_sglist_add(qsg, prp_ent, trans_len);
                 len -= trans_len;
                 i++;
@@ -133,6 +157,9 @@ static uint16_t nvme_map_prp(QEMUSGList *qsg, uint64_t prp1, uint64_t prp2,
         } else {
             if (prp2 & (n->page_size - 1)) {
                 goto unmap;
+            }
+            if (nvme_addr_is_iomem(n, prp2)) {
+                return NVME_DATA_TRAS_ERROR;
             }
             qemu_sglist_add(qsg, prp2, len);
         }
