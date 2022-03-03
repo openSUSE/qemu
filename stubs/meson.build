@@ -18,6 +18,9 @@ stub_ss.add(files('get-vm-name.c'))
 stub_ss.add(when: 'CONFIG_LINUX_IO_URING', if_true: files('io_uring.c'))
 stub_ss.add(files('iothread.c'))
 stub_ss.add(files('iothread-lock.c'))
+if have_block
+  stub_ss.add(files('iothread-lock-block.c'))
+endif
 stub_ss.add(files('isa-bus.c'))
 stub_ss.add(files('is-daemonized.c'))
 stub_ss.add(when: 'CONFIG_LINUX_AIO', if_true: files('linux-aio.c'))
