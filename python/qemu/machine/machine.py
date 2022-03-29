@@ -349,6 +349,9 @@ class QEMUMachine:
         Called to cleanup the VM instance after the process has exited.
         May also be called after a failed launch.
         """
+        # Comprehensive reset for the failed launch case:
+        self._early_cleanup()
+
         try:
             self._close_qmp_connection()
         except Exception as err:  # pylint: disable=broad-except
@@ -397,16 +400,9 @@ class QEMUMachine:
 
         try:
             self._launch()
+            self._launched = True
         except:
-            # We may have launched the process but it may
-            # have exited before we could connect via QMP.
-            # Assume the VM didn't launch or is exiting.
-            # If we don't wait for the process, exitcode() may still be
-            # 'None' by the time control is ceded back to the caller.
-            if self._launched:
-                self.wait()
-            else:
-                self._post_shutdown()
+            self._post_shutdown()
 
             LOG.debug('Error launching VM')
             if self._qemu_full_args:
@@ -430,7 +426,6 @@ class QEMUMachine:
                                        stderr=subprocess.STDOUT,
                                        shell=False,
                                        close_fds=False)
-        self._launched = True
         self._post_launch()
 
     def _close_qmp_connection(self) -> None:
@@ -462,8 +457,8 @@ class QEMUMachine:
         """
         Perform any cleanup that needs to happen before the VM exits.
 
-        This method may be called twice upon shutdown, once each by soft
-        and hard shutdown in failover scenarios.
+        May be invoked by both soft and hard shutdown in failover scenarios.
+        Called additionally by _post_shutdown for comprehensive cleanup.
         """
         # If we keep the console socket open, we may deadlock waiting
         # for QEMU to exit, while QEMU is waiting for the socket to
