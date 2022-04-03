@@ -715,7 +715,14 @@ int execute_command(PVRDMADev *dev)
 
     dsr_info = &dev->dsr_info;
 
+    if (!dsr_info->dsr) {
+            /* Buggy or malicious guest driver */
+            error_report("Exec command without dsr, req or rsp buffers");
+            goto out;
+    }
+
     pr_dbg("cmd=%d\n", dsr_info->req->hdr.cmd);
+
     if (dsr_info->req->hdr.cmd >= sizeof(cmd_handlers) /
                       sizeof(struct cmd_handler)) {
         pr_dbg("Unsupported command\n");
