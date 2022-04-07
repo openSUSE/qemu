@@ -222,7 +222,7 @@ static QEMUCursor *qxl_cursor(PCIQXLDevice *qxl, QXLCursor *cursor)
     c->hot_y = cursor->header.hot_spot_y;
     switch (cursor->header.type) {
     case SPICE_CURSOR_TYPE_ALPHA:
-        size = sizeof(uint32_t) * cursor->header.width * cursor->header.height;
+        size = sizeof(uint32_t) * c->width * c->height;
         memcpy(c->data, cursor->chunk.data, size);
         if (qxl->debug > 2) {
             cursor_print_ascii_art(c, "qxl/alpha");
