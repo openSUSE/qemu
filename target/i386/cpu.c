@@ -5641,6 +5641,12 @@ void cpu_x86_cpuid(CPUX86State *env, uint32_t index, uint32_t count,
             } else {
                 *ecx &= ~XSTATE_ARCH_LBR_MASK;
             }
+#ifndef CONFIG_USER_ONLY
+            if (is_tdx_vm() &&
+                (*ecx & XSTATE_CET_MASK)) {
+                *ecx |= XSTATE_CET_MASK;
+            }
+#endif
         } else if (count == 0xf &&
                    accel_uses_host_cpuid() && cpu->enable_pmu &&
                    (env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_ARCH_LBR)) {
