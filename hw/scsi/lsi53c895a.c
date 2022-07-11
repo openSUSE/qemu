@@ -989,6 +989,7 @@ static void lsi_do_msgout(LSIState *s)
             DPRINTF("MSG: ABORT TAG tag=0x%x\n", current_tag);
             if (current_req) {
                 scsi_req_cancel(current_req->req);
+                current_req = NULL;
             }
             lsi_disconnect(s);
             break;
@@ -1014,6 +1015,7 @@ static void lsi_do_msgout(LSIState *s)
             /* clear the current I/O process */
             if (s->current) {
                 scsi_req_cancel(s->current->req);
+                current_req = NULL;
             }
 
             /* As the current implemented devices scsi_disk and scsi_generic
