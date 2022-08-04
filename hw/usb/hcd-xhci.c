@@ -21,6 +21,7 @@
 
 #include "qemu/osdep.h"
 #include "qemu/timer.h"
+#include "qemu/log.h"
 #include "qemu/module.h"
 #include "qemu/queue.h"
 #include "migration/vmstate.h"
@@ -720,9 +721,13 @@ static int xhci_ring_chain_length(XHCIState *xhci, const XHCIRing *ring)
     bool control_td_set = 0;
     uint32_t link_cnt = 0;
 
-    while (1) {
+    do {
         TRBType type;
-        dma_memory_read(xhci->as, dequeue, &trb, TRB_SIZE);
+        if (dma_memory_read(xhci->as, dequeue, &trb, TRB_SIZE) != MEMTX_OK) {
+            qemu_log_mask(LOG_GUEST_ERROR, "%s: DMA memory access failed!\n",
+                          __func__);
+            return -1;
+        }
         le64_to_cpus(&trb.parameter);
         le32_to_cpus(&trb.status);
         le32_to_cpus(&trb.control);
@@ -756,7 +761,17 @@ static int xhci_ring_chain_length(XHCIState *xhci, const XHCIRing *ring)
         if (!control_td_set && !(trb.control & TRB_TR_CH)) {
             return length;
         }
-    }
+
+        /*
+         * According to the xHCI spec, Transfer Ring segments should have
+         * a maximum size of 64 kB (see chapter "6 Data Structures")
+         */
+    } while (length < TRB_LINK_LIMIT * 65536 / TRB_SIZE);
+
+    qemu_log_mask(LOG_GUEST_ERROR, "%s: exceeded maximum tranfer ring size!\n",
+                          __func__);
+
+    return -1;
 }
 
 static void xhci_er_reset(XHCIState *xhci, int v)
