@@ -1282,11 +1282,14 @@ void smbios_entry_add(QemuOpts *opts, Error **errp)
             return;
         }
 
-        if (test_bit(header->type, have_fields_bitmap)) {
-            error_setg(errp,
-                       "can't load type %d struct, fields already specified!",
-                       header->type);
-            return;
+        if (header->type <= SMBIOS_MAX_TYPE) {
+            if (test_bit(header->type, have_fields_bitmap)) {
+                error_setg(errp,
+                           "can't load type %d struct, fields already specified!",
+                           header->type);
+                return;
+            }
+            set_bit(header->type, have_binfile_bitmap);
         }
         for (dbl_nulls = smbios_tables + smbios_tables_len + header->length;
              dbl_nulls + 2 <= orig_end; dbl_nulls++) {
