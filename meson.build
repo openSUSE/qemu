@@ -2163,7 +2163,7 @@ config_host_data.set_quoted('CONFIG_SYSCONFDIR', get_option('prefix') / get_opti
 if enable_modules
   config_host_data.set('CONFIG_STAMP', run_command(
       meson.current_source_dir() / 'scripts/qemu-stamp.py',
-      meson.project_version(), get_option('pkgversion'), '--',
+      meson.project_version(), '--',
       meson.current_source_dir() / 'configure',
       capture: true, check: true).stdout().strip())
 endif
