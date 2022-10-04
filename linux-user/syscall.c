@@ -2525,16 +2525,12 @@ set_timeout:
         case NETLINK_DROP_MEMBERSHIP:
         case NETLINK_BROADCAST_ERROR:
         case NETLINK_NO_ENOBUFS:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
         case NETLINK_LISTEN_ALL_NSID:
         case NETLINK_CAP_ACK:
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0) */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
         case NETLINK_EXT_ACK:
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0) */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
         case NETLINK_GET_STRICT_CHK:
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0) */
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0) */
             break;
         default:
             goto unimplemented;
@@ -2903,16 +2899,12 @@ get_timeout:
         case NETLINK_PKTINFO:
         case NETLINK_BROADCAST_ERROR:
         case NETLINK_NO_ENOBUFS:
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
         case NETLINK_LISTEN_ALL_NSID:
         case NETLINK_CAP_ACK:
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0) */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
         case NETLINK_EXT_ACK:
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0) */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
         case NETLINK_GET_STRICT_CHK:
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0) */
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 20, 0) */
             if (get_user_u32(len, optlen)) {
                 return -TARGET_EFAULT;
             }
@@ -2929,7 +2921,6 @@ get_timeout:
                 return -TARGET_EFAULT;
             }
             break;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
         case NETLINK_LIST_MEMBERSHIPS:
         {
             uint32_t *results;
@@ -2960,7 +2951,6 @@ get_timeout:
             unlock_user(results, optval_addr, 0);
             break;
         }
-#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0) */
         default:
             goto unimplemented;
         }
