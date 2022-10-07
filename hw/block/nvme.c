@@ -142,6 +142,24 @@ static inline void *nvme_addr_to_cmb(NvmeCtrl *n, hwaddr addr)
     return &n->cmbuf[addr - n->ctrl_mem.addr];
 }
 
+static inline bool nvme_addr_is_iomem(NvmeCtrl *n, hwaddr addr)
+{
+    PCIDevice *pci_dev = &n->parent_obj;
+    hwaddr regs_hi, regs_lo, msix_hi, msix_lo;
+
+    /*
+     * The purpose of this check is to guard against invalid "local" access
+     * to the iomem (i.e. controller registers, MSIX-related space).
+     */
+    regs_lo = n->iomem.addr;
+    regs_hi = regs_lo + int128_get64(n->iomem.size);
+    msix_lo = pci_dev->msix_exclusive_bar.addr;
+    msix_hi = msix_lo + int128_get64(pci_dev->msix_exclusive_bar.size);
+
+    return (addr >= regs_lo && addr < regs_hi) ||
+           (addr >= msix_lo && addr < msix_hi);
+}
+
 static int nvme_addr_read(NvmeCtrl *n, hwaddr addr, void *buf, int size)
 {
     hwaddr hi = addr + size - 1;
@@ -282,6 +300,10 @@ static uint16_t nvme_map_addr(NvmeCtrl *n, QEMUSGList *qsg, QEMUIOVector *iov,
     }
 
     trace_pci_nvme_map_addr(addr, len);
+
+    if (nvme_addr_is_iomem(n, addr)) {
+        return NVME_DATA_TRAS_ERROR;
+    }
 
     if (nvme_addr_is_cmb(n, addr)) {
         if (qsg && qsg->sg) {
