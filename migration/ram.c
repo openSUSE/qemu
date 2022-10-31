@@ -82,6 +82,7 @@
 #define RAM_SAVE_FLAG_XBZRLE   0x40
 /* 0x80 is reserved in migration.h start with 0x100 next */
 #define RAM_SAVE_FLAG_COMPRESS_PAGE    0x100
+#define RAM_SAVE_FLAG_CGS_EPOCH        0x200
 
 XBZRLECacheStats xbzrle_counters;
 
@@ -2438,6 +2439,11 @@ static void postcopy_preempt_reset_channel(RAMState *rs)
         rs->f = migrate_get_current()->to_dst_file;
         trace_postcopy_preempt_reset_channel();
     }
+}
+
+void ram_save_cgs_epoch_header(QEMUFile *f)
+{
+    qemu_put_be64(f, RAM_SAVE_FLAG_CGS_EPOCH);
 }
 
 /**
