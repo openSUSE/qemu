@@ -1529,6 +1529,7 @@ void qemu_savevm_state_cleanup(void)
     }
 
     trace_savevm_state_cleanup();
+    cgs_mig_savevm_state_cleanup();
     QTAILQ_FOREACH(se, &savevm_state.handlers, entry) {
         if (se->ops && se->ops->save_cleanup) {
             se->ops->save_cleanup(se->opaque);

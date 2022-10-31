@@ -162,3 +162,12 @@ int cgs_mig_savevm_state_ram_cancel(QEMUFile *f, hwaddr gfn_end)
 
     return ret;
 }
+
+void cgs_mig_savevm_state_cleanup(void)
+{
+    if (!cgs_mig.savevm_state_cleanup) {
+        return;
+    }
+
+    cgs_mig.savevm_state_cleanup();
+}
