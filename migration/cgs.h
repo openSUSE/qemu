@@ -21,11 +21,16 @@ typedef struct CgsMig {
     int (*savevm_state_setup)(void);
     int (*savevm_state_start)(QEMUFile *f);
     long (*savevm_state_ram_start_epoch)(QEMUFile *f);
+    long (*savevm_state_ram)(QEMUFile *f,
+                             hwaddr *gfns,
+                             uint64_t gfn_num);
 } CgsMig;
 
 bool cgs_mig_is_ready(void);
 int cgs_mig_savevm_state_setup(QEMUFile *f);
 int cgs_mig_savevm_state_start(QEMUFile *f);
 long cgs_ram_save_start_epoch(QEMUFile *f);
+long cgs_mig_savevm_state_ram(QEMUFile *f, RAMBlock *block, ram_addr_t offset,
+                              hwaddr *gfns, uint64_t gfn_num);
 
 #endif

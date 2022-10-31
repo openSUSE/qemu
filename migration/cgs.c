@@ -96,3 +96,25 @@ long cgs_ram_save_start_epoch(QEMUFile *f)
     /* 8 bytes for the cgs header */
     return ret + 8;
 }
+
+/* Return number of bytes sent or the error value (< 0) */
+long cgs_mig_savevm_state_ram(QEMUFile *f, RAMBlock *block, ram_addr_t offset,
+                              hwaddr *gfns, uint64_t gfn_num)
+{
+    long hdr_bytes, ret;
+
+    if (!cgs_mig.savevm_state_ram) {
+        return 0;
+    }
+
+    hdr_bytes = ram_save_cgs_ram_header(f, block, offset);
+    ret = cgs_mig.savevm_state_ram(f, gfns, gfn_num);
+    /*
+     * Returning 0 isn't expected. Either succeed with returning bytes of data
+     * written to the file or error with a negative error code returned.
+     */
+    assert(ret);
+    cgs_check_error(f, ret);
+
+    return hdr_bytes + ret;
+}

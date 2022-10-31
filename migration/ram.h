@@ -77,6 +77,8 @@ void postcopy_preempt_shutdown_file(MigrationState *s);
 void *postcopy_preempt_thread(void *opaque);
 
 void ram_save_cgs_epoch_header(QEMUFile *f);
+size_t ram_save_cgs_ram_header(QEMUFile *f, RAMBlock *block,
+                               ram_addr_t offset);
 
 /* ram cache */
 int colo_init_ram_cache(void);
