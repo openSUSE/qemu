@@ -29,6 +29,27 @@ typedef struct TdxMigState {
 
 TdxMigState tdx_mig;
 
+static int tdx_mig_stream_ioctl(TdxMigStream *stream, int cmd_id,
+                                __u32 metadata, void *data)
+{
+    struct kvm_tdx_cmd tdx_cmd;
+    int ret;
+
+    memset(&tdx_cmd, 0x0, sizeof(tdx_cmd));
+
+    tdx_cmd.id = cmd_id;
+    tdx_cmd.flags = metadata;
+    tdx_cmd.data = (__u64)(unsigned long)data;
+
+    ret = kvm_device_ioctl(stream->fd, KVM_MEMORY_ENCRYPT_OP, &tdx_cmd);
+    if (ret) {
+        error_report("Failed to send migration cmd %d to the driver: %s",
+                      cmd_id, strerror(ret));
+    }
+
+    return ret;
+}
+
 static bool tdx_mig_is_ready(void)
 {
     return tdx_premig_is_done();
