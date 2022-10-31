@@ -171,3 +171,17 @@ void cgs_mig_savevm_state_cleanup(void)
 
     cgs_mig.savevm_state_cleanup();
 }
+
+int cgs_mig_loadvm_state_setup(QEMUFile *f)
+{
+    int ret;
+
+   if (!cgs_mig.loadvm_state_setup) {
+        return 0;
+    }
+
+    ret = cgs_mig.loadvm_state_setup();
+    cgs_check_error(f, ret);
+
+    return ret;
+}
