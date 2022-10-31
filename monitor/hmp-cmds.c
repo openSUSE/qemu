@@ -297,6 +297,10 @@ void hmp_info_migrate(Monitor *mon, const QDict *qdict)
             monitor_printf(mon, "cgs epochs: %" PRIu64 "\n",
                            info->ram->cgs_epochs);
         }
+        if (info->ram->cgs_private_pages) {
+            monitor_printf(mon, "cgs private-pages: %" PRIu64 "\n",
+                           info->ram->cgs_private_pages);
+        }
     }
 
     if (info->has_disk) {

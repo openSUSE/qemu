@@ -62,6 +62,8 @@
 #
 # @cgs-epochs: confidential guest migration epochs (since 7.1)
 #
+# @cgs-private-pages: number of private pages (since 7.1)
+#
 # Since: 0.14
 ##
 { 'struct': 'MigrationStats',
@@ -74,7 +76,7 @@
            'precopy-bytes' : 'uint64', 'downtime-bytes' : 'uint64',
            'postcopy-bytes' : 'uint64',
            'dirty-sync-missed-zero-copy' : 'uint64',
-           'cgs-epochs' : 'uint64' } }
+           'cgs-epochs' : 'uint64', 'cgs-private-pages' : 'uint64'} }
 
 ##
 # @XBZRLECacheStats:

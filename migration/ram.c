@@ -2311,6 +2311,26 @@ static bool save_compress_page(RAMState *rs, RAMBlock *block, ram_addr_t offset)
     return false;
 }
 
+static int ram_save_cgs_private_page(RAMState *rs, PageSearchStatus *pss)
+{
+    RAMBlock *block = pss->block;
+    ram_addr_t offset = ((ram_addr_t)pss->page) << TARGET_PAGE_BITS;
+    hwaddr gfn = pss->cgs_private_gpa >> TARGET_PAGE_BITS;
+    long res;
+
+    res = cgs_mig_savevm_state_ram(rs->f, block, offset, &gfn, 1);
+    if (res > 0) {
+        ram_counters.transferred += res;
+        ram_counters.cgs_private_pages++;
+    } else {
+        /* Return the negative error code */
+        return res;
+    }
+
+    /* Return the number of pages (i.e. 1) succeeded to be saved */
+    return 1;
+}
+
 /**
  * ram_save_target_page: save one target page
  *
@@ -2324,6 +2344,10 @@ static int ram_save_target_page(RAMState *rs, PageSearchStatus *pss)
     RAMBlock *block = pss->block;
     ram_addr_t offset = ((ram_addr_t)pss->page) << TARGET_PAGE_BITS;
     int res;
+
+    if (pss->cgs_private_gpa != CGS_PRIVATE_GPA_INVALID) {
+        return ram_save_cgs_private_page(rs, pss);
+    }
 
     if (control_save_page(rs, block, offset, &res)) {
         return res;
