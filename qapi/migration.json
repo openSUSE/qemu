@@ -59,6 +59,9 @@
 #                               not avoid copying dirty pages. This is between
 #                               0 and @dirty-sync-count * @multifd-channels.
 #                               (since 7.1)
+#
+# @cgs-epochs: confidential guest migration epochs (since 7.1)
+#
 # Since: 0.14
 ##
 { 'struct': 'MigrationStats',
@@ -70,7 +73,8 @@
            'multifd-bytes' : 'uint64', 'pages-per-second' : 'uint64',
            'precopy-bytes' : 'uint64', 'downtime-bytes' : 'uint64',
            'postcopy-bytes' : 'uint64',
-           'dirty-sync-missed-zero-copy' : 'uint64' } }
+           'dirty-sync-missed-zero-copy' : 'uint64',
+           'cgs-epochs' : 'uint64' } }
 
 ##
 # @XBZRLECacheStats:

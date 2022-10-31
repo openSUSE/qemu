@@ -35,6 +35,7 @@
 #include "io/channel-null.h"
 #include "xbzrle.h"
 #include "ram.h"
+#include "cgs.h"
 #include "migration.h"
 #include "migration/register.h"
 #include "migration/misc.h"
@@ -344,6 +345,8 @@ struct RAMState {
     bool xbzrle_enabled;
     /* Are we on the last stage of migration */
     bool last_stage;
+    /* Used by cgs migration and set to request for the start of a new epoch */
+    bool cgs_start_epoch;
     /* compression statistics since the beginning of the period */
     /* amount of count that no free thread to compress data */
     uint64_t compress_thread_busy_prev;
@@ -1583,6 +1586,7 @@ static bool find_dirty_block(RAMState *rs, PageSearchStatus *pss, bool *again)
             pss->block = QLIST_FIRST_RCU(&ram_list.blocks);
             /* Flag that we've looped */
             pss->complete_round = true;
+            rs->cgs_start_epoch = true;
             /* After the first round, enable XBZRLE. */
             if (migrate_use_xbzrle()) {
                 rs->xbzrle_enabled = true;
@@ -2446,6 +2450,22 @@ void ram_save_cgs_epoch_header(QEMUFile *f)
     qemu_put_be64(f, RAM_SAVE_FLAG_CGS_EPOCH);
 }
 
+static int ram_save_cgs_start_epoch(RAMState *rs)
+{
+    long res;
+
+     res = cgs_ram_save_start_epoch(rs->f);
+    if (res < 0) {
+        return (int)res;
+    } else if (res > 0) {
+        ram_counters.transferred += res;
+        ram_counters.cgs_epochs++;
+        rs->cgs_start_epoch = false;
+    }
+
+    return 0;
+}
+
 /**
  * ram_save_host_page: save a whole host page
  *
@@ -2479,6 +2499,10 @@ static int ram_save_host_page(RAMState *rs, PageSearchStatus *pss)
 
     if (migrate_postcopy_preempt() && migration_in_postcopy()) {
         postcopy_preempt_choose_channel(rs, pss);
+    }
+
+    if (rs->cgs_start_epoch) {
+        ram_save_cgs_start_epoch(rs);
     }
 
     do {
@@ -2710,6 +2734,7 @@ static void ram_state_reset(RAMState *rs)
     rs->last_page = 0;
     rs->last_version = ram_list.version;
     rs->xbzrle_enabled = false;
+    rs->cgs_start_epoch = true;
     postcopy_preempt_reset(rs);
     rs->postcopy_channel = RAM_CHANNEL_PRECOPY;
 }
