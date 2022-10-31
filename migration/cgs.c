@@ -147,3 +147,18 @@ int cgs_mig_savevm_state_end(QEMUFile *f)
 
     return ret;
 }
+
+/* gfn_end indicates the last private page that has been migrated. */
+int cgs_mig_savevm_state_ram_cancel(QEMUFile *f, hwaddr gfn_end)
+{
+    int ret;
+
+    if (!cgs_mig.savevm_state_ram_cancel) {
+        return 0;
+    }
+
+    ret = cgs_mig.savevm_state_ram_cancel(gfn_end);
+    cgs_check_error(f, ret);
+
+    return ret;
+}
