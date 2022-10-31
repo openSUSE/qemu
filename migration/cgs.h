@@ -19,9 +19,11 @@
 typedef struct CgsMig {
     bool (*is_ready)(void);
     int (*savevm_state_setup)(void);
+    int (*savevm_state_start)(QEMUFile *f);
 } CgsMig;
 
 bool cgs_mig_is_ready(void);
 int cgs_mig_savevm_state_setup(QEMUFile *f);
+int cgs_mig_savevm_state_start(QEMUFile *f);
 
 #endif
