@@ -2673,6 +2673,10 @@ retry:
                 goto out;
             }
             break;
+        case QEMU_VM_SECTION_CGS_START:
+        case QEMU_VM_SECTION_CGS_END:
+            ret = cgs_mig_loadvm_state(f);
+            break;
         case QEMU_VM_COMMAND:
             ret = loadvm_process_command(f);
             trace_qemu_loadvm_state_section_command(ret);
