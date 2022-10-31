@@ -118,3 +118,17 @@ long cgs_mig_savevm_state_ram(QEMUFile *f, RAMBlock *block, ram_addr_t offset,
 
     return hdr_bytes + ret;
 }
+
+int cgs_mig_savevm_state_downtime(QEMUFile *f)
+{
+    int ret;
+
+    if (!cgs_mig.savevm_state_downtime) {
+        return 0;
+    }
+
+    ret = cgs_mig.savevm_state_downtime();
+    cgs_check_error(f, ret);
+
+    return ret;
+}
