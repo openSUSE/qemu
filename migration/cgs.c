@@ -132,3 +132,18 @@ int cgs_mig_savevm_state_downtime(QEMUFile *f)
 
     return ret;
 }
+
+int cgs_mig_savevm_state_end(QEMUFile *f)
+{
+    int ret;
+
+    if (!cgs_mig.savevm_state_end) {
+        return 0;
+    }
+
+    qemu_put_byte(f, QEMU_VM_SECTION_CGS_END);
+    ret = cgs_mig.savevm_state_end(f);
+    cgs_check_error(f, ret);
+
+    return ret;
+}

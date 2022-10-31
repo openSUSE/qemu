@@ -28,6 +28,7 @@
 #define QEMU_VM_CONFIGURATION        0x07
 #define QEMU_VM_COMMAND              0x08
 #define QEMU_VM_SECTION_CGS_START    0x09
+#define QEMU_VM_SECTION_CGS_END      0x0a
 #define QEMU_VM_SECTION_FOOTER       0x7e
 
 bool qemu_savevm_state_blocked(Error **errp);

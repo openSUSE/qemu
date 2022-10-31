@@ -25,6 +25,7 @@ typedef struct CgsMig {
                              hwaddr *gfns,
                              uint64_t gfn_num);
     int (*savevm_state_downtime)(void);
+    int (*savevm_state_end)(QEMUFile *f);
 } CgsMig;
 
 bool cgs_mig_is_ready(void);
@@ -34,5 +35,6 @@ long cgs_ram_save_start_epoch(QEMUFile *f);
 long cgs_mig_savevm_state_ram(QEMUFile *f, RAMBlock *block, ram_addr_t offset,
                               hwaddr *gfns, uint64_t gfn_num);
 int cgs_mig_savevm_state_downtime(QEMUFile *f);
+int cgs_mig_savevm_state_end(QEMUFile *f);
 
 #endif
