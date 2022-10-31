@@ -185,3 +185,17 @@ int cgs_mig_loadvm_state_setup(QEMUFile *f)
 
     return ret;
 }
+
+int cgs_mig_loadvm_state(QEMUFile *f)
+{
+    int ret;
+
+    if (!cgs_mig.loadvm_state) {
+        return 0;
+    }
+
+    ret = cgs_mig.loadvm_state(f);
+    cgs_check_error(f, ret);
+
+    return ret;
+}
