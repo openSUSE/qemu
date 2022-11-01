@@ -120,6 +120,7 @@ int qemu_put_qemu_file(QEMUFile *f_des, QEMUFile *f_src);
  * previously peeked +n-1.
  */
 int qemu_peek_byte(QEMUFile *f, int offset);
+int qemu_peek_le16(QEMUFile *f, int offset);
 void qemu_file_skip(QEMUFile *f, int size);
 /*
  * qemu_file_credit_transfer:

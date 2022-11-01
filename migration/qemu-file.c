@@ -713,6 +713,16 @@ int qemu_peek_byte(QEMUFile *f, int offset)
     return f->buf[index];
 }
 
+/* Peeks 2 bytes in little endian from the buffer */
+int qemu_peek_le16(QEMUFile *f, int offset)
+{
+    int v;
+    v = qemu_peek_byte(f, offset + 1) << 8;
+    v |= qemu_peek_byte(f, offset);
+
+    return v;
+}
+
 int qemu_get_byte(QEMUFile *f)
 {
     int result;
