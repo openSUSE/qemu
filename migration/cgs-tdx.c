@@ -392,6 +392,49 @@ static int tdx_mig_stream_setup(void)
     return 0;
 }
 
+static void tdx_mig_stream_cleanup(TdxMigStream *stream)
+{
+    struct kvm_dev_tdx_mig_attr tdx_mig_attr;
+    struct kvm_device_attr attr = {
+        .group = KVM_DEV_TDX_MIG_ATTR,
+        .addr = (uint64_t)&tdx_mig_attr,
+        .attr = sizeof(struct kvm_dev_tdx_mig_attr),
+    };
+    size_t unmap_size;
+    int ret;
+
+    memset(&tdx_mig_attr, 0, sizeof(struct kvm_dev_tdx_mig_attr));
+    ret = kvm_device_ioctl(stream->fd, KVM_GET_DEVICE_ATTR, &attr);
+    if (ret < 0) {
+        error_report("tdx mig cleanup failed: %s", strerror(ret));
+        return;
+    }
+
+    unmap_size = (TDX_MIG_STREAM_GPA_LIST_MAP_OFFSET -
+                  TDX_MIG_STREAM_MBMD_MAP_OFFSET) * TARGET_PAGE_SIZE;
+    munmap(stream->mbmd, unmap_size);
+
+    unmap_size = (TDX_MIG_STREAM_MAC_LIST_MAP_OFFSET -
+                  TDX_MIG_STREAM_GPA_LIST_MAP_OFFSET) * TARGET_PAGE_SIZE;
+    munmap(stream->gpa_list, unmap_size);
+
+    unmap_size = (TDX_MIG_STREAM_BUF_LIST_MAP_OFFSET -
+                  TDX_MIG_STREAM_MAC_LIST_MAP_OFFSET) * TARGET_PAGE_SIZE;
+    munmap(stream->mac_list, unmap_size);
+
+    unmap_size = tdx_mig_attr.buf_list_pages * TARGET_PAGE_SIZE;
+    munmap(stream->buf_list, unmap_size);
+    close(stream->fd);
+}
+
+static void tdx_mig_cleanup(void)
+{
+    tdx_mig_stream_cleanup(&tdx_mig.streams[0]);
+
+    g_free(tdx_mig.streams);
+    tdx_mig.streams = NULL;
+}
+
 void tdx_mig_init(CgsMig *cgs_mig, uint32_t nr_channels)
 {
     /* Only support 1 migration channel currently */
@@ -407,5 +450,7 @@ void tdx_mig_init(CgsMig *cgs_mig, uint32_t nr_channels)
     cgs_mig->savevm_state_ram = tdx_mig_savevm_state_ram;
     cgs_mig->savevm_state_downtime = tdx_mig_savevm_state_downtime;
     cgs_mig->savevm_state_end = tdx_mig_savevm_state_end;
+    cgs_mig->savevm_state_cleanup = tdx_mig_cleanup;
     cgs_mig->loadvm_state_setup = tdx_mig_stream_setup;
+    cgs_mig->loadvm_state_cleanup = tdx_mig_cleanup;
 }
