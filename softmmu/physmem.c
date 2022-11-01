@@ -1544,43 +1544,55 @@ static int file_ram_open(const char *path,
     return fd;
 }
 
-static void *file_ram_alloc(RAMBlock *block,
-                            ram_addr_t memory,
-                            int fd,
-                            bool readonly,
-                            bool truncate,
-                            off_t offset,
-                            Error **errp)
+static int64_t ram_block_map_check_and_truncate(RAMBlock *block,
+                                                int fd, Error **errp)
 {
-    uint32_t qemu_map_flags;
-    void *area;
+    int64_t file_size, file_align;
+    int64_t map_size = block->used_length;
+    MemoryRegion *mr = block->mr;
+
+    file_size = get_file_size(fd);
+    if (file_size > 0 && file_size < map_size) {
+        error_setg(errp, "backing store size 0x%" PRIx64
+                   " does not match 'size' option 0x" RAM_ADDR_FMT,
+                   file_size, map_size);
+        return -ENOSPC;
+    }
+
+    file_align = get_file_align(fd);
+    if (file_align > 0 && file_align > mr->align) {
+        error_setg(errp, "backing store align 0x%" PRIx64
+                   " is larger than 'align' option 0x%" PRIx64,
+                   file_align, mr->align);
+        return -ENOSPC;
+    }
 
     block->page_size = qemu_fd_getpagesize(fd);
-    if (block->mr->align % block->page_size) {
+    if (mr->align % block->page_size) {
         error_setg(errp, "alignment 0x%" PRIx64
                    " must be multiples of page size 0x%zx",
-                   block->mr->align, block->page_size);
-        return NULL;
-    } else if (block->mr->align && !is_power_of_2(block->mr->align)) {
+                   mr->align, block->page_size);
+        return -EINVAL;
+    } else if (mr->align && !is_power_of_2(mr->align)) {
         error_setg(errp, "alignment 0x%" PRIx64
-                   " must be a power of two", block->mr->align);
-        return NULL;
+                   " must be a power of two", mr->align);
+        return -EINVAL;
     }
-    block->mr->align = MAX(block->page_size, block->mr->align);
+    mr->align = MAX(block->page_size, mr->align);
 #if defined(__s390x__)
     if (kvm_enabled()) {
-        block->mr->align = MAX(block->mr->align, QEMU_VMALLOC_ALIGN);
+        mr->align = MAX(mr->align, QEMU_VMALLOC_ALIGN);
     }
 #endif
 
-    if (memory < block->page_size) {
-        error_setg(errp, "memory size 0x" RAM_ADDR_FMT " must be equal to "
+    if (map_size < block->page_size) {
+        error_setg(errp, "memory map size 0x" RAM_ADDR_FMT " must be equal to "
                    "or larger than page size 0x%zx",
-                   memory, block->page_size);
-        return NULL;
+                   map_size, block->page_size);
+        return -EINVAL;
     }
 
-    memory = ROUND_UP(memory, block->page_size);
+    map_size = ROUND_UP(map_size, block->page_size);
 
     /*
      * ftruncate is not supported by hugetlbfs in older
@@ -1596,23 +1608,72 @@ static void *file_ram_alloc(RAMBlock *block,
      * those labels. Therefore, extending the non-empty backend file
      * is disabled as well.
      */
-    if (truncate && ftruncate(fd, memory)) {
+    if (!file_size && ftruncate(fd, map_size)) {
         perror("ftruncate");
+        return -EIO;
     }
 
-    qemu_map_flags = readonly ? QEMU_MAP_READONLY : 0;
-    qemu_map_flags |= (block->flags & RAM_SHARED) ? QEMU_MAP_SHARED : 0;
-    qemu_map_flags |= (block->flags & RAM_PMEM) ? QEMU_MAP_SYNC : 0;
-    qemu_map_flags |= (block->flags & RAM_NORESERVE) ? QEMU_MAP_NORESERVE : 0;
-    area = qemu_ram_mmap(fd, memory, block->mr->align, qemu_map_flags, offset);
+    return map_size;
+}
+
+static uint32_t ram_block_get_map_flags(RAMBlock *block, bool readonly)
+{
+    uint32_t map_flags;
+
+    map_flags = readonly ? QEMU_MAP_READONLY : 0;
+    map_flags |= (block->flags & RAM_SHARED) ? QEMU_MAP_SHARED : 0;
+    map_flags |= (block->flags & RAM_PMEM) ? QEMU_MAP_SYNC : 0;
+    map_flags |= (block->flags & RAM_NORESERVE) ? QEMU_MAP_NORESERVE : 0;
+
+    return map_flags;
+}
+
+static void *ram_block_map_fd(RAMBlock *block, int fd,
+                              off_t offset, bool readonly, Error **errp)
+{
+    int64_t map_size;
+    uint32_t map_flags;
+    void *area;
+
+    map_size = ram_block_map_check_and_truncate(block, fd, errp);
+    if (map_size < 0) {
+        return NULL;
+    }
+
+    map_flags = ram_block_get_map_flags(block, readonly);
+    area = qemu_ram_mmap(fd, (size_t)map_size, block->mr->align,
+                         map_flags, offset);
     if (area == MAP_FAILED) {
         error_setg_errno(errp, errno,
                          "unable to map backing store for guest RAM");
         return NULL;
     }
 
-    block->fd = fd;
     return area;
+}
+
+static RAMBlock *ram_block_alloc_and_map(ram_addr_t size, MemoryRegion *mr,
+                                         uint32_t ram_flags, int fd,
+                                         off_t offset, bool readonly,
+                                         Error **errp)
+{
+    RAMBlock *block;
+
+    /* Just support these ram flags by now. */
+    assert((ram_flags & ~(RAM_SHARED | RAM_PMEM | RAM_NORESERVE |
+                          RAM_PROTECTED)) == 0);
+
+    block = g_malloc0(sizeof(RAMBlock));
+    size = HOST_PAGE_ALIGN(size);
+    block->mr = mr;
+    block->used_length = size;
+    block->max_length = size;
+    block->flags = ram_flags;
+
+    block->host = ram_block_map_fd(block, fd, offset, readonly, errp);
+    block->fd = fd;
+
+    return block;
 }
 #endif
 
@@ -2066,11 +2127,6 @@ RAMBlock *qemu_ram_alloc_from_fd(ram_addr_t size, MemoryRegion *mr,
 {
     RAMBlock *new_block;
     Error *local_err = NULL;
-    int64_t file_size, file_align;
-
-    /* Just support these ram flags by now. */
-    assert((ram_flags & ~(RAM_SHARED | RAM_PMEM | RAM_NORESERVE |
-                          RAM_PROTECTED)) == 0);
 
     if (xen_enabled()) {
         error_setg(errp, "-mem-path not supported with Xen");
@@ -2083,31 +2139,9 @@ RAMBlock *qemu_ram_alloc_from_fd(ram_addr_t size, MemoryRegion *mr,
         return NULL;
     }
 
-    size = HOST_PAGE_ALIGN(size);
-    file_size = get_file_size(fd);
-    if (file_size > 0 && file_size < size) {
-        error_setg(errp, "backing store size 0x%" PRIx64
-                   " does not match 'size' option 0x" RAM_ADDR_FMT,
-                   file_size, size);
-        return NULL;
-    }
-
-    file_align = get_file_align(fd);
-    if (file_align > 0 && file_align > mr->align) {
-        error_setg(errp, "backing store align 0x%" PRIx64
-                   " is larger than 'align' option 0x%" PRIx64,
-                   file_align, mr->align);
-        return NULL;
-    }
-
-    new_block = g_malloc0(sizeof(*new_block));
-    new_block->mr = mr;
-    new_block->used_length = size;
-    new_block->max_length = size;
-    new_block->flags = ram_flags;
-    new_block->host = file_ram_alloc(new_block, size, fd, readonly,
-                                     !file_size, offset, errp);
-    if (!new_block->host) {
+    new_block = ram_block_alloc_and_map(size, mr, ram_flags, fd,
+                                        offset, readonly, errp);
+    if (!(new_block && new_block->host)) {
         g_free(new_block);
         return NULL;
     }
