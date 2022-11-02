@@ -4692,7 +4692,7 @@ static int kvm_put_nested_state(X86CPU *cpu)
     CPUX86State *env = &cpu->env;
     int max_nested_state_len = kvm_max_nested_state_length();
 
-    if (!env->nested_state) {
+    if (is_tdx_vm() || !env->nested_state) {
         return 0;
     }
 
@@ -4722,7 +4722,7 @@ static int kvm_get_nested_state(X86CPU *cpu)
     int max_nested_state_len = kvm_max_nested_state_length();
     int ret;
 
-    if (!env->nested_state) {
+    if (is_tdx_vm() || !env->nested_state) {
         return 0;
     }
 
