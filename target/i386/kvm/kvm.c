@@ -2906,6 +2906,10 @@ static int kvm_put_sregs(X86CPU *cpu)
     CPUX86State *env = &cpu->env;
     struct kvm_sregs sregs;
 
+    if (is_tdx_vm()) {
+        return 0;
+    }
+
     /*
      * The interrupt_bitmap is ignored because KVM_SET_SREGS is
      * always followed by KVM_SET_VCPU_EVENTS.
@@ -2956,6 +2960,10 @@ static int kvm_put_sregs2(X86CPU *cpu)
     CPUX86State *env = &cpu->env;
     struct kvm_sregs2 sregs;
     int i;
+
+    if (is_tdx_vm()) {
+        return 0;
+    }
 
     sregs.flags = 0;
 
@@ -3734,6 +3742,10 @@ static int kvm_get_sregs(X86CPU *cpu)
     struct kvm_sregs sregs;
     int ret;
 
+    if (is_tdx_vm()) {
+        return 0;
+    }
+
     ret = kvm_vcpu_ioctl(CPU(cpu), KVM_GET_SREGS, &sregs);
     if (ret < 0) {
         return ret;
@@ -3777,6 +3789,10 @@ static int kvm_get_sregs2(X86CPU *cpu)
     CPUX86State *env = &cpu->env;
     struct kvm_sregs2 sregs;
     int i, ret;
+
+    if (is_tdx_vm()) {
+        return 0;
+    }
 
     ret = kvm_vcpu_ioctl(CPU(cpu), KVM_GET_SREGS2, &sregs);
     if (ret < 0) {
