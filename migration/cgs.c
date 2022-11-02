@@ -14,6 +14,7 @@
 #include "qemu/osdep.h"
 #include "qemu/error-report.h"
 #include "qemu-file.h"
+#include "sysemu/kvm.h"
 #include "savevm.h"
 #include "ram.h"
 #include "cgs.h"
@@ -207,4 +208,21 @@ void cgs_mig_loadvm_state_cleanup(void)
     }
 
     cgs_mig.loadvm_state_cleanup();
+}
+
+void cgs_mig_init(void)
+{
+    uint32_t nr_channels = 1;
+
+    if (migrate_use_multifd()) {
+        nr_channels = migrate_multifd_channels();
+    }
+
+    switch (kvm_vm_type) {
+    case KVM_X86_TDX_VM:
+        tdx_mig_init(&cgs_mig, nr_channels);
+        break;
+    default:
+        return;
+    }
 }

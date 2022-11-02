@@ -46,6 +46,7 @@ void cgs_mig_savevm_state_cleanup(void);
 int cgs_mig_loadvm_state_setup(QEMUFile *f);
 int cgs_mig_loadvm_state(QEMUFile *f);
 void cgs_mig_loadvm_state_cleanup(void);
+void cgs_mig_init(void);
 
 void tdx_mig_init(CgsMig *cgs_mig, uint32_t nr_channels);
 
