@@ -4615,6 +4615,10 @@ static int kvm_guest_debug_workarounds(X86CPU *cpu)
     int ret = 0;
     unsigned long reinject_trap = 0;
 
+    if (is_tdx_vm()) {
+        return 0;
+    }
+
     if (!kvm_has_vcpu_events()) {
         if (env->exception_nr == EXCP01_DB) {
             reinject_trap = KVM_GUESTDBG_INJECT_DB;
@@ -4645,7 +4649,7 @@ static int kvm_put_debugregs(X86CPU *cpu)
     struct kvm_debugregs dbgregs;
     int i;
 
-    if (!kvm_has_debugregs()) {
+    if (is_tdx_vm() || !kvm_has_debugregs()) {
         return 0;
     }
 
@@ -4666,7 +4670,7 @@ static int kvm_get_debugregs(X86CPU *cpu)
     struct kvm_debugregs dbgregs;
     int i, ret;
 
-    if (!kvm_has_debugregs()) {
+    if (is_tdx_vm() || !kvm_has_debugregs()) {
         return 0;
     }
 
