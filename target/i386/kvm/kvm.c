@@ -2799,6 +2799,13 @@ static int kvm_getput_regs(X86CPU *cpu, int set)
     struct kvm_regs regs;
     int ret = 0;
 
+    /* For the tdx case, get/put the registers only during migration. */
+    if (is_tdx_vm() &&
+        (!runstate_check(RUN_STATE_PAUSED) ||
+         !runstate_check(RUN_STATE_INMIGRATE))) {
+        return 0;
+    }
+
     if (!set) {
         ret = kvm_vcpu_ioctl(CPU(cpu), KVM_GET_REGS, &regs);
         if (ret < 0) {
