@@ -3101,7 +3101,7 @@ static int kvm_put_msr_feature_control(X86CPU *cpu)
 {
     int ret;
 
-    if (!has_msr_feature_control) {
+    if (is_tdx_vm() || !has_msr_feature_control) {
         return 0;
     }
 
