@@ -3835,19 +3835,61 @@ static int kvm_get_sregs2(X86CPU *cpu)
     return 0;
 }
 
-static int kvm_get_msrs(X86CPU *cpu)
+static void kvm_get_msrs_common(X86CPU *cpu)
 {
     CPUX86State *env = &cpu->env;
-    struct kvm_msr_entry *msrs = cpu->kvm_msr_buf->entries;
-    int ret, i;
-    uint64_t mtrr_top_bits;
+    int i;
 
-    kvm_msr_buf_reset(cpu);
+    if (has_msr_tsc_deadline) {
+        kvm_msr_entry_add(cpu, MSR_IA32_TSCDEADLINE, 0);
+    }
+
+    if (has_msr_misc_enable) {
+        kvm_msr_entry_add(cpu, MSR_IA32_MISC_ENABLE, 0);
+    }
+
+    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_STEAL_TIME)) {
+        kvm_msr_entry_add(cpu, MSR_KVM_STEAL_TIME, 0);
+    }
+
+    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_POLL_CONTROL)) {
+        kvm_msr_entry_add(cpu, MSR_KVM_POLL_CONTROL, 1);
+    }
+
+    if (env->features[FEAT_1_EDX] & CPUID_MTRR) {
+        kvm_msr_entry_add(cpu, MSR_MTRRdefType, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix64K_00000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix16K_80000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix16K_A0000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_C0000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_C8000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_D0000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_D8000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_E0000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_E8000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_F0000, 0);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_F8000, 0);
+        for (i = 0; i < MSR_MTRRcap_VCNT; i++) {
+            kvm_msr_entry_add(cpu, MSR_MTRRphysBase(i), 0);
+            kvm_msr_entry_add(cpu, MSR_MTRRphysMask(i), 0);
+        }
+    }
+}
+
+static void kvm_get_msrs_vm(X86CPU *cpu)
+{
+    CPUX86State *env = &cpu->env;
+    int i;
+
+    if (is_tdx_vm()) {
+        return;
+    }
 
     kvm_msr_entry_add(cpu, MSR_IA32_SYSENTER_CS, 0);
     kvm_msr_entry_add(cpu, MSR_IA32_SYSENTER_ESP, 0);
     kvm_msr_entry_add(cpu, MSR_IA32_SYSENTER_EIP, 0);
     kvm_msr_entry_add(cpu, MSR_PAT, 0);
+
     if (has_msr_star) {
         kvm_msr_entry_add(cpu, MSR_STAR, 0);
     }
@@ -3860,12 +3902,7 @@ static int kvm_get_msrs(X86CPU *cpu)
     if (has_msr_tsc_adjust) {
         kvm_msr_entry_add(cpu, MSR_TSC_ADJUST, 0);
     }
-    if (has_msr_tsc_deadline) {
-        kvm_msr_entry_add(cpu, MSR_IA32_TSCDEADLINE, 0);
-    }
-    if (has_msr_misc_enable) {
-        kvm_msr_entry_add(cpu, MSR_IA32_MISC_ENABLE, 0);
-    }
+
     if (has_msr_smbase) {
         kvm_msr_entry_add(cpu, MSR_IA32_SMBASE, 0);
     }
@@ -3904,15 +3941,14 @@ static int kvm_get_msrs(X86CPU *cpu)
         kvm_msr_entry_add(cpu, MSR_IA32_TSC, 0);
         env->tsc_valid = !runstate_is_running();
     }
-
-#ifdef TARGET_X86_64
+    #ifdef TARGET_X86_64
     if (lm_capable_kernel) {
         kvm_msr_entry_add(cpu, MSR_CSTAR, 0);
         kvm_msr_entry_add(cpu, MSR_KERNELGSBASE, 0);
         kvm_msr_entry_add(cpu, MSR_FMASK, 0);
         kvm_msr_entry_add(cpu, MSR_LSTAR, 0);
     }
-#endif
+    #endif
     kvm_msr_entry_add(cpu, MSR_KVM_SYSTEM_TIME, 0);
     kvm_msr_entry_add(cpu, MSR_KVM_WALL_CLOCK, 0);
     if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_ASYNC_PF_INT)) {
@@ -3924,12 +3960,18 @@ static int kvm_get_msrs(X86CPU *cpu)
     if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_PV_EOI)) {
         kvm_msr_entry_add(cpu, MSR_KVM_PV_EOI_EN, 0);
     }
-    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_STEAL_TIME)) {
-        kvm_msr_entry_add(cpu, MSR_KVM_STEAL_TIME, 0);
+
+    if (env->mcg_cap) {
+        kvm_msr_entry_add(cpu, MSR_MCG_STATUS, 0);
+        kvm_msr_entry_add(cpu, MSR_MCG_CTL, 0);
+        if (has_msr_mcg_ext_ctl) {
+            kvm_msr_entry_add(cpu, MSR_MCG_EXT_CTL, 0);
+        }
+        for (i = 0; i < (env->mcg_cap & 0xff) * 4; i++) {
+            kvm_msr_entry_add(cpu, MSR_MC0_CTL + i, 0);
+        }
     }
-    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_POLL_CONTROL)) {
-        kvm_msr_entry_add(cpu, MSR_KVM_POLL_CONTROL, 1);
-    }
+
     if (has_architectural_pmu_version > 0) {
         if (has_architectural_pmu_version > 1) {
             kvm_msr_entry_add(cpu, MSR_CORE_PERF_FIXED_CTR_CTRL, 0);
@@ -3943,17 +3985,6 @@ static int kvm_get_msrs(X86CPU *cpu)
         for (i = 0; i < num_architectural_pmu_gp_counters; i++) {
             kvm_msr_entry_add(cpu, MSR_P6_PERFCTR0 + i, 0);
             kvm_msr_entry_add(cpu, MSR_P6_EVNTSEL0 + i, 0);
-        }
-    }
-
-    if (env->mcg_cap) {
-        kvm_msr_entry_add(cpu, MSR_MCG_STATUS, 0);
-        kvm_msr_entry_add(cpu, MSR_MCG_CTL, 0);
-        if (has_msr_mcg_ext_ctl) {
-            kvm_msr_entry_add(cpu, MSR_MCG_EXT_CTL, 0);
-        }
-        for (i = 0; i < (env->mcg_cap & 0xff) * 4; i++) {
-            kvm_msr_entry_add(cpu, MSR_MC0_CTL + i, 0);
         }
     }
 
@@ -3971,9 +4002,6 @@ static int kvm_get_msrs(X86CPU *cpu)
         kvm_msr_entry_add(cpu, HV_X64_MSR_REENLIGHTENMENT_CONTROL, 0);
         kvm_msr_entry_add(cpu, HV_X64_MSR_TSC_EMULATION_CONTROL, 0);
         kvm_msr_entry_add(cpu, HV_X64_MSR_TSC_EMULATION_STATUS, 0);
-    }
-    if (has_msr_hv_syndbg_options) {
-        kvm_msr_entry_add(cpu, HV_X64_MSR_SYNDBG_OPTIONS, 0);
     }
     if (has_msr_hv_crash) {
         int j;
@@ -4001,24 +4029,6 @@ static int kvm_get_msrs(X86CPU *cpu)
         for (msr = HV_X64_MSR_STIMER0_CONFIG; msr <= HV_X64_MSR_STIMER3_COUNT;
              msr++) {
             kvm_msr_entry_add(cpu, msr, 0);
-        }
-    }
-    if (env->features[FEAT_1_EDX] & CPUID_MTRR) {
-        kvm_msr_entry_add(cpu, MSR_MTRRdefType, 0);
-        kvm_msr_entry_add(cpu, MSR_MTRRfix64K_00000, 0);
-        kvm_msr_entry_add(cpu, MSR_MTRRfix16K_80000, 0);
-        kvm_msr_entry_add(cpu, MSR_MTRRfix16K_A0000, 0);
-        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_C0000, 0);
-        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_C8000, 0);
-        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_D0000, 0);
-        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_D8000, 0);
-        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_E0000, 0);
-        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_E8000, 0);
-        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_F0000, 0);
-        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_F8000, 0);
-        for (i = 0; i < MSR_MTRRcap_VCNT; i++) {
-            kvm_msr_entry_add(cpu, MSR_MTRRphysBase(i), 0);
-            kvm_msr_entry_add(cpu, MSR_MTRRphysMask(i), 0);
         }
     }
 
@@ -4065,7 +4075,8 @@ static int kvm_get_msrs(X86CPU *cpu)
     }
 
     if (kvm_enabled() && cpu->enable_pmu &&
-        (env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_ARCH_LBR)) {
+        (env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_ARCH_LBR))
+    {
         uint64_t depth;
         int i, ret;
 
@@ -4081,6 +4092,19 @@ static int kvm_get_msrs(X86CPU *cpu)
             }
         }
     }
+}
+
+static int kvm_get_msrs(X86CPU *cpu)
+{
+    CPUX86State *env = &cpu->env;
+    struct kvm_msr_entry *msrs = cpu->kvm_msr_buf->entries;
+    int ret, i;
+    uint64_t mtrr_top_bits;
+
+    kvm_msr_buf_reset(cpu);
+
+    kvm_get_msrs_common(cpu);
+    kvm_get_msrs_vm(cpu);
 
     ret = kvm_vcpu_ioctl(CPU(cpu), KVM_GET_MSRS, cpu->kvm_msr_buf);
     if (ret < 0) {
