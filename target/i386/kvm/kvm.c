@@ -4957,7 +4957,9 @@ int kvm_arch_get_registers(CPUState *cs)
     }
     ret = 0;
  out:
-    cpu_sync_bndcs_hflags(&cpu->env);
+    if (!is_tdx_vm()) {
+        cpu_sync_bndcs_hflags(&cpu->env);
+    }
     return ret;
 }
 
