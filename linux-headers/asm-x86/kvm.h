@@ -564,6 +564,13 @@ enum kvm_tdx_cmd_id {
 	KVM_TDX_CMD_NR_MAX,
 };
 
+/*
+ * Flag set from userspace to indicate the initialization it for a migratino
+ * destination TD, and some initialition work (e.g. tdh.mng.init) should be
+ * skipped.
+ */
+#define KVM_TDX_INIT_VM_F_POST_INIT	1
+
 struct kvm_tdx_cmd {
 	/* enum kvm_tdx_cmd_id */
 	__u32 id;

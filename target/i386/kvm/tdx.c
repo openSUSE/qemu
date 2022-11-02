@@ -1122,6 +1122,7 @@ int tdx_pre_create_vcpu(CPUState *cpu)
     X86CPU *x86cpu = X86_CPU(cpu);
     CPUX86State *env = &x86cpu->env;
     struct kvm_tdx_init_vm init_vm;
+    uint32_t flags = 0;
     int r = 0;
 
     qemu_mutex_lock(&tdx_guest->lock);
@@ -1173,7 +1174,11 @@ int tdx_pre_create_vcpu(CPUState *cpu)
     memcpy(init_vm.mrowner, tdx_guest->mrowner, sizeof(init_vm.mrowner));
     memcpy(init_vm.mrownerconfig, tdx_guest->mrownerconfig, sizeof(init_vm.mrownerconfig));
 
-    r = tdx_vm_ioctl(KVM_TDX_INIT_VM, 0, &init_vm);
+    if (runstate_check(RUN_STATE_INMIGRATE)) {
+        flags = KVM_TDX_INIT_VM_F_POST_INIT;
+    }
+
+    r = tdx_vm_ioctl(KVM_TDX_INIT_VM, flags, &init_vm);
     if (r < 0) {
         error_report("KVM_TDX_INIT_VM failed %s", strerror(-r));
         goto out;
