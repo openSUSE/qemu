@@ -2575,10 +2575,12 @@ static void qemu_machine_creation_done(void)
 
     qdev_machine_creation_done();
 
-    if (machine->cgs) {
-        /*
-         * Verify that Confidential Guest Support has actually been initialized
-         */
+    /*
+     * Verify that Confidential Guest Support has actually been initialized.
+     * Skip it if it's a migration destination guest which will be ready after
+     * migration ends.
+     */
+    if (machine->cgs && !runstate_check(RUN_STATE_INMIGRATE)) {
         assert(machine->cgs->ready);
     }
 
