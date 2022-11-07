@@ -2271,7 +2271,7 @@ void kvm_arch_reset_vcpu(X86CPU *cpu)
     CPUX86State *env = &cpu->env;
 
     env->xcr0 = 1;
-    if (kvm_irqchip_in_kernel()) {
+    if (kvm_irqchip_in_kernel() && !is_tdx_vm()) {
         env->mp_state = cpu_is_bsp(cpu) ? KVM_MP_STATE_RUNNABLE :
                                           KVM_MP_STATE_UNINITIALIZED;
     } else {
