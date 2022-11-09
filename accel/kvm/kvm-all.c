@@ -1007,7 +1007,8 @@ static int kvm_physical_log_clear(KVMMemoryListener *kml,
     KVMSlot *mem;
     int ret = 0, i;
 
-    if (!s->manual_dirty_log_protect) {
+    if (!s->manual_dirty_log_protect ||
+        runstate_check(RUN_STATE_FINISH_MIGRATE)) {
         /* No need to do explicit clear */
         return ret;
     }
