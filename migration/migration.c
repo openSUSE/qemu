@@ -3816,6 +3816,7 @@ static void migration_iteration_finish(MigrationState *s)
     case MIGRATION_STATUS_FAILED:
     case MIGRATION_STATUS_CANCELLED:
     case MIGRATION_STATUS_CANCELLING:
+        ram_save_cancel();
         if (s->vm_was_running) {
             if (!runstate_check(RUN_STATE_SHUTDOWN)) {
                 vm_start();

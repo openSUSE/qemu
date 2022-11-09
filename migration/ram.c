@@ -2533,6 +2533,42 @@ static int ram_save_cgs_start_epoch(RAMState *rs)
     return 0;
 }
 
+void ram_save_cancel(void)
+{
+    RAMBlock *block = ram_state->last_seen_block;
+    unsigned long page = ram_state->last_page;
+    ram_addr_t offset = ((ram_addr_t)page) << TARGET_PAGE_BITS;
+    uint64_t align_size = 1UL << block->clear_bmap_shift;
+    hwaddr gpa, gfn, gfn_aligned;
+    int ret;
+
+    if (!ram_counters.cgs_epochs) {
+        return;
+    } else if (ram_counters.cgs_epochs == 1) {
+        ret = kvm_physical_memory_addr_from_host(kvm_state,
+                                                 block->host + offset, &gpa);
+        assert(ret == 1);
+    } else {
+        /*
+         * All the pages have likely been saved in the first round. Just
+         * provide the end of the guest-physical page to cancel from.
+         */
+        gpa = ram_bytes_total() - TARGET_PAGE_SIZE;
+    }
+    gfn = gpa >> TARGET_PAGE_BITS;
+
+    /*
+     * Pages that have been cleared in the clear log are write-protected, and
+     * need to be restored. So make it aligned on the clear_bmap boundary.
+     */
+    gfn_aligned = QEMU_ALIGN_UP(gfn, align_size);
+
+    ret = cgs_mig_savevm_state_ram_cancel(ram_state->f, gfn_aligned);
+    if (ret) {
+        error_report("%s failed: %s", __func__, strerror(ret));
+    }
+}
+
 /**
  * ram_save_host_page: save a whole host page
  *
