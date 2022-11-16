@@ -367,7 +367,7 @@ static void pc_q35_machine_options(MachineClass *m)
     machine_class_allow_dynamic_sysbus_dev(m, TYPE_INTEL_IOMMU_DEVICE);
     machine_class_allow_dynamic_sysbus_dev(m, TYPE_RAMFB_DEVICE);
     machine_class_allow_dynamic_sysbus_dev(m, TYPE_VMBUS_BRIDGE);
-    m->max_cpus = 288;
+    m->max_cpus = 1024;
 }
 
 static void pc_q35_7_1_machine_options(MachineClass *m)
@@ -388,6 +388,7 @@ static void pc_q35_7_0_machine_options(MachineClass *m)
     pc_q35_7_1_machine_options(m);
     m->alias = NULL;
     pcmc->enforce_amd_1tb_hole = false;
+    m->max_cpus = 288;
     compat_props_add(m->compat_props, hw_compat_7_0, hw_compat_7_0_len);
     compat_props_add(m->compat_props, pc_compat_7_0, pc_compat_7_0_len);
 }
