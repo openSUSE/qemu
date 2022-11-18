@@ -690,4 +690,20 @@ struct kvm_tdx_get_migration_info {
 	__u8  pad[6];
 };
 
+#define KVM_DEV_TDX_MIG_ATTR	0x1
+
+struct kvm_dev_tdx_mig_attr {
+#define KVM_DEV_TDX_MIG_ATTR_VERSION	0
+	__u32 version;
+/* 4KB buffer can hold 512 entries at most */
+#define TDX_MIG_BUF_LIST_PAGES_MAX		512
+	__u32 buf_list_pages;
+	__u32 max_migs;
+};
+
+#define TDX_MIG_STREAM_MBMD_MAP_OFFSET		0
+#define TDX_MIG_STREAM_GPA_LIST_MAP_OFFSET	1
+#define TDX_MIG_STREAM_MAC_LIST_MAP_OFFSET	2
+#define TDX_MIG_STREAM_BUF_LIST_MAP_OFFSET	4
+
 #endif /* _ASM_X86_KVM_H */
