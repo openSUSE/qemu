@@ -5459,6 +5459,15 @@ int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
         assert(run->msr.reason == KVM_MSR_EXIT_REASON_FILTER);
         ret = kvm_handle_wrmsr(cpu, run);
         break;
+    case KVM_EXIT_TDX:
+        if (!is_tdx_vm()) {
+            fprintf(stderr, "KVM: get KVM_EXIT_TDX for a non-TDX VM.\n");
+            ret = -1;
+            break;
+        }
+        tdx_handle_exit(cpu, &run->tdx);
+        ret = 0;
+        break;
     default:
         fprintf(stderr, "KVM: unknown exit reason %d\n", run->exit_reason);
         ret = -1;
