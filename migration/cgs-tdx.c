@@ -104,6 +104,32 @@ static int tdx_mig_savevm_state_start(QEMUFile *f)
     return 0;
 }
 
+static long tdx_mig_save_epoch(QEMUFile *f, bool in_order_done)
+{
+    TdxMigStream *stream = &tdx_mig.streams[0];
+    uint64_t flags = in_order_done ? TDX_MIG_EXPORT_TRACK_F_IN_ORDER_DONE : 0;
+    long tdx_hdr_bytes, mbmd_bytes;
+    int ret;
+
+    ret = tdx_mig_stream_ioctl(stream, KVM_TDX_MIG_EXPORT_TRACK, 0, &flags);
+    if (ret) {
+        return ret;
+    }
+
+    mbmd_bytes = tdx_mig_stream_get_mbmd_bytes(stream);
+
+    /* Epoch only has mbmd data */
+    tdx_hdr_bytes = tdx_mig_put_mig_hdr(f, 0, 0);
+    qemu_put_buffer(f, (uint8_t *)stream->mbmd, mbmd_bytes);
+
+    return tdx_hdr_bytes + mbmd_bytes;
+}
+
+static long tdx_mig_savevm_state_ram_start_epoch(QEMUFile *f)
+{
+    return tdx_mig_save_epoch(f, false);
+}
+
 static bool tdx_mig_is_ready(void)
 {
     return tdx_premig_is_done();
@@ -214,5 +240,7 @@ void tdx_mig_init(CgsMig *cgs_mig, uint32_t nr_channels)
     cgs_mig->is_ready = tdx_mig_is_ready;
     cgs_mig->savevm_state_setup = tdx_mig_stream_setup;
     cgs_mig->savevm_state_start = tdx_mig_savevm_state_start;
+    cgs_mig->savevm_state_ram_start_epoch =
+                        tdx_mig_savevm_state_ram_start_epoch;
     cgs_mig->loadvm_state_setup = tdx_mig_stream_setup;
 }
