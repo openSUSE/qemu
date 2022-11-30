@@ -11,8 +11,15 @@
  *
  */
 
+#include "qemu/osdep.h"
+#include "qemu-file.h"
 #include "cgs.h"
 #include "target/i386/kvm/tdx.h"
+
+typedef struct TdxMigHdr {
+    uint16_t flags;
+    uint16_t buf_list_num;
+} TdxMigHdr;
 
 typedef struct TdxMigStream {
     int fd;
@@ -48,6 +55,53 @@ static int tdx_mig_stream_ioctl(TdxMigStream *stream, int cmd_id,
     }
 
     return ret;
+}
+
+static uint64_t tdx_mig_put_mig_hdr(QEMUFile *f, uint64_t num, uint16_t flags)
+{
+    TdxMigHdr hdr = {
+        .flags = flags,
+        .buf_list_num = (uint16_t)num,
+    };
+
+    qemu_put_buffer(f, (uint8_t *)&hdr, sizeof(hdr));
+
+    return sizeof(hdr);
+}
+
+static inline uint64_t tdx_mig_stream_get_mbmd_bytes(TdxMigStream *stream)
+{
+    /*
+     * The first 2 bytes in MBMD buffer tells the overall size of the mbmd
+     * data (see TDX module v1.5 ABI spec).
+     */
+    uint16_t bytes = *(uint16_t *)stream->mbmd;
+
+    return (uint64_t)bytes;
+}
+
+static int tdx_mig_savevm_state_start(QEMUFile *f)
+{
+    TdxMigStream *stream = &tdx_mig.streams[0];
+    uint64_t mbmd_bytes, buf_list_bytes, exported_num = 0;
+    int ret;
+
+    /* Export mbmd and buf_list */
+    ret = tdx_mig_stream_ioctl(stream, KVM_TDX_MIG_EXPORT_STATE_IMMUTABLE,
+                               0, &exported_num);
+    if (ret) {
+        error_report("Failed to export immutable states: %s", strerror(ret));
+        return ret;
+    }
+
+    mbmd_bytes = tdx_mig_stream_get_mbmd_bytes(stream);
+    buf_list_bytes = exported_num * TARGET_PAGE_SIZE;
+
+    tdx_mig_put_mig_hdr(f, exported_num, 0);
+    qemu_put_buffer(f, (uint8_t *)stream->mbmd, mbmd_bytes);
+    qemu_put_buffer(f, (uint8_t *)stream->buf_list, buf_list_bytes);
+
+    return 0;
 }
 
 static bool tdx_mig_is_ready(void)
@@ -159,5 +213,6 @@ void tdx_mig_init(CgsMig *cgs_mig, uint32_t nr_channels)
 
     cgs_mig->is_ready = tdx_mig_is_ready;
     cgs_mig->savevm_state_setup = tdx_mig_stream_setup;
+    cgs_mig->savevm_state_start = tdx_mig_savevm_state_start;
     cgs_mig->loadvm_state_setup = tdx_mig_stream_setup;
 }
