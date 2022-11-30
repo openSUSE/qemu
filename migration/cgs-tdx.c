@@ -198,6 +198,13 @@ static long tdx_mig_savevm_state_ram(QEMUFile *f, ram_addr_t *gfns,
     return tdx_mig_save_ram(f, stream);
 }
 
+static int tdx_mig_savevm_state_downtime(void)
+{
+    TdxMigStream *stream = &tdx_mig.streams[0];
+
+    return tdx_mig_stream_ioctl(stream, KVM_TDX_MIG_EXPORT_PAUSE, 0, 0);
+}
+
 static bool tdx_mig_is_ready(void)
 {
     return tdx_premig_is_done();
@@ -311,5 +318,6 @@ void tdx_mig_init(CgsMig *cgs_mig, uint32_t nr_channels)
     cgs_mig->savevm_state_ram_start_epoch =
                         tdx_mig_savevm_state_ram_start_epoch;
     cgs_mig->savevm_state_ram = tdx_mig_savevm_state_ram;
+    cgs_mig->savevm_state_downtime = tdx_mig_savevm_state_downtime;
     cgs_mig->loadvm_state_setup = tdx_mig_stream_setup;
 }
