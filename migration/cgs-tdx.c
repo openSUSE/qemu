@@ -16,6 +16,12 @@
 #include "cgs.h"
 #include "target/i386/kvm/tdx.h"
 
+#define KVM_TDX_MIG_MBMD_TYPE_IMMUTABLE_STATE   0
+#define KVM_TDX_MIG_MBMD_TYPE_TD_STATE          1
+#define KVM_TDX_MIG_MBMD_TYPE_VCPU_STATE        2
+#define KVM_TDX_MIG_MBMD_TYPE_EPOCH_TOKEN       32
+#define KVM_TDX_MIG_MBMD_TYPE_ABORT_TOKEN       33
+
 #define GPA_LIST_OP_EXPORT 1
 
 #define TDX_MIG_F_CONTINUE 0x1
@@ -99,6 +105,12 @@ static inline uint64_t tdx_mig_stream_get_mbmd_bytes(TdxMigStream *stream)
     uint16_t bytes = *(uint16_t *)stream->mbmd;
 
     return (uint64_t)bytes;
+}
+
+static uint8_t tdx_mig_stream_get_mbmd_type(TdxMigStream *stream)
+{
+    /* TDX module v1.5 ABI spec: MB_TYPE at byte offset 6 */
+    return *((uint8_t *)stream->mbmd + 6);
 }
 
 static int tdx_mig_savevm_state_start(QEMUFile *f)
@@ -453,6 +465,61 @@ static int tdx_mig_savevm_state_ram_cancel(hwaddr gfn_end)
     return 0;
 }
 
+static int tdx_mig_loadvm_state(QEMUFile *f)
+{
+    TdxMigStream *stream = &tdx_mig.streams[0];
+    uint64_t mbmd_bytes, buf_list_bytes;
+    uint64_t buf_list_num = 0;
+    bool should_continue = true;
+    uint8_t mbmd_type;
+    int ret, cmd_id;
+    TdxMigHdr hdr;
+
+    while (should_continue) {
+        if (should_continue && qemu_peek_le16(f, sizeof(hdr)) == 0) {
+            continue;
+        }
+
+        qemu_get_buffer(f, (uint8_t *)&hdr, sizeof(hdr));
+        mbmd_bytes = qemu_peek_le16(f, 0);
+        qemu_get_buffer(f, (uint8_t *)stream->mbmd, mbmd_bytes);
+        mbmd_type = tdx_mig_stream_get_mbmd_type(stream);
+
+        buf_list_num = hdr.buf_list_num;
+        buf_list_bytes = buf_list_num * TARGET_PAGE_SIZE;
+        qemu_get_buffer(f, (uint8_t *)stream->buf_list, buf_list_bytes);
+
+        switch (mbmd_type) {
+        case KVM_TDX_MIG_MBMD_TYPE_IMMUTABLE_STATE:
+            cmd_id = KVM_TDX_MIG_IMPORT_STATE_IMMUTABLE;
+            break;
+        case KVM_TDX_MIG_MBMD_TYPE_EPOCH_TOKEN:
+            cmd_id = KVM_TDX_MIG_IMPORT_TRACK;
+            break;
+        case KVM_TDX_MIG_MBMD_TYPE_TD_STATE:
+            cmd_id = KVM_TDX_MIG_IMPORT_STATE_TD;
+            break;
+        case KVM_TDX_MIG_MBMD_TYPE_VCPU_STATE:
+            cmd_id = KVM_TDX_MIG_IMPORT_STATE_VP;
+            break;
+        default:
+            error_report("%s: unsupported mb_type %d", __func__, mbmd_type);
+            return -1;
+        }
+
+        ret = tdx_mig_stream_ioctl(stream, cmd_id, 0, &buf_list_num);
+        if (ret) {
+            if (buf_list_num != 0) {
+                error_report("%s: buf_list_num=%lx", __func__, buf_list_num);
+            }
+            break;
+        }
+        should_continue = hdr.flags & TDX_MIG_F_CONTINUE;
+    }
+
+    return ret;
+}
+
 void tdx_mig_init(CgsMig *cgs_mig, uint32_t nr_channels)
 {
     /* Only support 1 migration channel currently */
@@ -471,5 +538,6 @@ void tdx_mig_init(CgsMig *cgs_mig, uint32_t nr_channels)
     cgs_mig->savevm_state_cleanup = tdx_mig_cleanup;
     cgs_mig->savevm_state_ram_cancel = tdx_mig_savevm_state_ram_cancel;
     cgs_mig->loadvm_state_setup = tdx_mig_stream_setup;
+    cgs_mig->loadvm_state = tdx_mig_loadvm_state;
     cgs_mig->loadvm_state_cleanup = tdx_mig_cleanup;
 }
