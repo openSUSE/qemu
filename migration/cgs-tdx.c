@@ -18,6 +18,8 @@
 
 #define GPA_LIST_OP_EXPORT 1
 
+#define TDX_MIG_F_CONTINUE 0x1
+
 typedef struct TdxMigHdr {
     uint16_t flags;
     uint16_t buf_list_num;
@@ -205,6 +207,91 @@ static int tdx_mig_savevm_state_downtime(void)
     return tdx_mig_stream_ioctl(stream, KVM_TDX_MIG_EXPORT_PAUSE, 0, 0);
 }
 
+static int tdx_mig_save_td(QEMUFile *f, TdxMigStream *stream)
+{
+    int ret;
+    uint64_t mbmd_bytes, buf_list_bytes, exported_num = 0;
+
+    ret = tdx_mig_stream_ioctl(stream, KVM_TDX_MIG_EXPORT_STATE_TD, 0,
+                               &exported_num);
+    if (ret) {
+        return ret;
+    }
+
+    mbmd_bytes = tdx_mig_stream_get_mbmd_bytes(stream);
+    buf_list_bytes = exported_num * TARGET_PAGE_SIZE;
+
+    /*
+     * The TD-scope states and vCPU states are sent together, so add the
+     * CONTINUE flag to have the destination side continue the loading.
+     */
+    tdx_mig_put_mig_hdr(f, exported_num, TDX_MIG_F_CONTINUE);
+    qemu_put_buffer(f, (uint8_t *)stream->mbmd, mbmd_bytes);
+    qemu_put_buffer(f, (uint8_t *)stream->buf_list, buf_list_bytes);
+
+    return 0;
+}
+
+static int tdx_mig_save_one_vcpu(QEMUFile *f, TdxMigStream *stream)
+{
+    uint64_t mbmd_bytes, buf_list_bytes, exported_num = 0;
+    int ret;
+
+    ret = tdx_mig_stream_ioctl(stream, KVM_TDX_MIG_EXPORT_STATE_VP, 0,
+                               &exported_num);
+    if (ret) {
+        return ret;
+    }
+
+    mbmd_bytes = tdx_mig_stream_get_mbmd_bytes(stream);
+    buf_list_bytes = exported_num * TARGET_PAGE_SIZE;
+    /* Ask the destination to continue to load the next vCPU states */
+    tdx_mig_put_mig_hdr(f, exported_num, TDX_MIG_F_CONTINUE);
+
+    qemu_put_buffer(f, (uint8_t *)stream->mbmd, mbmd_bytes);
+    qemu_put_buffer(f, (uint8_t *)stream->buf_list, buf_list_bytes);
+
+    return 0;
+}
+
+static int tdx_mig_save_vcpus(QEMUFile *f, TdxMigStream *stream)
+{
+    CPUState *cpu;
+    int ret;
+
+    CPU_FOREACH(cpu) {
+        ret = tdx_mig_save_one_vcpu(f, stream);
+        if (ret) {
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
+static int tdx_mig_savevm_state_end(QEMUFile *f)
+{
+    TdxMigStream *stream = &tdx_mig.streams[0];
+    int ret;
+
+    ret = tdx_mig_save_td(f, stream);
+    if (ret) {
+        return ret;
+    }
+
+    ret = tdx_mig_save_vcpus(f, stream);
+    if (ret) {
+        return ret;
+    }
+
+    ret = tdx_mig_save_epoch(f, true);
+    if (ret < 0) {
+        return ret;
+    }
+
+    return 0;
+}
+
 static bool tdx_mig_is_ready(void)
 {
     return tdx_premig_is_done();
@@ -319,5 +406,6 @@ void tdx_mig_init(CgsMig *cgs_mig, uint32_t nr_channels)
                         tdx_mig_savevm_state_ram_start_epoch;
     cgs_mig->savevm_state_ram = tdx_mig_savevm_state_ram;
     cgs_mig->savevm_state_downtime = tdx_mig_savevm_state_downtime;
+    cgs_mig->savevm_state_end = tdx_mig_savevm_state_end;
     cgs_mig->loadvm_state_setup = tdx_mig_stream_setup;
 }
