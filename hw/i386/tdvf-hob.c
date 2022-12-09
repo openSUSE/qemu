@@ -119,17 +119,19 @@ static void tdvf_hob_add_memory_resources(TdxGuest *tdx, TdvfHob *hob)
 
 void tdvf_hob_create(TdxGuest *tdx, TdxFirmwareEntry *td_hob)
 {
-    TdvfHob hob = {
-        .hob_addr = td_hob->address,
-        .size = td_hob->size,
-        .ptr = td_hob->mem_ptr,
-
-        .current = td_hob->mem_ptr,
-        .end = td_hob->mem_ptr + td_hob->size,
-    };
-
+    TdvfHob hob;
     EFI_HOB_GENERIC_HEADER *last_hob;
     EFI_HOB_HANDOFF_INFO_TABLE *hit;
+
+    if (!td_hob) {
+        return;
+    }
+
+    hob.hob_addr = td_hob->address,
+    hob.size = td_hob->size,
+    hob.ptr = td_hob->mem_ptr,
+    hob.current = td_hob->mem_ptr,
+    hob.end = td_hob->mem_ptr + td_hob->size,
 
     /* Note, Efi{Free}Memory{Bottom,Top} are ignored, leave 'em zeroed. */
     hit = tdvf_get_area(&hob, sizeof(*hit));

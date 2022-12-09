@@ -763,8 +763,8 @@ static TdxFirmwareEntry *tdx_get_hob_entry(TdxGuest *tdx)
             return entry;
         }
     }
-    error_report("TDVF metadata doesn't specify TD_HOB location.");
-    exit(1);
+
+    return NULL;
 }
 
 static void tdx_add_ram_entry(uint64_t address, uint64_t length, uint32_t type)
@@ -873,14 +873,19 @@ static void tdx_init_ram_entries(void)
 static void tdx_post_init_vcpus(void)
 {
     TdxFirmwareEntry *hob;
+    void *hob_addr = NULL;
     CPUState *cpu;
     int r;
 
     hob = tdx_get_hob_entry(tdx_guest);
+    if (hob) {
+        hob_addr = (void *)hob->address;
+    }
+
     CPU_FOREACH(cpu) {
         apic_force_x2apic(X86_CPU(cpu)->apic_state);
 
-        r = tdx_vcpu_ioctl(cpu, KVM_TDX_INIT_VCPU, 0, (void *)hob->address);
+        r = tdx_vcpu_ioctl(cpu, KVM_TDX_INIT_VCPU, 0, hob_addr);
         if (r < 0) {
             error_report("KVM_TDX_INIT_VCPU failed %s", strerror(-r));
             exit(1);
