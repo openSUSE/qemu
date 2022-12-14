@@ -63,6 +63,7 @@ priv_memfd_backend_memory_alloc(HostMemoryBackend *backend, Error **errp)
     g_free(name);
 
     memory_region_set_restricted_fd(&backend->mr, priv_fd);
+    ram_block_alloc_cgs_bitmap(backend->mr.ram_block);
 }
 
 static bool

@@ -2220,6 +2220,8 @@ static void reclaim_ramblock(RAMBlock *block)
     } else if (block->fd >= 0) {
         qemu_ram_munmap(block->fd, block->host, block->max_length);
         close(block->fd);
+        g_free(block->cgs_bmap);
+        block->cgs_bmap = NULL;
 #endif
     } else {
         qemu_anon_ram_free(block->host, block->max_length);
@@ -4000,10 +4002,19 @@ bool ram_block_discard_is_required(void)
            qatomic_read(&ram_block_coordinated_discard_required_cnt);
 }
 
+void ram_block_alloc_cgs_bitmap(RAMBlock *rb)
+{
+    if (!rb) {
+        return;
+    }
+
+    rb->cgs_bmap = g_malloc0(rb->max_length);
+}
+
 int ram_block_convert_range(RAMBlock *rb, uint64_t start, size_t length,
                             bool shared_to_private)
 {
-    int fd;
+    int fd, ret;
 
     if (!rb || rb->restricted_fd <= 0) {
         return -1;
@@ -4024,5 +4035,17 @@ int ram_block_convert_range(RAMBlock *rb, uint64_t start, size_t length,
         fd = rb->restricted_fd;
     }
 
-    return ram_block_discard_range_fd(rb, start, length, fd);
+    ret = ram_block_discard_range_fd(rb, start, length, fd);
+    if (!ret) {
+        uint64_t bit_start = start / rb->page_size;
+        uint64_t bit_length = length / rb->page_size;
+
+        if (shared_to_private) {
+            bitmap_clear(rb->cgs_bmap, bit_start, bit_length);
+        } else {
+            bitmap_set(rb->cgs_bmap, bit_start, bit_length);
+        }
+    }
+
+    return ret;
 }

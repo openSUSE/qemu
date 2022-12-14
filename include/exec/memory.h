@@ -3115,6 +3115,8 @@ bool ram_block_discard_is_disabled(void);
  */
 bool ram_block_discard_is_required(void);
 
+void ram_block_alloc_cgs_bitmap(RAMBlock *rb);
+
 #endif
 
 #endif
