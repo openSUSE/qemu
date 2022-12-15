@@ -912,7 +912,21 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
         case TDVF_SECTION_TYPE_TEMP_MEM:
             entry->mem_ptr = qemu_ram_mmap(-1, entry->size,
                                            qemu_real_host_page_size(), 0, 0);
-            tdx_accept_ram_range(entry->address, entry->size);
+            QEMU_FALLTHROUGH;
+        /* PERM_MEM is allocated and added later via PAGE.AUG */
+        case TDVF_SECTION_TYPE_PERM_MEM:
+            /*
+             * TEMP_MEM uses the address space reserved for BIOS, rather than
+             * the regular TD RAM address space.
+             */
+            if (entry->type != TDVF_SECTION_TYPE_TEMP_MEM) {
+                r = tdx_accept_ram_range(entry->address, entry->size);
+                if (r) {
+                    error_report("Failed to reserve ram for TDVF section %d",
+                                 entry->type);
+                    exit(1);
+                }
+            }
             break;
         default:
             error_report("Unsupported TDVF section %d", entry->type);
@@ -938,6 +952,10 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
         if (r < 0) {
              error_report("Reserve initial private memory failed %s", strerror(-r));
              exit(1);
+        }
+
+        if (entry->type == TDVF_SECTION_TYPE_PERM_MEM) {
+            continue;
         }
 
         __u32 flags = entry->attributes & TDVF_SECTION_ATTRIBUTES_MR_EXTEND ?

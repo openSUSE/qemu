@@ -144,6 +144,7 @@ static int tdvf_parse_and_check_section_entry(const TdvfSectionEntry *src,
         break;
     case TDVF_SECTION_TYPE_TD_HOB:
     case TDVF_SECTION_TYPE_TEMP_MEM:
+    case TDVF_SECTION_TYPE_PERM_MEM:
         /* The sections that no need to be copied from firmware image */
         if (entry->data_len != 0) {
             error_report("%d section with RawDataSize 0x%x != 0",
