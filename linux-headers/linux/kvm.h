@@ -1197,6 +1197,7 @@ struct kvm_ppc_resize_hpt {
 #define KVM_CAP_S390_PROTECTED_ASYNC_DISABLE 224
 
 #define KVM_CAP_MEMORY_ATTRIBUTES 225
+#define KVM_CAP_VM_TYPES 226
 
 #ifdef KVM_CAP_IRQ_ROUTING
 
