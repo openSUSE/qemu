@@ -58,6 +58,7 @@
 #include "qemu/iov.h"
 #include "multifd.h"
 #include "sysemu/runstate.h"
+#include "sysemu/kvm.h"
 
 #include "hw/boards.h" /* for machine_dump_guest_core() */
 
@@ -444,12 +445,16 @@ void dirty_sync_missed_zero_copy(void)
     ram_counters.dirty_sync_missed_zero_copy++;
 }
 
+#define CGS_PRIVATE_GPA_INVALID (~0UL)
+
 /* used by the search for pages to send */
 struct PageSearchStatus {
     /* Current block being searched */
     RAMBlock    *block;
     /* Current page to search from */
     unsigned long page;
+    /* Guest-physical address of the current page if it is private */
+    hwaddr cgs_private_gpa;
     /* Set once we wrap around */
     bool         complete_round;
     /*
@@ -1537,6 +1542,36 @@ retry:
     return pages;
 }
 
+static hwaddr ram_get_private_gpa(RAMBlock *rb, unsigned long page)
+{
+    int ret;
+    ram_addr_t offset = ((ram_addr_t)page) << TARGET_PAGE_BITS;
+    hwaddr gpa;
+
+    /* ROM devices contain unencrypted data */
+    if (ramblock_is_ignored(rb) ||
+        memory_region_is_romd(rb->mr) ||
+        memory_region_is_rom(rb->mr) ||
+        !memory_region_is_ram(rb->mr) ||
+        !rb->cgs_bmap ||
+        test_bit(page, rb->cgs_bmap)) {
+        return CGS_PRIVATE_GPA_INVALID;
+    }
+
+    if (offset >= rb->used_length) {
+        return CGS_PRIVATE_GPA_INVALID;
+    }
+
+    ret = kvm_physical_memory_addr_from_host(kvm_state, rb->host + offset,
+                                             &gpa);
+    if (!ret) {
+        error_report("failed to finf gpa, page=%lx", page);
+        return CGS_PRIVATE_GPA_INVALID;
+    }
+
+    return gpa;
+}
+
 /**
  * find_dirty_block: find the next dirty page and update any state
  * associated with the search process.
@@ -1557,6 +1592,7 @@ static bool find_dirty_block(RAMState *rs, PageSearchStatus *pss, bool *again)
     pss->postcopy_target_channel = RAM_CHANNEL_PRECOPY;
 
     pss->page = migration_bitmap_find_dirty(rs, pss->block, pss->page);
+    pss->cgs_private_gpa = ram_get_private_gpa(pss->block, pss->page);
     if (pss->complete_round && pss->block == rs->last_seen_block &&
         pss->page >= rs->last_page) {
         /*
@@ -2535,6 +2571,7 @@ static int ram_save_host_page(RAMState *rs, PageSearchStatus *pss)
             }
         }
         pss->page = migration_bitmap_find_dirty(rs, pss->block, pss->page);
+        pss->cgs_private_gpa = ram_get_private_gpa(pss->block, pss->page);
     } while ((pss->page < hostpage_boundary) &&
              offset_in_ramblock(pss->block,
                                 ((ram_addr_t)pss->page) << TARGET_PAGE_BITS));
@@ -2597,6 +2634,7 @@ static int ram_find_and_save_block(RAMState *rs)
     pss.block = rs->last_seen_block;
     pss.page = rs->last_page;
     pss.complete_round = false;
+    pss.cgs_private_gpa = CGS_PRIVATE_GPA_INVALID;
 
     do {
         again = true;
