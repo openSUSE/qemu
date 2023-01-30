@@ -19,6 +19,7 @@
 #define KVM_TDX_MIG_MBMD_TYPE_IMMUTABLE_STATE   0
 #define KVM_TDX_MIG_MBMD_TYPE_TD_STATE          1
 #define KVM_TDX_MIG_MBMD_TYPE_VCPU_STATE        2
+#define KVM_TDX_MIG_MBMD_TYPE_MEMORY_STATE      16
 #define KVM_TDX_MIG_MBMD_TYPE_EPOCH_TOKEN       32
 #define KVM_TDX_MIG_MBMD_TYPE_ABORT_TOKEN       33
 
@@ -468,7 +469,7 @@ static int tdx_mig_savevm_state_ram_cancel(hwaddr gfn_end)
 static int tdx_mig_loadvm_state(QEMUFile *f)
 {
     TdxMigStream *stream = &tdx_mig.streams[0];
-    uint64_t mbmd_bytes, buf_list_bytes;
+    uint64_t mbmd_bytes, buf_list_bytes, mac_list_bytes, gpa_list_bytes;
     uint64_t buf_list_num = 0;
     bool should_continue = true;
     uint8_t mbmd_type;
@@ -487,11 +488,20 @@ static int tdx_mig_loadvm_state(QEMUFile *f)
 
         buf_list_num = hdr.buf_list_num;
         buf_list_bytes = buf_list_num * TARGET_PAGE_SIZE;
-        qemu_get_buffer(f, (uint8_t *)stream->buf_list, buf_list_bytes);
+        if (buf_list_num) {
+            qemu_get_buffer(f, (uint8_t *)stream->buf_list, buf_list_bytes);
+        }
 
         switch (mbmd_type) {
         case KVM_TDX_MIG_MBMD_TYPE_IMMUTABLE_STATE:
             cmd_id = KVM_TDX_MIG_IMPORT_STATE_IMMUTABLE;
+            break;
+        case KVM_TDX_MIG_MBMD_TYPE_MEMORY_STATE:
+            cmd_id = KVM_TDX_MIG_IMPORT_MEM;
+            mac_list_bytes = buf_list_num * sizeof(Int128);
+            gpa_list_bytes = buf_list_num * sizeof(GpaListEntry);
+            qemu_get_buffer(f, (uint8_t *)stream->gpa_list, gpa_list_bytes);
+            qemu_get_buffer(f, (uint8_t *)stream->mac_list, mac_list_bytes);
             break;
         case KVM_TDX_MIG_MBMD_TYPE_EPOCH_TOKEN:
             cmd_id = KVM_TDX_MIG_IMPORT_TRACK;
