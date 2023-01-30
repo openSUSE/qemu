@@ -51,6 +51,7 @@
 #include "sysemu/cpus.h"
 #include "exec/memory.h"
 #include "exec/target_page.h"
+#include "exec/confidential-guest-support.h"
 #include "trace.h"
 #include "qemu/iov.h"
 #include "qemu/main-loop.h"
@@ -2646,6 +2647,7 @@ static bool postcopy_pause_incoming(MigrationIncomingState *mis)
 
 int qemu_loadvm_state_main(QEMUFile *f, MigrationIncomingState *mis)
 {
+    MachineState *machine;
     uint8_t section_type;
     int ret = 0;
 
@@ -2677,6 +2679,10 @@ retry:
         case QEMU_VM_SECTION_CGS_START:
         case QEMU_VM_SECTION_CGS_END:
             ret = cgs_mig_loadvm_state(f);
+            if (section_type == QEMU_VM_SECTION_CGS_END && !ret) {
+                machine = MACHINE(qdev_get_machine());
+                machine->cgs->ready = true;
+            }
             break;
         case QEMU_VM_COMMAND:
             ret = loadvm_process_command(f);
