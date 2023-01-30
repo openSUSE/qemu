@@ -199,3 +199,12 @@ int cgs_mig_loadvm_state(QEMUFile *f)
 
     return ret;
 }
+
+void cgs_mig_loadvm_state_cleanup(void)
+{
+    if (!cgs_mig.loadvm_state_cleanup) {
+        return;
+    }
+
+    cgs_mig.loadvm_state_cleanup();
+}
