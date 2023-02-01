@@ -56,6 +56,7 @@ typedef struct TdxGuest {
     char *quote_generation_str;
     SocketAddress *quote_generation;
 
+    uint32_t vsockport;
     uint32_t migtd_pid;
     uint64_t migtd_attr;
 } TdxGuest;

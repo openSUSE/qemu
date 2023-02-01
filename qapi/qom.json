@@ -881,6 +881,8 @@
 #
 # @migtd-pid: process id of a migtd to bind
 #
+# @vsockport: vsock port for a migtd to connect
+#
 # Since: 7.3
 ##
 { 'struct': 'TdxGuestProperties',
@@ -891,7 +893,8 @@
             '*mrownerconfig': 'str',
             '*quote-generation-service': 'str',
             '*migtd-attr': 'uint64',
-            '*migtd-pid': 'uint32' } }
+            '*migtd-pid': 'uint32',
+            '*vsockport': 'uint32' } }
 
 ##
 # @ThreadContextProperties:

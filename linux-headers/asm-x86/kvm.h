@@ -675,4 +675,12 @@ struct kvm_tdx_servtd {
 	};
 };
 
+struct kvm_tdx_set_migration_info {
+#define KVM_TDX_SET_MIGRATION_INFO_VERSION	0
+	__u8  version;
+	__u8  is_src;
+	__u8  pad[2];
+	__u32 vsock_port;
+};
+
 #endif /* _ASM_X86_KVM_H */

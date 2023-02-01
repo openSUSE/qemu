@@ -19,6 +19,7 @@
 #include "sysemu/kvm.h"
 #include "sysemu/sysemu.h"
 #include "sysemu/tdx.h"
+#include "sysemu/runstate.h"
 
 #include "exec/address-spaces.h"
 #include "exec/ramblock.h"
@@ -1267,6 +1268,40 @@ OBJECT_DEFINE_TYPE_WITH_INTERFACES(TdxGuest,
                                    { TYPE_USER_CREATABLE },
                                    { NULL })
 
+static void tdx_migtd_get_vsockport(Object *obj,
+                                     Visitor *v,
+                                     const char *name,
+                                     void *opaque,
+                                     Error **errp)
+{
+    TdxGuest *tdx = TDX_GUEST(obj);
+
+    visit_type_uint32(v, name, &tdx->vsockport, errp);
+}
+
+static void tdx_migtd_set_vsockport(Object *obj,
+                                     Visitor *v,
+                                     const char *name,
+                                     void *opaque,
+                                     Error **errp)
+{
+    TdxGuest *tdx = TDX_GUEST(obj);
+    struct kvm_tdx_set_migration_info info;
+    uint32_t val;
+
+    if (!visit_type_uint32(v, name, &val, errp)) {
+        return;
+    }
+
+    tdx->vsockport = val;
+
+    memset(&info, 0, sizeof(struct kvm_tdx_set_migration_info));
+    info.version = KVM_TDX_SET_MIGRATION_INFO_VERSION;
+    info.is_src = !runstate_check(RUN_STATE_INMIGRATE);
+    info.vsock_port = tdx->vsockport;
+    tdx_vm_ioctl(KVM_TDX_SET_MIGRATION_INFO, 0, &info);
+}
+
 static void tdx_guest_init(Object *obj)
 {
     TdxGuest *tdx = TDX_GUEST(obj);
@@ -1291,6 +1326,8 @@ static void tdx_guest_init(Object *obj)
                                    &tdx->migtd_attr, OBJ_PROP_FLAG_READWRITE);
     object_property_add(obj, "migtd-pid", "uint32", tdx_migtd_get_pid,
                         tdx_migtd_set_pid, NULL, NULL);
+    object_property_add(obj, "vsockport", "uint32", tdx_migtd_get_vsockport,
+                        tdx_migtd_set_vsockport, NULL, NULL);
 
     tdx->quote_generation_str = NULL;
     tdx->quote_generation = NULL;
