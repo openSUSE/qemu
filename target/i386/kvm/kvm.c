@@ -3318,17 +3318,77 @@ static void kvm_init_msrs(X86CPU *cpu)
     assert(kvm_buf_set_msrs(cpu) == 0);
 }
 
-static int kvm_put_msrs(X86CPU *cpu, int level)
+/* MSRs emulated for both legacy VMs and TDs */
+static void kvm_put_msrs_common(X86CPU *cpu, int level)
 {
     CPUX86State *env = &cpu->env;
     int i;
 
-    kvm_msr_buf_reset(cpu);
+    if (has_msr_misc_enable) {
+        kvm_msr_entry_add(cpu, MSR_IA32_MISC_ENABLE,
+                          env->msr_ia32_misc_enable);
+    }
+
+    /*
+     * The following MSRs have side effects on the guest or are too heavy
+     * for normal writeback. Limit them to reset or full state updates.
+     */
+    if (level < KVM_PUT_RESET_STATE) {
+        return;
+    }
+
+    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_STEAL_TIME)) {
+        kvm_msr_entry_add(cpu, MSR_KVM_STEAL_TIME, env->steal_time_msr);
+    }
+    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_POLL_CONTROL)) {
+        kvm_msr_entry_add(cpu, MSR_KVM_POLL_CONTROL, env->poll_control_msr);
+    }
+
+    if (env->features[FEAT_1_EDX] & CPUID_MTRR) {
+        uint64_t phys_mask = MAKE_64BIT_MASK(0, cpu->phys_bits);
+
+        kvm_msr_entry_add(cpu, MSR_MTRRdefType, env->mtrr_deftype);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix64K_00000, env->mtrr_fixed[0]);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix16K_80000, env->mtrr_fixed[1]);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix16K_A0000, env->mtrr_fixed[2]);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_C0000, env->mtrr_fixed[3]);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_C8000, env->mtrr_fixed[4]);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_D0000, env->mtrr_fixed[5]);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_D8000, env->mtrr_fixed[6]);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_E0000, env->mtrr_fixed[7]);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_E8000, env->mtrr_fixed[8]);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_F0000, env->mtrr_fixed[9]);
+        kvm_msr_entry_add(cpu, MSR_MTRRfix4K_F8000, env->mtrr_fixed[10]);
+        for (i = 0; i < MSR_MTRRcap_VCNT; i++) {
+            /*
+             * The CPU GPs if we write to a bit above the physical limit of
+             * the host CPU (and KVM emulates that)
+             */
+            uint64_t mask = env->mtrr_var[i].mask;
+            mask &= phys_mask;
+
+            kvm_msr_entry_add(cpu, MSR_MTRRphysBase(i),
+                              env->mtrr_var[i].base);
+            kvm_msr_entry_add(cpu, MSR_MTRRphysMask(i), mask);
+        }
+    }
+}
+
+/* MSRs emulated for VMs only */
+static void kvm_put_msrs_vm(X86CPU *cpu, int level)
+{
+    CPUX86State *env = &cpu->env;
+    int i;
+
+    if (is_tdx_vm()) {
+        return;
+    }
 
     kvm_msr_entry_add(cpu, MSR_IA32_SYSENTER_CS, env->sysenter_cs);
     kvm_msr_entry_add(cpu, MSR_IA32_SYSENTER_ESP, env->sysenter_esp);
     kvm_msr_entry_add(cpu, MSR_IA32_SYSENTER_EIP, env->sysenter_eip);
     kvm_msr_entry_add(cpu, MSR_PAT, env->pat);
+
     if (has_msr_star) {
         kvm_msr_entry_add(cpu, MSR_STAR, env->star);
     }
@@ -3340,10 +3400,6 @@ static int kvm_put_msrs(X86CPU *cpu, int level)
     }
     if (has_msr_tsc_adjust) {
         kvm_msr_entry_add(cpu, MSR_TSC_ADJUST, env->tsc_adjust);
-    }
-    if (has_msr_misc_enable) {
-        kvm_msr_entry_add(cpu, MSR_IA32_MISC_ENABLE,
-                          env->msr_ia32_misc_enable);
     }
     if (has_msr_smbase) {
         kvm_msr_entry_add(cpu, MSR_IA32_SMBASE, env->smbase);
@@ -3367,7 +3423,8 @@ static int kvm_put_msrs(X86CPU *cpu, int level)
         kvm_msr_entry_add(cpu, MSR_IA32_SPEC_CTRL, env->spec_ctrl);
     }
     if (has_tsc_scale_msr) {
-        kvm_msr_entry_add(cpu, MSR_AMD64_TSC_RATIO, env->amd_tsc_scale_msr);
+        kvm_msr_entry_add(cpu, MSR_AMD64_TSC_RATIO,
+                          env->amd_tsc_scale_msr);
     }
 
     if (has_msr_tsx_ctrl) {
@@ -3390,45 +3447,39 @@ static int kvm_put_msrs(X86CPU *cpu, int level)
      * The following MSRs have side effects on the guest or are too heavy
      * for normal writeback. Limit them to reset or full state updates.
      */
-    if (level >= KVM_PUT_RESET_STATE) {
-        kvm_msr_entry_add(cpu, MSR_IA32_TSC, env->tsc);
-        kvm_msr_entry_add(cpu, MSR_KVM_SYSTEM_TIME, env->system_time_msr);
-        kvm_msr_entry_add(cpu, MSR_KVM_WALL_CLOCK, env->wall_clock_msr);
-        if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_ASYNC_PF_INT)) {
-            kvm_msr_entry_add(cpu, MSR_KVM_ASYNC_PF_INT, env->async_pf_int_msr);
-        }
-        if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_ASYNC_PF)) {
-            kvm_msr_entry_add(cpu, MSR_KVM_ASYNC_PF_EN, env->async_pf_en_msr);
-        }
-        if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_PV_EOI)) {
-            kvm_msr_entry_add(cpu, MSR_KVM_PV_EOI_EN, env->pv_eoi_en_msr);
-        }
-        if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_STEAL_TIME)) {
-            kvm_msr_entry_add(cpu, MSR_KVM_STEAL_TIME, env->steal_time_msr);
-        }
+    if (level < KVM_PUT_RESET_STATE) {
+        return;
+    }
 
-        if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_POLL_CONTROL)) {
-            kvm_msr_entry_add(cpu, MSR_KVM_POLL_CONTROL, env->poll_control_msr);
+    kvm_msr_entry_add(cpu, MSR_IA32_TSC, env->tsc);
+    kvm_msr_entry_add(cpu, MSR_KVM_SYSTEM_TIME, env->system_time_msr);
+    kvm_msr_entry_add(cpu, MSR_KVM_WALL_CLOCK, env->wall_clock_msr);
+    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_ASYNC_PF_INT)) {
+        kvm_msr_entry_add(cpu, MSR_KVM_ASYNC_PF_INT, env->async_pf_int_msr);
+    }
+    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_ASYNC_PF)) {
+        kvm_msr_entry_add(cpu, MSR_KVM_ASYNC_PF_EN, env->async_pf_en_msr);
+    }
+    if (env->features[FEAT_KVM] & (1 << KVM_FEATURE_PV_EOI)) {
+        kvm_msr_entry_add(cpu, MSR_KVM_PV_EOI_EN, env->pv_eoi_en_msr);
+    }
+
+    if (has_architectural_pmu_version > 0) {
+        if (has_architectural_pmu_version > 1) {
+            /* Stop the counter.  */
+            kvm_msr_entry_add(cpu, MSR_CORE_PERF_FIXED_CTR_CTRL, 0);
+            kvm_msr_entry_add(cpu, MSR_CORE_PERF_GLOBAL_CTRL, 0);
         }
-
-        if (has_architectural_pmu_version > 0) {
-            if (has_architectural_pmu_version > 1) {
-                /* Stop the counter.  */
-                kvm_msr_entry_add(cpu, MSR_CORE_PERF_FIXED_CTR_CTRL, 0);
-                kvm_msr_entry_add(cpu, MSR_CORE_PERF_GLOBAL_CTRL, 0);
-            }
-
-            /* Set the counter values.  */
-            for (i = 0; i < num_architectural_pmu_fixed_counters; i++) {
-                kvm_msr_entry_add(cpu, MSR_CORE_PERF_FIXED_CTR0 + i,
-                                  env->msr_fixed_counters[i]);
-            }
-            for (i = 0; i < num_architectural_pmu_gp_counters; i++) {
-                kvm_msr_entry_add(cpu, MSR_P6_PERFCTR0 + i,
-                                  env->msr_gp_counters[i]);
-                kvm_msr_entry_add(cpu, MSR_P6_EVNTSEL0 + i,
-                                  env->msr_gp_evtsel[i]);
-            }
+        /* Set the counter values.  */
+        for (i = 0; i < num_architectural_pmu_fixed_counters; i++) {
+            kvm_msr_entry_add(cpu, MSR_CORE_PERF_FIXED_CTR0 + i,
+                              env->msr_fixed_counters[i]);
+        }
+        for (i = 0; i < num_architectural_pmu_gp_counters; i++) {
+            kvm_msr_entry_add(cpu, MSR_P6_PERFCTR0 + i,
+                              env->msr_gp_counters[i]);
+            kvm_msr_entry_add(cpu, MSR_P6_EVNTSEL0 + i, env->msr_gp_evtsel[i]);
+         }
             if (has_architectural_pmu_version > 1) {
                 kvm_msr_entry_add(cpu, MSR_CORE_PERF_GLOBAL_STATUS,
                                   env->msr_global_status);
@@ -3441,187 +3492,118 @@ static int kvm_put_msrs(X86CPU *cpu, int level)
                 kvm_msr_entry_add(cpu, MSR_CORE_PERF_GLOBAL_CTRL,
                                   env->msr_global_ctrl);
             }
-        }
-        /*
-         * Hyper-V partition-wide MSRs: to avoid clearing them on cpu hot-add,
-         * only sync them to KVM on the first cpu
-         */
-        if (current_cpu == first_cpu) {
-            if (has_msr_hv_hypercall) {
-                kvm_msr_entry_add(cpu, HV_X64_MSR_GUEST_OS_ID,
-                                  env->msr_hv_guest_os_id);
-                kvm_msr_entry_add(cpu, HV_X64_MSR_HYPERCALL,
+    }
+
+    /*
+     * Hyper-V partition-wide MSRs: to avoid clearing them on cpu hot-add,
+     * only sync them to KVM on the first cpu.
+     */
+    if (current_cpu == first_cpu) {
+        if (has_msr_hv_hypercall) {
+            kvm_msr_entry_add(cpu, HV_X64_MSR_GUEST_OS_ID,
+                              env->msr_hv_guest_os_id);
+            kvm_msr_entry_add(cpu, HV_X64_MSR_HYPERCALL,
                                   env->msr_hv_hypercall);
-            }
-            if (hyperv_feat_enabled(cpu, HYPERV_FEAT_TIME)) {
+        }
+        if (hyperv_feat_enabled(cpu, HYPERV_FEAT_TIME)) {
                 kvm_msr_entry_add(cpu, HV_X64_MSR_REFERENCE_TSC,
                                   env->msr_hv_tsc);
-            }
-            if (hyperv_feat_enabled(cpu, HYPERV_FEAT_REENLIGHTENMENT)) {
+        }
+        if (hyperv_feat_enabled(cpu, HYPERV_FEAT_REENLIGHTENMENT)) {
                 kvm_msr_entry_add(cpu, HV_X64_MSR_REENLIGHTENMENT_CONTROL,
                                   env->msr_hv_reenlightenment_control);
                 kvm_msr_entry_add(cpu, HV_X64_MSR_TSC_EMULATION_CONTROL,
                                   env->msr_hv_tsc_emulation_control);
                 kvm_msr_entry_add(cpu, HV_X64_MSR_TSC_EMULATION_STATUS,
                                   env->msr_hv_tsc_emulation_status);
-            }
+        }
 #ifdef CONFIG_SYNDBG
-            if (hyperv_feat_enabled(cpu, HYPERV_FEAT_SYNDBG) &&
-                has_msr_hv_syndbg_options) {
-                kvm_msr_entry_add(cpu, HV_X64_MSR_SYNDBG_OPTIONS,
-                                  hyperv_syndbg_query_options());
-            }
+        if (hyperv_feat_enabled(cpu, HYPERV_FEAT_SYNDBG) &&
+            has_msr_hv_syndbg_options) {
+            kvm_msr_entry_add(cpu, HV_X64_MSR_SYNDBG_OPTIONS,
+                              hyperv_syndbg_query_options());
+        }
 #endif
-        }
-        if (hyperv_feat_enabled(cpu, HYPERV_FEAT_VAPIC)) {
-            kvm_msr_entry_add(cpu, HV_X64_MSR_APIC_ASSIST_PAGE,
-                              env->msr_hv_vapic);
-        }
-        if (has_msr_hv_crash) {
-            int j;
+    }
+    if (hyperv_feat_enabled(cpu, HYPERV_FEAT_VAPIC)) {
+        kvm_msr_entry_add(cpu, HV_X64_MSR_APIC_ASSIST_PAGE, env->msr_hv_vapic);
+    }
+    if (has_msr_hv_crash) {
+        int j;
 
-            for (j = 0; j < HV_CRASH_PARAMS; j++)
-                kvm_msr_entry_add(cpu, HV_X64_MSR_CRASH_P0 + j,
-                                  env->msr_hv_crash_params[j]);
-
+        for (j = 0; j < HV_CRASH_PARAMS; j++) {
+            kvm_msr_entry_add(cpu, HV_X64_MSR_CRASH_P0 + j,
+                              env->msr_hv_crash_params[j]);
             kvm_msr_entry_add(cpu, HV_X64_MSR_CRASH_CTL, HV_CRASH_CTL_NOTIFY);
         }
-        if (has_msr_hv_runtime) {
-            kvm_msr_entry_add(cpu, HV_X64_MSR_VP_RUNTIME, env->msr_hv_runtime);
+    }
+    if (has_msr_hv_runtime) {
+        kvm_msr_entry_add(cpu, HV_X64_MSR_VP_RUNTIME, env->msr_hv_runtime);
+    }
+    if (hyperv_feat_enabled(cpu, HYPERV_FEAT_VPINDEX)
+        && hv_vpindex_settable) {
+        kvm_msr_entry_add(cpu, HV_X64_MSR_VP_INDEX,
+                          hyperv_vp_index(CPU(cpu)));
+    }
+    if (hyperv_feat_enabled(cpu, HYPERV_FEAT_SYNIC)) {
+        int j;
+
+        kvm_msr_entry_add(cpu, HV_X64_MSR_SVERSION, HV_SYNIC_VERSION);
+        kvm_msr_entry_add(cpu, HV_X64_MSR_SCONTROL,
+                          env->msr_hv_synic_control);
+        kvm_msr_entry_add(cpu, HV_X64_MSR_SIEFP, env->msr_hv_synic_evt_page);
+        kvm_msr_entry_add(cpu, HV_X64_MSR_SIMP, env->msr_hv_synic_msg_page);
+
+        for (j = 0; j < ARRAY_SIZE(env->msr_hv_synic_sint); j++) {
+            kvm_msr_entry_add(cpu, HV_X64_MSR_SINT0 + j,
+                              env->msr_hv_synic_sint[j]);
         }
-        if (hyperv_feat_enabled(cpu, HYPERV_FEAT_VPINDEX)
-            && hv_vpindex_settable) {
-            kvm_msr_entry_add(cpu, HV_X64_MSR_VP_INDEX,
-                              hyperv_vp_index(CPU(cpu)));
+    }
+    if (has_msr_hv_stimer) {
+        int j;
+
+        for (j = 0; j < ARRAY_SIZE(env->msr_hv_stimer_config); j++) {
+            kvm_msr_entry_add(cpu, HV_X64_MSR_STIMER0_CONFIG + j * 2,
+                              env->msr_hv_stimer_config[j]);
         }
-        if (hyperv_feat_enabled(cpu, HYPERV_FEAT_SYNIC)) {
-            int j;
-
-            kvm_msr_entry_add(cpu, HV_X64_MSR_SVERSION, HV_SYNIC_VERSION);
-
-            kvm_msr_entry_add(cpu, HV_X64_MSR_SCONTROL,
-                              env->msr_hv_synic_control);
-            kvm_msr_entry_add(cpu, HV_X64_MSR_SIEFP,
-                              env->msr_hv_synic_evt_page);
-            kvm_msr_entry_add(cpu, HV_X64_MSR_SIMP,
-                              env->msr_hv_synic_msg_page);
-
-            for (j = 0; j < ARRAY_SIZE(env->msr_hv_synic_sint); j++) {
-                kvm_msr_entry_add(cpu, HV_X64_MSR_SINT0 + j,
-                                  env->msr_hv_synic_sint[j]);
-            }
+        for (j = 0; j < ARRAY_SIZE(env->msr_hv_stimer_count); j++) {
+            kvm_msr_entry_add(cpu, HV_X64_MSR_STIMER0_COUNT + j * 2,
+                              env->msr_hv_stimer_count[j]);
         }
-        if (has_msr_hv_stimer) {
-            int j;
+    }
 
-            for (j = 0; j < ARRAY_SIZE(env->msr_hv_stimer_config); j++) {
-                kvm_msr_entry_add(cpu, HV_X64_MSR_STIMER0_CONFIG + j * 2,
-                                env->msr_hv_stimer_config[j]);
-            }
+    if (env->features[FEAT_7_0_EBX] & CPUID_7_0_EBX_INTEL_PT) {
+        int addr_num = kvm_arch_get_supported_cpuid(kvm_state,
+                                                0x14, 1, R_EAX) & 0x7;
 
-            for (j = 0; j < ARRAY_SIZE(env->msr_hv_stimer_count); j++) {
-                kvm_msr_entry_add(cpu, HV_X64_MSR_STIMER0_COUNT + j * 2,
-                                env->msr_hv_stimer_count[j]);
-            }
+        kvm_msr_entry_add(cpu, MSR_IA32_RTIT_CTL, env->msr_rtit_ctrl);
+        kvm_msr_entry_add(cpu, MSR_IA32_RTIT_STATUS, env->msr_rtit_status);
+        kvm_msr_entry_add(cpu, MSR_IA32_RTIT_OUTPUT_BASE,
+                          env->msr_rtit_output_base);
+        kvm_msr_entry_add(cpu, MSR_IA32_RTIT_OUTPUT_MASK,
+                          env->msr_rtit_output_mask);
+        kvm_msr_entry_add(cpu, MSR_IA32_RTIT_CR3_MATCH,
+                          env->msr_rtit_cr3_match);
+        for (i = 0; i < addr_num; i++) {
+            kvm_msr_entry_add(cpu, MSR_IA32_RTIT_ADDR0_A + i,
+                              env->msr_rtit_addrs[i]);
         }
-        if (env->features[FEAT_1_EDX] & CPUID_MTRR) {
-            uint64_t phys_mask = MAKE_64BIT_MASK(0, cpu->phys_bits);
+    }
 
-            kvm_msr_entry_add(cpu, MSR_MTRRdefType, env->mtrr_deftype);
-            kvm_msr_entry_add(cpu, MSR_MTRRfix64K_00000, env->mtrr_fixed[0]);
-            kvm_msr_entry_add(cpu, MSR_MTRRfix16K_80000, env->mtrr_fixed[1]);
-            kvm_msr_entry_add(cpu, MSR_MTRRfix16K_A0000, env->mtrr_fixed[2]);
-            kvm_msr_entry_add(cpu, MSR_MTRRfix4K_C0000, env->mtrr_fixed[3]);
-            kvm_msr_entry_add(cpu, MSR_MTRRfix4K_C8000, env->mtrr_fixed[4]);
-            kvm_msr_entry_add(cpu, MSR_MTRRfix4K_D0000, env->mtrr_fixed[5]);
-            kvm_msr_entry_add(cpu, MSR_MTRRfix4K_D8000, env->mtrr_fixed[6]);
-            kvm_msr_entry_add(cpu, MSR_MTRRfix4K_E0000, env->mtrr_fixed[7]);
-            kvm_msr_entry_add(cpu, MSR_MTRRfix4K_E8000, env->mtrr_fixed[8]);
-            kvm_msr_entry_add(cpu, MSR_MTRRfix4K_F0000, env->mtrr_fixed[9]);
-            kvm_msr_entry_add(cpu, MSR_MTRRfix4K_F8000, env->mtrr_fixed[10]);
-            for (i = 0; i < MSR_MTRRcap_VCNT; i++) {
-                /* The CPU GPs if we write to a bit above the physical limit of
-                 * the host CPU (and KVM emulates that)
-                 */
-                uint64_t mask = env->mtrr_var[i].mask;
-                mask &= phys_mask;
+    if (env->features[FEAT_7_0_ECX] & CPUID_7_0_ECX_SGX_LC) {
+        kvm_msr_entry_add(cpu, MSR_IA32_SGXLEPUBKEYHASH0,
+                          env->msr_ia32_sgxlepubkeyhash[0]);
+        kvm_msr_entry_add(cpu, MSR_IA32_SGXLEPUBKEYHASH1,
+                          env->msr_ia32_sgxlepubkeyhash[1]);
+        kvm_msr_entry_add(cpu, MSR_IA32_SGXLEPUBKEYHASH2,
+                          env->msr_ia32_sgxlepubkeyhash[2]);
+        kvm_msr_entry_add(cpu, MSR_IA32_SGXLEPUBKEYHASH3,
+                          env->msr_ia32_sgxlepubkeyhash[3]);
+    }
 
-                kvm_msr_entry_add(cpu, MSR_MTRRphysBase(i),
-                                  env->mtrr_var[i].base);
-                kvm_msr_entry_add(cpu, MSR_MTRRphysMask(i), mask);
-            }
-        }
-        if (env->features[FEAT_7_0_EBX] & CPUID_7_0_EBX_INTEL_PT) {
-            int addr_num = kvm_arch_get_supported_cpuid(kvm_state,
-                                                    0x14, 1, R_EAX) & 0x7;
-
-            kvm_msr_entry_add(cpu, MSR_IA32_RTIT_CTL,
-                            env->msr_rtit_ctrl);
-            kvm_msr_entry_add(cpu, MSR_IA32_RTIT_STATUS,
-                            env->msr_rtit_status);
-            kvm_msr_entry_add(cpu, MSR_IA32_RTIT_OUTPUT_BASE,
-                            env->msr_rtit_output_base);
-            kvm_msr_entry_add(cpu, MSR_IA32_RTIT_OUTPUT_MASK,
-                            env->msr_rtit_output_mask);
-            kvm_msr_entry_add(cpu, MSR_IA32_RTIT_CR3_MATCH,
-                            env->msr_rtit_cr3_match);
-            for (i = 0; i < addr_num; i++) {
-                kvm_msr_entry_add(cpu, MSR_IA32_RTIT_ADDR0_A + i,
-                            env->msr_rtit_addrs[i]);
-            }
-        }
-
-        if (env->features[FEAT_7_0_ECX] & CPUID_7_0_ECX_SGX_LC) {
-            kvm_msr_entry_add(cpu, MSR_IA32_SGXLEPUBKEYHASH0,
-                              env->msr_ia32_sgxlepubkeyhash[0]);
-            kvm_msr_entry_add(cpu, MSR_IA32_SGXLEPUBKEYHASH1,
-                              env->msr_ia32_sgxlepubkeyhash[1]);
-            kvm_msr_entry_add(cpu, MSR_IA32_SGXLEPUBKEYHASH2,
-                              env->msr_ia32_sgxlepubkeyhash[2]);
-            kvm_msr_entry_add(cpu, MSR_IA32_SGXLEPUBKEYHASH3,
-                              env->msr_ia32_sgxlepubkeyhash[3]);
-        }
-
-        if (env->features[FEAT_XSAVE] & CPUID_D_1_EAX_XFD) {
-            kvm_msr_entry_add(cpu, MSR_IA32_XFD,
-                              env->msr_xfd);
-            kvm_msr_entry_add(cpu, MSR_IA32_XFD_ERR,
-                              env->msr_xfd_err);
-        }
-
-        if (kvm_enabled() && cpu->enable_pmu &&
-            (env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_ARCH_LBR)) {
-            uint64_t depth;
-            int i, ret;
-
-            /*
-             * Only migrate Arch LBR states when the host Arch LBR depth
-             * equals that of source guest's, this is to avoid mismatch
-             * of guest/host config for the msr hence avoid unexpected
-             * misbehavior.
-             */
-            ret = kvm_get_one_msr(cpu, MSR_ARCH_LBR_DEPTH, &depth);
-
-            if (ret == 1 && !!depth && depth == env->msr_lbr_depth) {
-                kvm_msr_entry_add(cpu, MSR_ARCH_LBR_CTL, env->msr_lbr_ctl);
-                kvm_msr_entry_add(cpu, MSR_ARCH_LBR_DEPTH, env->msr_lbr_depth);
-
-                for (i = 0; i < ARCH_LBR_NR_ENTRIES; i++) {
-                    if (!env->lbr_records[i].from) {
-                        continue;
-                    }
-                    kvm_msr_entry_add(cpu, MSR_ARCH_LBR_FROM_0 + i,
-                                      env->lbr_records[i].from);
-                    kvm_msr_entry_add(cpu, MSR_ARCH_LBR_TO_0 + i,
-                                      env->lbr_records[i].to);
-                    kvm_msr_entry_add(cpu, MSR_ARCH_LBR_INFO_0 + i,
-                                      env->lbr_records[i].info);
-                }
-            }
-        }
-
-        /* Note: MSR_IA32_FEATURE_CONTROL is written separately, see
-         *       kvm_put_msr_feature_control. */
+    if (env->features[FEAT_XSAVE] & CPUID_D_1_EAX_XFD) {
+        kvm_msr_entry_add(cpu, MSR_IA32_XFD, env->msr_xfd);
+        kvm_msr_entry_add(cpu, MSR_IA32_XFD_ERR, env->msr_xfd_err);
     }
 
     if (env->mcg_cap) {
@@ -3653,9 +3635,55 @@ static int kvm_put_msrs(X86CPU *cpu, int level)
         kvm_msr_entry_add(cpu, MSR_IA32_S_CET, env->s_cet);
     }
 
-    return kvm_buf_set_msrs(cpu);
+    if (env->features[FEAT_XSAVE] & CPUID_D_1_EAX_XFD) {
+        kvm_msr_entry_add(cpu, MSR_IA32_XFD,
+                          env->msr_xfd);
+        kvm_msr_entry_add(cpu, MSR_IA32_XFD_ERR,
+                          env->msr_xfd_err);
+    }
+
+    if (kvm_enabled() && cpu->enable_pmu &&
+        (env->features[FEAT_7_0_EDX] & CPUID_7_0_EDX_ARCH_LBR)) {
+        uint64_t depth;
+        int i, ret;
+
+        /*
+         * Only migrate Arch LBR states when: 1) Arch LBR is enabled
+         * for migrated vcpu. 2) the host Arch LBR depth equals that
+         * of source guest's, this is to avoid mismatch of guest/host
+         * config for the msr hence avoid unexpected misbehavior.
+         */
+        ret = kvm_get_one_msr(cpu, MSR_ARCH_LBR_DEPTH, &depth);
+
+        if (ret == 1 && (env->msr_lbr_ctl & 0x1) && !!depth &&
+            depth == env->msr_lbr_depth) {
+            kvm_msr_entry_add(cpu, MSR_ARCH_LBR_CTL, env->msr_lbr_ctl);
+            kvm_msr_entry_add(cpu, MSR_ARCH_LBR_DEPTH, env->msr_lbr_depth);
+
+            for (i = 0; i < ARCH_LBR_NR_ENTRIES; i++) {
+                if (!env->lbr_records[i].from) {
+                    continue;
+                }
+                kvm_msr_entry_add(cpu, MSR_ARCH_LBR_FROM_0 + i,
+                                  env->lbr_records[i].from);
+                kvm_msr_entry_add(cpu, MSR_ARCH_LBR_TO_0 + i,
+                                  env->lbr_records[i].to);
+                kvm_msr_entry_add(cpu, MSR_ARCH_LBR_INFO_0 + i,
+                                  env->lbr_records[i].info);
+            }
+        }
+    }
 }
 
+static int kvm_put_msrs(X86CPU *cpu, int level)
+{
+    kvm_msr_buf_reset(cpu);
+
+    kvm_put_msrs_common(cpu, level);
+    kvm_put_msrs_vm(cpu, level);
+
+    return kvm_buf_set_msrs(cpu);
+}
 
 static int kvm_get_fpu(X86CPU *cpu)
 {
