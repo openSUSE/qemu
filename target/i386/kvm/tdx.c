@@ -46,10 +46,17 @@
 
 #define TDX_TD_ATTRIBUTES_DEBUG             BIT_ULL(0)
 #define TDX_TD_ATTRIBUTES_SEPT_VE_DISABLE   BIT_ULL(28)
+#define TDX_TD_ATTRIBUTES_MIG               BIT_ULL(29)
 #define TDX_TD_ATTRIBUTES_PKS               BIT_ULL(30)
 #define TDX_TD_ATTRIBUTES_PERFMON           BIT_ULL(63)
 
 #define TDX_ATTRIBUTES_MAX_BITS      64
+
+/*
+ * Instance binding and ignore all the related TD fields when calculating
+ * SERVTD_INFO_HASH. See TDX module ABI spec, Table 4.53 for details.
+ */
+#define TDX_MIGTD_ATTR_DEFAULT      0x000007ff00000001
 
 static FeatureMask tdx_attrs_ctrl_fields[TDX_ATTRIBUTES_MAX_BITS] = {
     [30] = { .index = FEAT_7_0_ECX, .mask = CPUID_7_0_ECX_PKS },
@@ -893,6 +900,31 @@ static void tdx_post_init_vcpus(void)
     }
 }
 
+static bool tdx_guest_is_migratable(void)
+{
+    return !!(tdx_guest->attributes & TDX_TD_ATTRIBUTES_MIG);
+}
+
+static void tdx_binding_with_migtd_pid(void)
+{
+    struct kvm_tdx_servtd servtd;
+    int r;
+
+    if (!tdx_guest_is_migratable() || !tdx_guest->migtd_pid) {
+        return;
+    }
+
+    servtd.version = KVM_TDX_SERVTD_VERSION;
+    servtd.type = KVM_TDX_SERVTD_TYPE_MIGTD;
+    servtd.attr = tdx_guest->migtd_attr;
+    servtd.pid = tdx_guest->migtd_pid;
+
+    r = tdx_vm_ioctl(KVM_TDX_SERVTD_BIND, 0, &servtd);
+    if (r) {
+        error_report("failed to bind migtd: %d", r);
+    }
+}
+
 static void tdx_finalize_vm(Notifier *notifier, void *unused)
 {
     TdxFirmware *tdvf = &tdx_guest->tdvf;
@@ -940,6 +972,9 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
     tdvf_hob_create(tdx_guest, tdx_get_hob_entry(tdx_guest));
 
     tdx_post_init_vcpus();
+
+    /* Initial binding needs to be done before TD finalized */
+    tdx_binding_with_migtd_pid();
 
     for_each_tdx_fw_entry(tdvf, entry) {
         struct kvm_tdx_init_mem_region mem_region = {
@@ -1202,6 +1237,28 @@ static void tdx_guest_set_quote_generation(
     tdx->quote_generation_str = g_strdup(value);
 }
 
+static void tdx_migtd_get_pid(Object *obj, Visitor *v,
+                              const char *name, void *opaque, Error **errp)
+{
+    TdxGuest *tdx = TDX_GUEST(obj);
+
+    visit_type_uint32(v, name, &tdx->migtd_pid, errp);
+}
+
+static void tdx_migtd_set_pid(Object *obj, Visitor *v,
+                              const char *name, void *opaque, Error **errp)
+{
+    TdxGuest *tdx = TDX_GUEST(obj);
+    uint32_t val;
+
+    if (!visit_type_uint32(v, name, &val, errp)) {
+        return;
+    }
+
+    tdx->migtd_pid = val;
+    tdx->attributes |= TDX_TD_ATTRIBUTES_MIG;
+}
+
 /* tdx guest */
 OBJECT_DEFINE_TYPE_WITH_INTERFACES(TdxGuest,
                                    tdx_guest,
@@ -1230,6 +1287,10 @@ static void tdx_guest_init(Object *obj)
                                OBJ_PROP_FLAG_READWRITE);
     object_property_add_sha384(obj, "mrownerconfig", tdx->mrownerconfig,
                                OBJ_PROP_FLAG_READWRITE);
+    object_property_add_uint64_ptr(obj, "migtd-attr",
+                                   &tdx->migtd_attr, OBJ_PROP_FLAG_READWRITE);
+    object_property_add(obj, "migtd-pid", "uint32", tdx_migtd_get_pid,
+                        tdx_migtd_set_pid, NULL, NULL);
 
     tdx->quote_generation_str = NULL;
     tdx->quote_generation = NULL;
@@ -1239,6 +1300,7 @@ static void tdx_guest_init(Object *obj)
 
     tdx->event_notify_interrupt = -1;
     tdx->apic_id = -1;
+    tdx->migtd_attr = TDX_MIGTD_ATTR_DEFAULT;
 }
 
 static void tdx_guest_finalize(Object *obj)

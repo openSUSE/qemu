@@ -651,4 +651,28 @@ struct kvm_rw_memory {
 	__u64 len;
 	__u64 ubuf;
 };
+
+typedef enum kvm_tdx_servtd_type {
+	KVM_TDX_SERVTD_TYPE_MIGTD = 0,
+
+	KVM_TDX_SERVTD_TYPE_MAX,
+} kvm_tdx_servtd_type_t;
+
+/* A SHA384 hash takes up 48 bytes (Table 5.7, TDX module ABI Spec) */
+#define KVM_TDX_SERVTD_HASH_SIZE 48
+
+struct kvm_tdx_servtd {
+#define KVM_TDX_SERVTD_VERSION	0
+	__u8  version;
+	__u8  pad[5];
+	__u16 type;
+	__u64 attr;
+	union {
+		/* KVM_TDX_SERVTD_BIND */
+		__u32 pid;
+		/* KVM_TDX_SERVTD_PREBIND */
+		__u8  hash[KVM_TDX_SERVTD_HASH_SIZE];
+	};
+};
+
 #endif /* _ASM_X86_KVM_H */
