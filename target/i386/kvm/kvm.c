@@ -4919,7 +4919,7 @@ int kvm_arch_put_registers(CPUState *cpu, int level)
     return 0;
 }
 
-static int kvm_arch_tdx_get_registers(CPUState *cs)
+static int kvm_arch_tdx_debug_get_registers(CPUState *cs)
 {
     X86CPU *cpu = X86_CPU(cs);
     int ret;
@@ -4971,8 +4971,8 @@ int kvm_arch_get_registers(CPUState *cs)
         goto out;
     }
 
-    if (is_tdx_vm()) {
-        return kvm_arch_tdx_get_registers(cs);
+    if (tdx_debug_enabled()) {
+        return kvm_arch_tdx_debug_get_registers(cs);
     }
 
     ret = kvm_getput_regs(cpu, 0);
