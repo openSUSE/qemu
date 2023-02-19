@@ -2538,8 +2538,7 @@ void ram_save_cancel(void)
     RAMBlock *block = ram_state->last_seen_block;
     unsigned long page = ram_state->last_page;
     ram_addr_t offset = ((ram_addr_t)page) << TARGET_PAGE_BITS;
-    uint64_t align_size = 1UL << block->clear_bmap_shift;
-    hwaddr gpa, gfn, gfn_aligned;
+    hwaddr gpa, gfn;
     int ret;
 
     if (!ram_counters.cgs_epochs) {
@@ -2557,13 +2556,7 @@ void ram_save_cancel(void)
     }
     gfn = gpa >> TARGET_PAGE_BITS;
 
-    /*
-     * Pages that have been cleared in the clear log are write-protected, and
-     * need to be restored. So make it aligned on the clear_bmap boundary.
-     */
-    gfn_aligned = QEMU_ALIGN_UP(gfn, align_size);
-
-    ret = cgs_mig_savevm_state_ram_cancel(ram_state->f, gfn_aligned);
+    ret = cgs_mig_savevm_state_ram_cancel(ram_state->f, gfn);
     if (ret) {
         error_report("%s failed: %s", __func__, strerror(ret));
     }

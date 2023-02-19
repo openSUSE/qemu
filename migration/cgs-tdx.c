@@ -324,9 +324,9 @@ static int tdx_mig_stream_create(TdxMigStream *stream)
     return 0;
 }
 
-static int tdx_mig_stream_setup(void)
+static int tdx_mig_stream_setup(uint32_t nr_channels)
 {
-    TdxMigStream *stream = &tdx_mig.streams[0];
+    TdxMigStream *stream;
     struct kvm_dev_tdx_mig_attr tdx_mig_attr;
     struct kvm_device_attr attr = {
         .group = KVM_DEV_TDX_MIG_ATTR,
@@ -336,6 +336,13 @@ static int tdx_mig_stream_setup(void)
     size_t map_size;
     off_t map_offset;
     int ret;
+
+    /* Multiple streams are not supported currently */
+    assert(nr_channels == 1);
+
+    tdx_mig.nr_streams = nr_channels;
+    tdx_mig.streams = g_malloc0(sizeof(struct TdxMigStream) * 1);
+    stream = &tdx_mig.streams[0];
 
     ret = tdx_mig_stream_create(stream);
     if (ret) {
@@ -530,13 +537,8 @@ static int tdx_mig_loadvm_state(QEMUFile *f)
     return ret;
 }
 
-void tdx_mig_init(CgsMig *cgs_mig, uint32_t nr_channels)
+void tdx_mig_init(CgsMig *cgs_mig)
 {
-    /* Only support 1 migration channel currently */
-    assert(nr_channels == 1);
-    tdx_mig.nr_streams = nr_channels;
-    tdx_mig.streams = g_malloc0(sizeof(struct TdxMigStream) * nr_channels);
-
     cgs_mig->is_ready = tdx_mig_is_ready;
     cgs_mig->savevm_state_setup = tdx_mig_stream_setup;
     cgs_mig->savevm_state_start = tdx_mig_savevm_state_start;

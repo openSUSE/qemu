@@ -47,12 +47,17 @@ bool cgs_mig_is_ready(void)
 int cgs_mig_savevm_state_setup(QEMUFile *f)
 {
     int ret;
+    uint32_t nr_channels = 1;
 
     if (!cgs_mig.savevm_state_setup) {
         return 0;
     }
 
-    ret = cgs_mig.savevm_state_setup();
+    if (migrate_use_multifd()) {
+        nr_channels = migrate_multifd_channels();
+    }
+
+    ret = cgs_mig.savevm_state_setup(nr_channels);
     cgs_check_error(f, ret);
 
     return ret;
@@ -176,12 +181,17 @@ void cgs_mig_savevm_state_cleanup(void)
 int cgs_mig_loadvm_state_setup(QEMUFile *f)
 {
     int ret;
+    uint32_t nr_channels = 1;
+
+    if (migrate_use_multifd()) {
+        nr_channels = migrate_multifd_channels();
+    }
 
    if (!cgs_mig.loadvm_state_setup) {
         return 0;
     }
 
-    ret = cgs_mig.loadvm_state_setup();
+    ret = cgs_mig.loadvm_state_setup(nr_channels);
     cgs_check_error(f, ret);
 
     return ret;
@@ -212,15 +222,9 @@ void cgs_mig_loadvm_state_cleanup(void)
 
 void cgs_mig_init(void)
 {
-    uint32_t nr_channels = 1;
-
-    if (migrate_use_multifd()) {
-        nr_channels = migrate_multifd_channels();
-    }
-
     switch (kvm_vm_type) {
     case KVM_X86_TDX_VM:
-        tdx_mig_init(&cgs_mig, nr_channels);
+        tdx_mig_init(&cgs_mig);
         break;
     default:
         return;

@@ -18,7 +18,7 @@
 
 typedef struct CgsMig {
     bool (*is_ready)(void);
-    int (*savevm_state_setup)(void);
+    int (*savevm_state_setup)(uint32_t nr_channels);
     int (*savevm_state_start)(QEMUFile *f);
     long (*savevm_state_ram_start_epoch)(QEMUFile *f);
     long (*savevm_state_ram)(QEMUFile *f,
@@ -28,7 +28,7 @@ typedef struct CgsMig {
     int (*savevm_state_end)(QEMUFile *f);
     int (*savevm_state_ram_cancel)(hwaddr gfn_end);
     void (*savevm_state_cleanup)(void);
-    int (*loadvm_state_setup)(void);
+    int (*loadvm_state_setup)(uint32_t nr_channels);
     int (*loadvm_state)(QEMUFile *f);
     void (*loadvm_state_cleanup)(void);
 } CgsMig;
@@ -48,6 +48,6 @@ int cgs_mig_loadvm_state(QEMUFile *f);
 void cgs_mig_loadvm_state_cleanup(void);
 void cgs_mig_init(void);
 
-void tdx_mig_init(CgsMig *cgs_mig, uint32_t nr_channels);
+void tdx_mig_init(CgsMig *cgs_mig);
 
 #endif
