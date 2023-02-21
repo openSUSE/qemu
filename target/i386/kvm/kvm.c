@@ -2799,11 +2799,13 @@ static int kvm_getput_regs(X86CPU *cpu, int set)
     struct kvm_regs regs;
     int ret = 0;
 
-    /* For the tdx case, get/put the registers only during migration. */
-    if (is_tdx_vm() &&
-        (!runstate_check(RUN_STATE_PAUSED) ||
-         !runstate_check(RUN_STATE_INMIGRATE))) {
-        return 0;
+    if (is_tdx_vm()) {
+        /* For the normal TD guest, get/put the registers only during migration. */
+        if (!tdx_debug_enabled() &&
+            (!runstate_check(RUN_STATE_PAUSED) ||
+             !runstate_check(RUN_STATE_INMIGRATE))) {
+            return 0;
+        }
     }
 
     if (!set) {
@@ -3745,7 +3747,11 @@ static int kvm_get_xcrs(X86CPU *cpu)
     int i, ret;
     struct kvm_xcrs xcrs;
 
-    if (is_tdx_vm() || !has_xcrs) {
+    if (!has_xcrs) {
+        return 0;
+    }
+
+    if (is_tdx_vm() && !tdx_debug_enabled()) {
         return 0;
     }
 
@@ -3770,7 +3776,7 @@ static int kvm_get_sregs(X86CPU *cpu)
     struct kvm_sregs sregs;
     int ret;
 
-    if (is_tdx_vm()) {
+    if (is_tdx_vm() && !tdx_debug_enabled()) {
         return 0;
     }
 
@@ -3818,7 +3824,7 @@ static int kvm_get_sregs2(X86CPU *cpu)
     struct kvm_sregs2 sregs;
     int i, ret;
 
-    if (is_tdx_vm()) {
+    if (is_tdx_vm() && !tdx_debug_enabled()) {
         return 0;
     }
 
@@ -4722,7 +4728,11 @@ static int kvm_get_debugregs(X86CPU *cpu)
     struct kvm_debugregs dbgregs;
     int i, ret;
 
-    if (is_tdx_vm() || !kvm_has_debugregs()) {
+    if (!kvm_has_debugregs()) {
+        return 0;
+    }
+
+    if (is_tdx_vm() && !tdx_debug_enabled()) {
         return 0;
     }
 
@@ -4923,9 +4933,6 @@ static int kvm_arch_tdx_debug_get_registers(CPUState *cs)
 {
     X86CPU *cpu = X86_CPU(cs);
     int ret;
-
-    if (!tdx_debug_enabled())
-        return 0;
 
     ret = kvm_getput_regs(cpu, 0);
     if (ret < 0) {
