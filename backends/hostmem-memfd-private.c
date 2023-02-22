@@ -273,6 +273,31 @@ int priv_memfd_backend_state_change(HostMemoryBackendPrivateMemfd *memfd,
     return priv_memfd_backend_state_change_notify(memfd, offset, size, shared);
 }
 
+static bool priv_memfd_backend_rdm_is_populated(const RamDiscardManager *rdm,
+                                                const MemoryRegionSection *s)
+{
+    /* TODO: TD live migration with pass-thru device */
+    return 0;
+}
+
+static int priv_memfd_backend_replay_populated(const RamDiscardManager *rdm,
+                                               MemoryRegionSection *s,
+                                               ReplayRamPopulate replay_fn,
+                                               void *opaque)
+{
+    /* TODO: TD live migration with pass-thru device */
+    return 0;
+}
+
+static void priv_memfd_backend_replay_discarded(const RamDiscardManager *rdm,
+                                                MemoryRegionSection *s,
+                                                ReplayRamDiscard replay_fn,
+                                                void *opaque)
+{
+    /* TODO:  TD live migration with pass-thru device */
+    return;
+}
+
 static void
 priv_memfd_backend_class_init(ObjectClass *oc, void *data)
 {
@@ -298,6 +323,9 @@ priv_memfd_backend_class_init(ObjectClass *oc, void *data)
     rdmc->get_min_granularity = priv_memfd_backend_rdm_get_min_granularity;
     rdmc->register_listener = priv_memfd_backend_rdm_register_listener;
     rdmc->unregister_listener = priv_memfd_backend_rdm_unregister_listener;
+    rdmc->is_populated = priv_memfd_backend_rdm_is_populated;
+    rdmc->replay_populated = priv_memfd_backend_replay_populated;
+    rdmc->replay_discarded = priv_memfd_backend_replay_discarded;
 }
 
 static const TypeInfo priv_memfd_backend_info = {
