@@ -2635,7 +2635,7 @@ static MigThrError migration_detect_error(MigrationState *s)
     }
 }
 
-static void migration_calculate_complete(MigrationState *s)
+void migration_calculate_complete(MigrationState *s)
 {
     uint64_t bytes = migration_transferred_bytes(s->to_dst_file);
     int64_t end_time = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
@@ -2667,8 +2667,7 @@ static void update_iteration_initial_status(MigrationState *s)
     s->iteration_initial_pages = ram_get_total_transferred_pages();
 }
 
-static void migration_update_counters(MigrationState *s,
-                                      int64_t current_time)
+void migration_update_counters(MigrationState *s, int64_t current_time)
 {
     uint64_t transferred, transferred_pages, time_spent;
     uint64_t current_bytes; /* bytes transferred since the beginning */
@@ -2767,6 +2766,7 @@ static void migration_iteration_finish(MigrationState *s)
     case MIGRATION_STATUS_COMPLETED:
         migration_calculate_complete(s);
         runstate_set(RUN_STATE_POSTMIGRATE);
+        trace_migration_status((int)s->mbps / 8, (int)s->pages_per_second, s->total_time);
         break;
     case MIGRATION_STATUS_COLO:
         assert(migrate_colo());
