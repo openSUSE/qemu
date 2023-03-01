@@ -958,6 +958,7 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
         switch (entry->type) {
         case TDVF_SECTION_TYPE_BFV:
         case TDVF_SECTION_TYPE_CFV:
+        case TDVF_SECTION_TYPE_PAYLOAD:
             entry->mem_ptr = tdvf->mem_ptr + entry->data_offset;
             break;
         case TDVF_SECTION_TYPE_TD_HOB:

@@ -29,6 +29,7 @@
 #define TDVF_SECTION_TYPE_TD_HOB            2
 #define TDVF_SECTION_TYPE_TEMP_MEM          3
 #define TDVF_SECTION_TYPE_PERM_MEM          4
+#define TDVF_SECTION_TYPE_PAYLOAD           5
 
 #define TDVF_SECTION_ATTRIBUTES_MR_EXTEND   (1U << 0)
 #define TDVF_SECTION_ATTRIBUTES_PAGE_AUG    (1U << 1)

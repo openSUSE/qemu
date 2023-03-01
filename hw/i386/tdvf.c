@@ -136,6 +136,7 @@ static int tdvf_parse_and_check_section_entry(const TdvfSectionEntry *src,
     switch (entry->type) {
     case TDVF_SECTION_TYPE_BFV:
     case TDVF_SECTION_TYPE_CFV:
+    case TDVF_SECTION_TYPE_PAYLOAD:
         /* The sections that must be copied from firmware image to TD memory */
         if (entry->data_len == 0) {
             error_report("%d section with RawDataSize == 0", entry->type);
