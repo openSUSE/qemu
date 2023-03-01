@@ -59,6 +59,7 @@ typedef struct TdxGuest {
     uint32_t vsockport;
     uint32_t migtd_pid;
     uint64_t migtd_attr;
+    uint8_t migtd_hash[48];  /* sha348 digest */
 } TdxGuest;
 
 #ifdef CONFIG_TDX

@@ -881,6 +881,8 @@
 #
 # @migtd-pid: process id of a migtd to bind
 #
+# @migtd-hash: SHA384 hex string of a migtd to prebind
+#
 # @vsockport: vsock port for a migtd to connect
 #
 # Since: 7.3
@@ -894,6 +896,7 @@
             '*quote-generation-service': 'str',
             '*migtd-attr': 'uint64',
             '*migtd-pid': 'uint32',
+            '*migtd-hash': 'str',
             '*vsockport': 'uint32' } }
 
 ##
