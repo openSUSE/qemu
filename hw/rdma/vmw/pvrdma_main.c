@@ -66,7 +66,7 @@ static int init_dev_ring(PvrdmaRing *ring, struct pvrdma_ring **ring_state,
                          dma_addr_t dir_addr, uint32_t num_pages)
 {
     uint64_t *dir, *tbl;
-    int rc = 0;
+    int max_pages, rc = 0;
 
     pr_dbg("Initializing device ring %s\n", name);
     pr_dbg("pdir_dma=0x%llx\n", (long long unsigned int)dir_addr);
@@ -76,12 +76,26 @@ static int init_dev_ring(PvrdmaRing *ring, struct pvrdma_ring **ring_state,
         return -EINVAL;
     }
 
+    /*
+     * Make sure we can satisfy the requested number of pages in a single
+     * TARGET_PAGE_SIZE sized page table (taking into account that first entry
+     * is reserved for ring-state)
+     */
+    max_pages = TARGET_PAGE_SIZE / sizeof(dma_addr_t) - 1;
+    if (num_pages > max_pages) {
+        rdma_error_report("Maximum pages on a single directory must not exceed %d\n",
+                          max_pages);
+        return -EINVAL;
+    }
+
     dir = rdma_pci_dma_map(pci_dev, dir_addr, TARGET_PAGE_SIZE);
     if (!dir) {
         pr_err("Failed to map to page directory\n");
         rc = -ENOMEM;
         goto out;
     }
+
+    /* We support only one page table for a ring */
     tbl = rdma_pci_dma_map(pci_dev, dir[0], TARGET_PAGE_SIZE);
     if (!tbl) {
         pr_err("Failed to map to page table\n");
