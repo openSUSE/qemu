@@ -780,6 +780,7 @@ static void test_migrate_end(QTestState *from, QTestState *to, bool test_dest)
     cleanup("migsocket");
     cleanup("src_serial");
     cleanup("dest_serial");
+    cleanup("migfile");
 }
 
 #ifdef CONFIG_GNUTLS
@@ -1452,6 +1453,14 @@ static void test_precopy_common(MigrateCommon *args)
          * hanging forever if migration didn't converge */
         wait_for_migration_complete(from);
 
+        /*
+         * For file based migration the target must begin its migration after
+         * the source has finished
+         */
+        if (args->connect_uri && strstr(args->connect_uri, "file:")) {
+            migrate_incoming_qmp(to, args->connect_uri, "{}");
+        }
+
         if (!got_stop) {
             qtest_qmp_eventwait(from, "STOP");
         }
@@ -1634,6 +1643,17 @@ static void test_precopy_unix_compress_nowait(void)
          * the previous iteration.
          */
         .iterations = 2,
+    };
+
+    test_precopy_common(&args);
+}
+
+static void test_precopy_file_stream_ram(void)
+{
+    g_autofree char *uri = g_strdup_printf("file:%s/migfile", tmpfs);
+    MigrateCommon args = {
+        .connect_uri = uri,
+        .listen_uri = "defer",
     };
 
     test_precopy_common(&args);
@@ -2668,6 +2688,10 @@ int main(int argc, char **argv)
         qtest_add_func("/migration/precopy/unix/compress/nowait",
                        test_precopy_unix_compress_nowait);
     }
+
+    qtest_add_func("/migration/precopy/file/stream-ram",
+                   test_precopy_file_stream_ram);
+
 #ifdef CONFIG_GNUTLS
     qtest_add_func("/migration/precopy/unix/tls/psk",
                    test_precopy_unix_tls_psk);
