@@ -49,6 +49,9 @@ struct QIOChannelSocket {
     socklen_t remoteAddrLen;
     ssize_t zero_copy_queued;
     ssize_t zero_copy_sent;
+
+    struct UnixSocketAddress sendtoDgramAddr;
+    bool unix_datagram;
 };
 
 
@@ -261,5 +264,8 @@ QIOChannelSocket *
 qio_channel_socket_accept(QIOChannelSocket *ioc,
                           Error **errp);
 
+
+void qio_channel_socket_set_dgram_send_address(QIOChannelSocket *ioc,
+                                                 const struct UnixSocketAddress *un_addr);
 
 #endif /* QIO_CHANNEL_SOCKET_H */

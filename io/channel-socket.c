@@ -311,6 +311,9 @@ int qio_channel_socket_dgram_sync(QIOChannelSocket *ioc,
         return -1;
     }
 
+    if (localAddr && localAddr->type == SOCKET_ADDRESS_TYPE_UNIX)
+        ioc->unix_datagram = true;
+
     return 0;
 }
 
@@ -414,6 +417,21 @@ qio_channel_socket_accept(QIOChannelSocket *ioc,
     return NULL;
 }
 
+void qio_channel_socket_set_dgram_send_address(QIOChannelSocket *ioc,
+                                               const struct UnixSocketAddress *un_addr)
+{
+    if (!ioc->unix_datagram)
+        return;
+
+    if (!un_addr)
+        return;
+
+    g_free(ioc->sendtoDgramAddr.path);
+    memcpy(&ioc->sendtoDgramAddr, un_addr, sizeof(*un_addr));
+    ioc->sendtoDgramAddr.path = g_strdup(un_addr->path);
+}
+
+
 static void qio_channel_socket_init(Object *obj)
 {
     QIOChannelSocket *ioc = QIO_CHANNEL_SOCKET(obj);
@@ -441,6 +459,8 @@ static void qio_channel_socket_finalize(Object *obj)
         closesocket(ioc->fd);
         ioc->fd = -1;
     }
+
+    g_free(ioc->sendtoDgramAddr.path);
 }
 
 
@@ -554,6 +574,8 @@ static ssize_t qio_channel_socket_writev(QIOChannel *ioc,
     size_t fdsize = sizeof(int) * nfds;
     struct cmsghdr *cmsg;
     int sflags = 0;
+    struct sockaddr_un addr;
+    size_t addr_len;
 
     memset(control, 0, CMSG_SPACE(sizeof(int) * SOCKET_MAX_FDS));
 
@@ -590,6 +612,16 @@ static ssize_t qio_channel_socket_writev(QIOChannel *ioc,
 #endif
     }
 
+    if (sioc->unix_datagram && sioc->sendtoDgramAddr.path) {
+        ret = prepare_unix_sockaddr(&sioc->sendtoDgramAddr,
+                                    &addr, &addr_len, errp);
+        if (ret < 0)
+            return ret;
+
+        msg.msg_name = &addr;
+        msg.msg_namelen = addr_len;
+    }
+
  retry:
     ret = sendmsg(sioc->fd, &msg, sflags);
     if (ret <= 0) {
@@ -605,6 +637,11 @@ static ssize_t qio_channel_socket_writev(QIOChannel *ioc,
                 return -1;
             }
             break;
+        case ENOENT:
+        case ECONNREFUSED:
+            if (sioc->unix_datagram) {
+                return -1;
+            }
         }
 
         error_setg_errno(errp, errno,
