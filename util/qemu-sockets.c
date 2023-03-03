@@ -1064,6 +1064,40 @@ static int unix_connect_saddr(UnixSocketAddress *saddr, Error **errp)
     return -1;
 }
 
+static int unix_dgram_saddr(UnixSocketAddress *saddr, Error **errp)
+{
+    struct sockaddr_un un;
+    size_t addr_len;
+    int sock;
+
+    if (!saddr->path) {
+        error_setg(errp, "unix bind: no path specified");
+        return -1;
+    }
+
+    sock = qemu_socket(PF_UNIX, SOCK_DGRAM, 0);
+    if (sock < 0) {
+        error_setg_errno(errp, errno, "Failed to create socket");
+        return -1;
+    }
+
+    if (prepare_sockaddr(saddr, &un, &addr_len, errp) < 0) {
+        goto err;
+    }
+
+    if (bind(sock, (const struct sockaddr *)&un, addr_len) < 0) {
+        error_setg_errno(errp, -errno, "Failed to connect to '%s'",
+                         saddr->path);
+        goto err;
+    }
+
+    return sock;
+
+ err:
+    closesocket(sock);
+    return -1;
+}
+
 /* compatibility wrapper */
 int unix_listen(const char *str, Error **errp)
 {
@@ -1301,6 +1335,12 @@ int socket_dgram(SocketAddress *remote, SocketAddress *local, Error **errp)
      * TODO SOCKET_ADDRESS_TYPE_FD when fd is AF_INET or AF_INET6
      * (although other address families can do SOCK_DGRAM, too)
      */
+
+    /*remote is not necessary for unix datagram socket, it's connectionless */
+    if (!remote && local && local->type == SOCKET_ADDRESS_TYPE_UNIX) {
+        return unix_dgram_saddr(&local->u.q_unix, errp);
+    }
+
     switch (remote->type) {
     case SOCKET_ADDRESS_TYPE_INET:
         fd = inet_dgram_saddr(&remote->u.inet,
