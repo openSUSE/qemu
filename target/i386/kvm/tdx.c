@@ -206,12 +206,12 @@ static KvmTdxCpuidLookup tdx_cpuid_lookup[FEATURE_WORDS] = {
     },
     [FEAT_1_ECX] = {
         .tdx_fixed0 =
-            CPUID_EXT_MONITOR | CPUID_EXT_VMX | CPUID_EXT_SMX |
+            CPUID_EXT_VMX | CPUID_EXT_SMX |
             BIT(16),
         .tdx_fixed1 =
             CPUID_EXT_CX16 | CPUID_EXT_PDCM | CPUID_EXT_X2APIC |
             CPUID_EXT_AES | CPUID_EXT_XSAVE | CPUID_EXT_RDRAND |
-            CPUID_EXT_HYPERVISOR,
+            CPUID_EXT_HYPERVISOR | CPUID_EXT_MONITOR,
         .vmm_fixup =
             CPUID_EXT_EST | CPUID_EXT_TM2 | CPUID_EXT_XTPR | CPUID_EXT_DCA,
     },
@@ -227,7 +227,7 @@ static KvmTdxCpuidLookup tdx_cpuid_lookup[FEATURE_WORDS] = {
             CPUID_7_0_EBX_FSGSBASE | CPUID_7_0_EBX_RTM |
             CPUID_7_0_EBX_RDSEED | CPUID_7_0_EBX_SMAP |
             CPUID_7_0_EBX_CLFLUSHOPT | CPUID_7_0_EBX_CLWB |
-            CPUID_7_0_EBX_SHA_NI,
+            CPUID_7_0_EBX_SHA_NI | CPUID_7_0_EBX_HLE,
         .vmm_fixup =
             CPUID_7_0_EBX_PQM | CPUID_7_0_EBX_RDT_A,
     },
@@ -364,6 +364,7 @@ static FeatureWord get_cpuid_featureword_index(uint32_t function,
     return w;
 }
 
+#define KVM_TSX_CPUID   (CPUID_7_0_EBX_RTM | CPUID_7_0_EBX_HLE)
 /*
  * TDX supported CPUID varies from what KVM reports. Adjust the result by
  * applying the TDX restrictions.
@@ -412,6 +413,12 @@ void tdx_get_supported_cpuid(uint32_t function, uint32_t index, int reg,
      * report the support.
      */
     *ret &= ~(~vmm_cap & tdx_cpuid_lookup[w].vmm_fixup);
+
+    if (function == 7 && index == 0 && reg == R_EBX && host_tsx_broken())
+        *ret &= ~KVM_TSX_CPUID;
+
+    if (function == 1 && reg == R_ECX && !enable_cpu_pm)
+        *ret &= ~CPUID_EXT_MONITOR;
 }
 
 void tdx_apply_xfam_dependencies(CPUState *cpu)
