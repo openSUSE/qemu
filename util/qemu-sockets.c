@@ -988,12 +988,44 @@ err:
     return -1;
 }
 
+static int prepare_sockaddr(UnixSocketAddress *saddr,
+                            struct sockaddr_un *un, size_t *addrlen,
+                            Error **errp)
+{
+    size_t pathlen;
+    bool abstract = saddr_is_abstract(saddr);
+
+    pathlen = strlen(saddr->path);
+    if (pathlen > sizeof(un->sun_path) ||
+        (abstract && pathlen > (sizeof(un->sun_path) - 1))) {
+        error_setg(errp, "UNIX socket path '%s' is too long", saddr->path);
+        error_append_hint(errp, "Path must be less than %zu bytes\n",
+                          abstract ? sizeof(un->sun_path) - 1 :
+                          sizeof(un->sun_path));
+        return -1;
+    }
+
+    memset(un, 0, sizeof(*un));
+    un->sun_family = AF_UNIX;
+    *addrlen = sizeof(*un);
+
+    if (abstract) {
+        un->sun_path[0] = '\0';
+        memcpy(&un->sun_path[1], saddr->path, pathlen);
+        if (saddr_is_tight(saddr)) {
+            *addrlen = offsetof(struct sockaddr_un, sun_path) + 1 + pathlen;
+        }
+    } else {
+        memcpy(un->sun_path, saddr->path, pathlen);
+    }
+
+    return 0;
+}
+
 static int unix_connect_saddr(UnixSocketAddress *saddr, Error **errp)
 {
-    bool abstract = saddr_is_abstract(saddr);
     struct sockaddr_un un;
     int sock, rc;
-    size_t pathlen;
     size_t addrlen;
 
     if (saddr->path == NULL) {
@@ -1007,29 +1039,10 @@ static int unix_connect_saddr(UnixSocketAddress *saddr, Error **errp)
         return -1;
     }
 
-    pathlen = strlen(saddr->path);
-    if (pathlen > sizeof(un.sun_path) ||
-        (abstract && pathlen > (sizeof(un.sun_path) - 1))) {
-        error_setg(errp, "UNIX socket path '%s' is too long", saddr->path);
-        error_append_hint(errp, "Path must be less than %zu bytes\n",
-                          abstract ? sizeof(un.sun_path) - 1 :
-                          sizeof(un.sun_path));
+    if (prepare_sockaddr(saddr, &un, &addrlen, errp) < 0) {
         goto err;
     }
 
-    memset(&un, 0, sizeof(un));
-    un.sun_family = AF_UNIX;
-    addrlen = sizeof(un);
-
-    if (abstract) {
-        un.sun_path[0] = '\0';
-        memcpy(&un.sun_path[1], saddr->path, pathlen);
-        if (saddr_is_tight(saddr)) {
-            addrlen = offsetof(struct sockaddr_un, sun_path) + 1 + pathlen;
-        }
-    } else {
-        memcpy(un.sun_path, saddr->path, pathlen);
-    }
     /* connect to peer */
     do {
         rc = 0;
