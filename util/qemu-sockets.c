@@ -988,9 +988,9 @@ err:
     return -1;
 }
 
-static int prepare_sockaddr(UnixSocketAddress *saddr,
-                            struct sockaddr_un *un, size_t *addrlen,
-                            Error **errp)
+int prepare_unix_sockaddr(UnixSocketAddress *saddr,
+                          struct sockaddr_un *un, size_t *addrlen,
+                          Error **errp)
 {
     size_t pathlen;
     bool abstract = saddr_is_abstract(saddr);
@@ -1039,7 +1039,7 @@ static int unix_connect_saddr(UnixSocketAddress *saddr, Error **errp)
         return -1;
     }
 
-    if (prepare_sockaddr(saddr, &un, &addrlen, errp) < 0) {
+    if (prepare_unix_sockaddr(saddr, &un, &addrlen, errp) < 0) {
         goto err;
     }
 
@@ -1081,7 +1081,7 @@ static int unix_dgram_saddr(UnixSocketAddress *saddr, Error **errp)
         return -1;
     }
 
-    if (prepare_sockaddr(saddr, &un, &addr_len, errp) < 0) {
+    if (prepare_unix_sockaddr(saddr, &un, &addr_len, errp) < 0) {
         goto err;
     }
 
