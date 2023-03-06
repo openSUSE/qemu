@@ -521,9 +521,8 @@ int qio_channel_set_blocking(QIOChannel *ioc,
 int qio_channel_close(QIOChannel *ioc,
                       Error **errp);
 
-
 /**
- * qio_channel_io_pwritev
+ * qio_channel_io_pwritev_full
  * @ioc: the channel object
  * @iov: the array of memory regions to write data from
  * @niov: the length of the @iov array
@@ -542,6 +541,21 @@ int qio_channel_close(QIOChannel *ioc,
 ssize_t qio_channel_io_pwritev_full(QIOChannel *ioc, const struct iovec *iov,
                                     size_t niov, off_t offset, Error **errp);
 
+/**
+ * qio_channel_io_pwritev
+ * @ioc: the channel object
+ * @buf: the memory region to write data into
+ * @buflen: the number of bytes to @buf
+ * @offset: offset in the channel where writes should begin
+ * @errp: pointer to a NULL-initialized error object
+ *
+ * Not all implementations will support this facility, so may report
+ * an error. To avoid errors, the caller may check for the feature
+ * flag QIO_CHANNEL_FEATURE_SEEKABLE prior to calling this method.
+ *
+ */
+ssize_t qio_channel_io_pwritev(QIOChannel *ioc, char *buf, size_t buflen,
+                               off_t offset, Error **errp);
 
 /**
  * qio_channel_io_preadv
@@ -562,6 +576,23 @@ ssize_t qio_channel_io_pwritev_full(QIOChannel *ioc, const struct iovec *iov,
  */
 ssize_t qio_channel_io_preadv_full(QIOChannel *ioc, const struct iovec *iov,
                                    size_t niov, off_t offset, Error **errp);
+
+/**
+ * qio_channel_io_preadv
+ * @ioc: the channel object
+ * @buf: the memory region to write data into
+ * @buflen: the number of bytes to @buf
+ * @offset: offset in the channel where writes should begin
+ * @errp: pointer to a NULL-initialized error object
+ *
+ * Not all implementations will support this facility, so may report
+ * an error.  To avoid errors, the caller may check for the feature
+ * flag QIO_CHANNEL_FEATURE_SEEKABLE prior to calling this method.
+ *
+ */
+ssize_t qio_channel_io_preadv(QIOChannel *ioc, char *buf, size_t buflen,
+                              off_t offset, Error **errp);
+
 /**
  * qio_channel_shutdown:
  * @ioc: the channel object

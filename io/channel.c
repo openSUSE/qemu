@@ -463,6 +463,17 @@ ssize_t qio_channel_io_pwritev_full(QIOChannel *ioc, const struct iovec *iov,
     return klass->io_pwritev(ioc, iov, niov, offset, errp);
 }
 
+ssize_t qio_channel_io_pwritev(QIOChannel *ioc, char *buf, size_t buflen,
+                               off_t offset, Error **errp)
+{
+    struct iovec iov = {
+        .iov_base = buf,
+        .iov_len = buflen
+    };
+
+    return qio_channel_io_pwritev_full(ioc, &iov, 1, offset, errp);
+}
+
 ssize_t qio_channel_io_preadv_full(QIOChannel *ioc, const struct iovec *iov,
                                    size_t niov, off_t offset, Error **errp)
 {
@@ -479,6 +490,17 @@ ssize_t qio_channel_io_preadv_full(QIOChannel *ioc, const struct iovec *iov,
     }
 
     return klass->io_preadv(ioc, iov, niov, offset, errp);
+}
+
+ssize_t qio_channel_io_preadv(QIOChannel *ioc, char *buf, size_t buflen,
+                              off_t offset, Error **errp)
+{
+    struct iovec iov = {
+        .iov_base = buf,
+        .iov_len = buflen
+    };
+
+    return qio_channel_io_preadv_full(ioc, &iov, 1, offset, errp);
 }
 
 int qio_channel_shutdown(QIOChannel *ioc,
