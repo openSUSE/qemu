@@ -1531,3 +1531,16 @@ SocketAddress *socket_address_flatten(SocketAddressLegacy *addr_legacy)
 
     return addr;
 }
+
+
+bool sockaddr_is_abstract(struct sockaddr_un *sock_un)
+{
+#if defined(CONFIG_LINUX)
+    if (!sock_un)
+        return false;
+
+    if (!sock_un->sun_path[0] && sock_un->sun_path[1])
+        return true;
+#endif
+    return false;
+}

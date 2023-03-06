@@ -157,4 +157,12 @@ SocketAddress *socket_address_flatten(SocketAddressLegacy *addr);
  * Return 0 on success.
  */
 int socket_address_parse_named_fd(SocketAddress *addr, Error **errp);
+
+/**
+ * sockaddr_is_abstract:
+ *
+ * Return false on sock_un is not abstract or NULL, othewise true.
+ */
+bool sockaddr_is_abstract(struct sockaddr_un *sock_un);
+
 #endif /* QEMU_SOCKETS_H */

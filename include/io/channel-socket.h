@@ -51,6 +51,7 @@ struct QIOChannelSocket {
     ssize_t zero_copy_sent;
 
     struct UnixSocketAddress sendtoDgramAddr;
+    struct UnixSocketAddress recvfromDgramAddr;
     bool unix_datagram;
 };
 
@@ -267,5 +268,8 @@ qio_channel_socket_accept(QIOChannelSocket *ioc,
 
 void qio_channel_socket_set_dgram_send_address(QIOChannelSocket *ioc,
                                                  const struct UnixSocketAddress *un_addr);
+
+void qio_channel_socket_get_dgram_recv_address(QIOChannelSocket *ioc,
+                                               struct UnixSocketAddress *un_addr);
 
 #endif /* QIO_CHANNEL_SOCKET_H */

@@ -431,6 +431,26 @@ void qio_channel_socket_set_dgram_send_address(QIOChannelSocket *ioc,
     ioc->sendtoDgramAddr.path = g_strdup(un_addr->path);
 }
 
+void qio_channel_socket_get_dgram_recv_address(QIOChannelSocket *ioc,
+                                               struct UnixSocketAddress *un_addr)
+{
+    if (!ioc->unix_datagram)
+        return;
+
+    if (!un_addr || !un_addr->path)
+        return;
+
+    if (!ioc->recvfromDgramAddr.path)
+        return;
+
+#if defined(CONFIG_LINUX)
+    un_addr->has_abstract = ioc->recvfromDgramAddr.has_abstract;
+    un_addr->abstract = ioc->recvfromDgramAddr.abstract;
+    un_addr->has_tight = ioc->recvfromDgramAddr.has_tight;
+    un_addr->tight = ioc->recvfromDgramAddr.tight;
+#endif /* defined(CONFIG_LINUX) */
+    strcpy(un_addr->path, ioc->recvfromDgramAddr.path);
+}
 
 static void qio_channel_socket_init(Object *obj)
 {
@@ -461,6 +481,7 @@ static void qio_channel_socket_finalize(Object *obj)
     }
 
     g_free(ioc->sendtoDgramAddr.path);
+    g_free(ioc->recvfromDgramAddr.path);
 }
 
 
@@ -510,7 +531,6 @@ static void qio_channel_socket_copy_fds(struct msghdr *msg,
     }
 }
 
-
 static ssize_t qio_channel_socket_readv(QIOChannel *ioc,
                                         const struct iovec *iov,
                                         size_t niov,
@@ -523,6 +543,7 @@ static ssize_t qio_channel_socket_readv(QIOChannel *ioc,
     struct msghdr msg = { NULL, };
     char control[CMSG_SPACE(sizeof(int) * SOCKET_MAX_FDS)];
     int sflags = 0;
+    struct sockaddr_un addr_un;
 
     memset(control, 0, CMSG_SPACE(sizeof(int) * SOCKET_MAX_FDS));
 
@@ -535,6 +556,12 @@ static ssize_t qio_channel_socket_readv(QIOChannel *ioc,
         sflags |= MSG_CMSG_CLOEXEC;
 #endif
 
+    }
+
+    if (sioc->unix_datagram) {
+        memset(&addr_un, 0, sizeof(addr_un));
+        msg.msg_name = &addr_un;
+        msg.msg_namelen = sizeof(addr_un);
     }
 
  retry:
@@ -554,6 +581,17 @@ static ssize_t qio_channel_socket_readv(QIOChannel *ioc,
 
     if (fds && nfds) {
         qio_channel_socket_copy_fds(&msg, fds, nfds);
+    }
+
+    if (ret > 0 && sioc->unix_datagram) {
+        g_free(sioc->recvfromDgramAddr.path);
+        if (sockaddr_is_abstract(&addr_un)) {
+            sioc->recvfromDgramAddr.path = g_strdup(addr_un.sun_path + 1);
+            sioc->recvfromDgramAddr.abstract = true;
+        } else {
+            sioc->recvfromDgramAddr.path = g_strdup(addr_un.sun_path);
+            sioc->recvfromDgramAddr.abstract = false;
+        }
     }
 
     return ret;
