@@ -31,6 +31,7 @@
 #include "hw/i386/tdvf-hob.h"
 #include "kvm_i386.h"
 #include "tdx.h"
+#include "tdx-vmcall-service.h"
 #include "../cpu-internal.h"
 
 #include "trace.h"
@@ -1494,6 +1495,7 @@ static void tdx_guest_class_init(ObjectClass *oc, void *data)
 #define TDG_VP_VMCALL_MAP_GPA                           0x10001ULL
 #define TDG_VP_VMCALL_GET_QUOTE                         0x10002ULL
 #define TDG_VP_VMCALL_SETUP_EVENT_NOTIFY_INTERRUPT      0x10004ULL
+#define TDG_VP_VMCALL_SERVICE                           0x10005ULL
 
 #define TDG_VP_VMCALL_SUCCESS           0x0000000000000000ULL
 #define TDG_VP_VMCALL_RETRY             0x0000000000000001ULL
@@ -2072,6 +2074,366 @@ static void tdx_handle_setup_event_notify_interrupt(
     }
 }
 
+static int tdx_vmcall_service_do_cache_data_head(hwaddr addr,
+                                                 TdxVmServiceDataHead *head)
+{
+    MemTxResult ret;
+
+    ret = address_space_read(&address_space_memory,
+                             addr, MEMTXATTRS_UNSPECIFIED,
+                             head, le32_to_cpu(sizeof(*head)));
+    if (ret != MEMTX_OK) {
+        return -1;
+    }
+
+    return 0;
+}
+
+
+static int tdx_vmcall_service_sanity_check(X86CPU *cpu,
+                                           struct kvm_tdx_vmcall *vmcall)
+{
+    TdxVmServiceDataHead head[2];
+    hwaddr addrs[] = { vmcall->in_r12, vmcall->in_r13 };
+    uint64_t vector;
+    QemuUUID guid[2];
+
+    for (int i = 0; i < 2; ++i) {
+
+        if (!(addrs[i] & tdx_shared_bit(cpu))) {
+            return -1;
+        }
+
+        if (!QEMU_IS_ALIGNED((uint64_t)addrs[i], 4096)) {
+            return -1;
+        }
+
+        /* Can't cache means the GPA may not in GPA space */
+        if (tdx_vmcall_service_do_cache_data_head(addrs[i] & ~tdx_shared_bit(cpu),
+                                                  &head[i])) {
+            return -1;
+        }
+
+        /*Length should be at least cover the head*/
+        if (head[i].length < sizeof(TdxVmServiceDataHead)) {
+            return -1;
+        }
+    }
+
+    guid[0] = head[0].guid;
+    guid[1] = head[1].guid;
+    /* the GUID in command/respond buffer should be same  */
+    if (!qemu_uuid_is_equal(&guid[0], &guid[1])) {
+        return -1;
+    }
+
+    /* check the notify vector for input parameter ONLY*/
+    vector = vmcall->in_r14;
+    if (vector && (vector < 32 || vector > 255)) {
+        return -1;
+    }
+
+    return 0;
+}
+
+static void tdx_vmcall_service_cache_data_head(TdxVmcallServiceItem *vsi)
+{
+    int ret;
+    TdxVmcallSerivceDataCache *cache[] = {&vsi->command, &vsi->response};
+
+    for (int i = 0; i < 2; ++i) {
+        ret = tdx_vmcall_service_do_cache_data_head(cache[i]->addr,
+                                                    &cache[i]->head);
+        if (ret) {
+            error_report("Unexpected failure of reading GPA space");
+        }
+    }
+}
+
+static int tdx_vmcall_service_cache_data(TdxVmcallServiceItem *vsi)
+{
+    MemTxResult ret;
+    int64_t data_size;
+    hwaddr addr;
+    TdxVmcallSerivceDataCache *cache[] = {&vsi->command, &vsi->response};
+
+    for (int i = 0; i < 2; ++i) {
+        data_size = cache[i]->head.length - sizeof(cache[i]->head);
+
+        if (!data_size) {
+            cache[i]->data_len = 0;
+            continue;
+        }
+
+        if (cache[i]->data_buf_len < data_size) {
+            g_free(cache[i]->data_buf);
+            cache[i]->data_buf = g_try_malloc0(data_size);
+            if (cache[i]->data_buf) {
+                cache[i]->data_buf_len = data_size;
+            }
+        }
+
+        if (!cache[i]->data_buf) {
+            return -1;
+        }
+
+        addr = cache[i]->addr + sizeof(cache[i]->head);
+        ret = address_space_read(&address_space_memory,
+                                 addr,
+                                 MEMTXATTRS_UNSPECIFIED,
+                                 cache[i]->data_buf,
+                                 le32_to_cpu(data_size));
+        if (ret != MEMTX_OK) {
+            return -2;
+        }
+
+        cache[i]->data_len = data_size;
+    }
+
+    return 0;
+}
+
+
+static void tdx_vmcall_service_prepare_response(TdxVmcallSerivceDataCache *data_cache,
+                                                bool prepare_rsp_head,
+                                                bool prepare_rsp_data)
+{
+    hwaddr data_addr;
+    MemTxResult ret;
+
+    if (!data_cache)
+        return;
+
+    if (prepare_rsp_head) {
+        data_cache->head.length = sizeof(TdxVmServiceDataHead) + data_cache->data_len;
+        ret = address_space_write(&address_space_memory,
+                                  data_cache->addr,
+                                  MEMTXATTRS_UNSPECIFIED,
+                                  &data_cache->head,
+                                  le32_to_cpu(sizeof(data_cache->head)));
+        if (ret != MEMTX_OK) {
+            error_report("TDX: failed to update VM Service response header.");
+            return;
+        }
+    }
+
+    if (!prepare_rsp_data)
+        return;
+
+    data_addr = data_cache->addr + sizeof(TdxVmServiceDataHead);
+    ret = address_space_write(&address_space_memory,
+                              data_addr,
+                              MEMTXATTRS_UNSPECIFIED,
+                              data_cache->data_buf,
+                              le32_to_cpu(data_cache->data_len));
+    if (ret != MEMTX_OK) {
+        error_report("TDX: failed to update VM Service response data area.");
+    }
+}
+
+static int __tdx_vmcall_service_notify_guest(int apic_id, uint64_t vector)
+{
+    if (!vector)
+        return 0;
+
+    return tdx_td_notify(apic_id, vector);
+}
+
+static void __tdx_vmcall_service_complete_request(TdxVmcallSerivceDataCache *data_cache,
+                                                  bool prepare_rsp_head, bool prepare_rsp_data,
+                                                  int apic_id,
+                                                  uint64_t notify_vector)
+{
+    tdx_vmcall_service_prepare_response(data_cache,
+                                        prepare_rsp_head, prepare_rsp_data);
+
+    __tdx_vmcall_service_notify_guest(apic_id, notify_vector);
+}
+
+static TdxVmcallServiceType* tdx_vmcall_service_find_handler(QemuUUID *guid,
+                                                             TdxVmcallService *vmc)
+{
+    for (int  i = 0; i < vmc->dispatch_table_count; ++i) {
+        if (!qemu_uuid_is_equal(guid, &vmc->dispatch_table[i].from)) {
+            continue;
+        }
+
+        if (!vmc->dispatch_table[i].to) {
+            continue;
+        }
+
+        return &vmc->dispatch_table[i];
+    }
+
+    return NULL;
+}
+
+static void tdx_vmcall_service_dispatch_service_item(TdxVmcallServiceType *handler,
+                                                     TdxVmcallServiceItem *vsi)
+{
+    handler->to(vsi, handler->opaque);
+}
+
+void tdx_vmcall_service_item_ref(TdxVmcallServiceItem *item)
+{
+    uint32_t ref;
+
+    g_assert(item);
+    ref = qatomic_fetch_inc(&item->ref_count);
+    g_assert(ref < INT_MAX);
+}
+
+void tdx_vmcall_service_item_unref(TdxVmcallServiceItem *item)
+{
+    g_assert(item);
+    g_assert(item->ref_count > 0);
+    if (qatomic_fetch_dec(&item->ref_count) == 1) {
+            g_free(item->command.data_buf);
+            g_free(item->response.data_buf);
+            qemu_sem_destroy(&item->wait);
+
+            g_free(item);
+    }
+}
+
+static TdxVmcallServiceItem*
+tdx_vmcall_service_create_service_item(int vsi_size,
+                                       struct kvm_tdx_vmcall *vmcall)
+{
+     TdxVmcallServiceItem* new;
+
+     new = g_try_malloc0(vsi_size);
+     if (!new)
+         return new;
+
+     tdx_vmcall_service_item_ref(new);
+
+     return new;
+}
+
+static int
+tdx_vmcall_service_init_service_item(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall,
+                                     TdxVmcallServiceItem *vsi)
+{
+     uint64_t gpa_mask = ~tdx_shared_bit(cpu);
+
+     qemu_sem_init(&vsi->wait, 0);
+
+     vsi->command.addr = vmcall->in_r12 & gpa_mask;
+     vsi->response.addr = vmcall->in_r13 & gpa_mask;
+     vsi->notify_vector = vmcall->in_r14;
+     vsi->apic_id = cpu->apic_id;
+     vsi->timeout = vmcall->in_r15;
+
+     tdx_vmcall_service_cache_data_head(vsi);
+     if (tdx_vmcall_service_cache_data(vsi)) {
+         return -1;
+     }
+
+     return 0;
+}
+
+static bool tdx_vmcall_service_is_block(TdxVmcallServiceItem *vsi)
+{
+    return !vsi->notify_vector;
+}
+
+static int tdx_vmcall_service_wait(TdxVmcallServiceItem *vsi)
+{
+    return qemu_sem_timedwait(&vsi->wait, 100);
+}
+
+static void tdx_vmcall_service_wake(TdxVmcallServiceItem *vsi)
+{
+    qemu_sem_post(&vsi->wait);
+}
+
+static void tdx_handle_vmcall_service(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall)
+{
+    TdxGuest *tdx;
+    MachineState *ms;
+    TdxVmcallServiceItem *vsi;
+    TdxVmcallServiceType *handler;
+    TdxVmcallSerivceDataCache command;
+    TdxVmcallSerivceDataCache response;
+    uint64_t gpa_mask = ~tdx_shared_bit(cpu);
+    QemuUUID guid;
+    struct {
+        hwaddr addr;
+        TdxVmcallSerivceDataCache *cache;
+    } helper[] = {
+        {vmcall->in_r12 & gpa_mask, &command},
+        {vmcall->in_r13 & gpa_mask, &response},
+    };
+
+    ms = MACHINE(qdev_get_machine());
+    tdx = TDX_GUEST(ms->cgs);
+
+    if (tdx_vmcall_service_sanity_check(cpu, vmcall)) {
+        vmcall->status_code = TDG_VP_VMCALL_INVALID_OPERAND;
+        return;
+    }
+
+    vmcall->status_code = TDG_VP_VMCALL_SUCCESS;
+
+    for (int i = 0; i < sizeof(helper)/sizeof(helper[0]); ++i) {
+        memset(helper[i].cache, 0, sizeof(*helper[i].cache));
+        helper[i].cache->addr = helper[i].addr;
+        tdx_vmcall_service_do_cache_data_head(helper[i].addr,
+                                              &helper[i].cache->head);
+
+    }
+
+    guid = command.head.guid;
+    handler = tdx_vmcall_service_find_handler(&guid,
+                                              &tdx->vmcall_service);
+    if (!handler) {
+        response.head.u.status = TDG_VP_VMCALL_SERVICE_NOT_SUPPORT;
+        goto fail;
+    }
+
+    vsi = tdx_vmcall_service_create_service_item(handler->vsi_size, vmcall);
+    if (!vsi) {
+        response.head.u.status = TDG_VP_VMCALL_SERVICE_OUT_OF_RESOURCE;
+        goto fail;
+    }
+
+    if (tdx_vmcall_service_init_service_item(cpu, vmcall, vsi)) {
+        response.head.u.status = TDG_VP_VMCALL_SERVICE_OUT_OF_RESOURCE;
+        goto fail_free;
+    }
+
+    tdx_vmcall_service_dispatch_service_item(handler, vsi);
+
+    if (tdx_vmcall_service_is_block(vsi)) {
+        /*Handle reset/shutdown, return BUSY for this */
+        while (1) {
+            if (runstate_is_running()) {
+                if (!tdx_vmcall_service_wait(vsi)) {
+                    break;
+                }
+                continue;
+            }
+
+            tdx_vmcall_service_set_response_state(vsi,
+                                                  TDG_VP_VMCALL_SERVICE_BUSY);
+            tdx_vmcall_service_complete_request(vsi);
+            break;
+        }
+    }
+
+    tdx_vmcall_service_item_unref(vsi);
+    return;
+
+ fail_free:
+    tdx_vmcall_service_item_unref(vsi);
+ fail:
+    __tdx_vmcall_service_complete_request(&response,
+                                          true, false,
+                                          cpu->apic_id,
+                                          vmcall->in_r14);
+}
+
 static void tdx_handle_vmcall(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall)
 {
     vmcall->status_code = TDG_VP_VMCALL_INVALID_OPERAND;
@@ -2093,11 +2455,121 @@ static void tdx_handle_vmcall(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall)
     case TDG_VP_VMCALL_SETUP_EVENT_NOTIFY_INTERRUPT:
         tdx_handle_setup_event_notify_interrupt(cpu, vmcall);
         break;
+    case TDG_VP_VMCALL_SERVICE:
+        tdx_handle_vmcall_service(cpu, vmcall);
+        break;
     default:
         warn_report("unknown tdg.vp.vmcall type 0x%llx subfunction 0x%llx",
                     vmcall->type, vmcall->subfunction);
         break;
     }
+}
+
+static void tdx_vmcall_service_timeout_handler(void *opaque)
+{
+    TdxVmcallServiceItem *vsi = opaque;
+
+    timer_del(&vsi->timer);
+    if (vsi->timer_cb)
+        vsi->timer_cb(vsi, vsi->timer_opaque);
+
+    tdx_vmcall_service_set_response_state(vsi, TDG_VP_VMCALL_SERVICE_TIME_OUT);
+    tdx_vmcall_service_complete_request(vsi);
+}
+
+void tdx_vmcall_service_set_response_state(TdxVmcallServiceItem *vsi,
+                                           int state)
+{
+    vsi->response.head.u.status = state;
+}
+
+void* tdx_vmcall_service_rsp_buf(TdxVmcallServiceItem *vsi)
+{
+    return vsi->response.data_buf;
+}
+
+int tdx_vmcall_service_rsp_size(TdxVmcallServiceItem *vsi)
+{
+    return vsi->response.data_len;
+}
+
+void tdx_vmcall_service_set_rsp_size(TdxVmcallServiceItem *vsi,
+                                     int size)
+{
+    vsi->response.data_len = size;
+}
+
+void* tdx_vmcall_service_cmd_buf(TdxVmcallServiceItem *vsi)
+{
+    return vsi->command.data_buf;
+}
+
+int tdx_vmcall_service_cmd_size(TdxVmcallServiceItem *vsi)
+{
+    return vsi->command.data_len;
+}
+
+void tdx_vmcall_service_set_timeout_handler(TdxVmcallServiceItem *vsi,
+                                            TdxVmcallServiceTimerCB *cb,
+                                            void *opaque)
+{
+    if (!vsi->timeout)
+        return;
+
+    vsi->timer_cb = cb;
+    vsi->timer_opaque = opaque;
+
+    if (cb) {
+        if (!vsi->timer_enable) {
+            tdx_vmcall_service_item_ref(vsi);
+            vsi->timer_enable = true;
+        } else {
+            timer_del(&vsi->timer);
+        }
+        timer_init_ms(&vsi->timer, QEMU_CLOCK_VIRTUAL,
+                      tdx_vmcall_service_timeout_handler, vsi);
+        timer_mod(&vsi->timer,
+                  qemu_clock_get_ms(QEMU_CLOCK_VIRTUAL) + vsi->timeout);
+    } else {
+            if (vsi->timer_enable) {
+                vsi->timer_enable = false;
+                timer_del(&vsi->timer);
+                tdx_vmcall_service_item_unref(vsi);
+            }
+    }
+}
+
+void tdx_vmcall_service_complete_request(TdxVmcallServiceItem *vsi)
+{
+    TdxVmcallSerivceDataCache *out = &vsi->response;
+    bool prepare_data;
+
+    prepare_data = (out->head.u.status != TDG_VP_VMCALL_SERVICE_RSP_BUF_TOO_SMALL);
+
+    __tdx_vmcall_service_complete_request(out, true, prepare_data,
+                                          vsi->apic_id, vsi->notify_vector);
+
+    if (tdx_vmcall_service_is_block(vsi)) {
+        tdx_vmcall_service_wake(vsi);
+    }
+
+    tdx_vmcall_service_set_timeout_handler(vsi, NULL, NULL);
+}
+
+void tdx_vmcall_service_register_type(TdxGuest *tdx,
+                                      TdxVmcallServiceType* type)
+{
+    TdxVmcallService *vmc;
+
+    if (!tdx || !type)
+        return;
+
+    vmc = &tdx->vmcall_service;
+    vmc->dispatch_table = g_realloc_n(vmc->dispatch_table,
+                                      vmc->dispatch_table_count + 1,
+                                      sizeof(*vmc->dispatch_table));
+    vmc->dispatch_table[vmc->dispatch_table_count] = *type;
+    ++vmc->dispatch_table_count;
 }
 
 void tdx_handle_exit(X86CPU *cpu, struct kvm_tdx_exit *tdx_exit)
