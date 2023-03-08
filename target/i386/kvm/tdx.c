@@ -1727,15 +1727,14 @@ static void tdx_handle_get_quote(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall)
                            UNASSIGNED_INTERRUPT_VECTOR, vmcall);
 }
 
-static void tdx_td_notify(struct tdx_get_quote_task *t)
+static int tdx_td_notify(uint32_t apic_id, int vector)
 {
     struct x86_msi x86_msi;
     struct kvm_msi msi;
-    int ret;
 
     /* It is optional for host VMM to interrupt TD. */
-    if(32 > t->event_notify_interrupt)
-        return;
+    if(!(32 <= vector && vector <= 255))
+        return 0;
 
     x86_msi = (struct x86_msi) {
         .x86_address_lo  = {
@@ -1744,14 +1743,14 @@ static void tdx_td_notify(struct tdx_get_quote_task *t)
             .redirect_hint = 0,
             .reserved_1 = 0,
             .virt_destid_8_14 = 0,
-            .destid_0_7 = t->apic_id & 0xff,
+            .destid_0_7 = apic_id & 0xff,
         },
         .x86_address_hi = {
             .reserved = 0,
-            .destid_8_31 = t->apic_id >> 8,
+            .destid_8_31 = apic_id >> 8,
         },
         .x86_data = {
-            .vector = t->event_notify_interrupt,
+            .vector = vector,
             .delivery_mode = APIC_DM_FIXED,
             .dest_mode_logical = 0,
             .reserved = 0,
@@ -1766,18 +1765,15 @@ static void tdx_td_notify(struct tdx_get_quote_task *t)
         .flags = 0,
         .devid = 0,
     };
-    ret = kvm_vm_ioctl(kvm_state, KVM_SIGNAL_MSI, &msi);
-    if (ret < 0) {
-        /* In this case, no better way to tell it to guest.  Log it. */
-        error_report("TDX: injection %d failed, interrupt lost (%s).\n",
-                     t->event_notify_interrupt, strerror(-ret));
-    }
+
+    return  kvm_vm_ioctl(kvm_state, KVM_SIGNAL_MSI, &msi);
 }
 
 static void tdx_getquote_task_cleanup(struct tdx_get_quote_task *t, bool outlen_overflow)
 {
     MachineState *ms;
     TdxGuest *tdx;
+    int ret;
 
     if (t->hdr.error_code != cpu_to_le64(TDX_VP_GET_QUOTE_SUCCESS) && !outlen_overflow) {
         t->hdr.out_len = cpu_to_le32(0);
@@ -1788,7 +1784,13 @@ static void tdx_getquote_task_cleanup(struct tdx_get_quote_task *t, bool outlen_
             MEMTXATTRS_UNSPECIFIED, &t->hdr, sizeof(t->hdr)) != MEMTX_OK) {
         error_report("TDX: failed to update GetQuote header.");
     }
-    tdx_td_notify(t);
+
+    ret = tdx_td_notify(t->apic_id, t->event_notify_interrupt);
+    if (ret < 0) {
+        /* In this case, no better way to tell it to guest.  Log it. */
+        error_report("TDX: injection %d failed, interrupt lost (%s).\n",
+                     t->event_notify_interrupt, strerror(-ret));
+    }
 
     /* Maintain the number of in-flight requests. */
     ms = MACHINE(qdev_get_machine());
