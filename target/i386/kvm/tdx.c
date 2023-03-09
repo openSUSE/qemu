@@ -978,6 +978,7 @@ static void tdx_binding_with_migtd_hash(void)
     }
 }
 
+static void tdx_guest_init_vmcall_service_vtpm(TdxGuest *tdx);
 static void tdx_finalize_vm(Notifier *notifier, void *unused)
 {
     TdxFirmware *tdvf = &tdx_guest->tdvf;
@@ -1079,6 +1080,8 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
         error_report("KVM_TDX_FINALIZE_VM failed %s", strerror(-r));
         exit(0);
     }
+
+    tdx_guest_init_vmcall_service_vtpm(tdx_guest);
     tdx_guest->parent_obj.ready = true;
 }
 
@@ -1435,6 +1438,24 @@ static void tdx_migtd_set_vsockport(Object *obj,
     info.is_src = !runstate_check(RUN_STATE_INMIGRATE);
     info.vsock_port = tdx->vsockport;
     tdx_vm_ioctl(KVM_TDX_SET_MIGRATION_INFO, 0, &info);
+}
+
+static void tdx_guest_init_vmcall_service_vtpm(TdxGuest *tdx)
+{
+    TdxVmcallService *vms = &tdx->vmcall_service;
+
+    if (!vms->vtpm_type)
+        return;
+
+    if (!vms->vtpm_path)
+        return;
+
+    if (!g_strcmp0(vms->vtpm_type, "client") &&
+        !vms->vtpm_userid) {
+        return;
+    }
+
+    tdx_guest_init_vtpm(tdx);
 }
 
 static void tdx_guest_set_vtpm_type(Object *obj, const char *val, Error **err)

@@ -174,5 +174,6 @@ void tdx_vmcall_service_item_unref(TdxVmcallServiceItem *vsi);
 
 void tdx_vmcall_service_register_type(TdxGuest *tdx,
                                       TdxVmcallServiceType* type);
+void tdx_guest_init_vtpm(TdxGuest *tdx);
 
 #endif /* QEMU_I386_TDX_H */
