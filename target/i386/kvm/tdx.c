@@ -1437,6 +1437,53 @@ static void tdx_migtd_set_vsockport(Object *obj,
     tdx_vm_ioctl(KVM_TDX_SET_MIGRATION_INFO, 0, &info);
 }
 
+static void tdx_guest_set_vtpm_type(Object *obj, const char *val, Error **err)
+{
+    TdxGuest *tdx = TDX_GUEST(obj);
+    TdxVmcallService *vms = &tdx->vmcall_service;
+
+    if (vms->vtpm_type) {
+        error_setg(err, "Invalid vtpm type: Duplicated value is not allowed");
+        return;
+    }
+
+    if (g_strcmp0(val, "server") && g_strcmp0(val, "client")) {
+        error_setg(err, "Invalid vtpm type: server or client");
+        return;
+    }
+
+    g_free(vms->vtpm_type);
+    vms->vtpm_type = g_strdup(val);
+}
+
+static void tdx_guest_set_vtpm_path(Object *obj, const char *val, Error **err)
+{
+    TdxGuest *tdx = TDX_GUEST(obj);
+    TdxVmcallService *vms = &tdx->vmcall_service;
+
+    if (vms->vtpm_path) {
+        error_setg(err, "Invalid vtpm path: Duplicated value is not allowed");
+        return;
+    }
+
+    g_free(vms->vtpm_path);
+    vms->vtpm_path = g_strdup(val);
+}
+
+static void tdx_guest_set_vtpm_userid(Object *obj, const char *val, Error **err)
+{
+    TdxGuest *tdx = TDX_GUEST(obj);
+    TdxVmcallService *vms = &tdx->vmcall_service;
+
+    if (vms->vtpm_userid) {
+        error_setg(err, "Invalid vtpm userid: Duplicated value is not allowed");
+        return;
+    }
+
+    g_free(vms->vtpm_userid);
+    vms->vtpm_userid = g_strdup(val);
+}
+
 static void tdx_guest_init(Object *obj)
 {
     TdxGuest *tdx = TDX_GUEST(obj);
@@ -1475,6 +1522,14 @@ static void tdx_guest_init(Object *obj)
     tdx->event_notify_interrupt = UNASSIGNED_INTERRUPT_VECTOR;
     tdx->apic_id = UNASSIGNED_APIC_ID;
     QLIST_INIT(&tdx->get_quote_task_list);
+
+    object_property_add_str(obj, "vtpm-type",
+                            NULL, tdx_guest_set_vtpm_type);
+    object_property_add_str(obj, "vtpm-path",
+                            NULL, tdx_guest_set_vtpm_path);
+    object_property_add_str(obj, "vtpm-userid",
+                            NULL, tdx_guest_set_vtpm_userid);
+
     tdx->migtd_attr = TDX_MIGTD_ATTR_DEFAULT;
 
     vmstate_register(NULL, 0, &tdx_guest_vmstate, tdx);

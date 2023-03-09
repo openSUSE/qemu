@@ -897,7 +897,10 @@
             '*migtd-attr': 'uint64',
             '*migtd-pid': 'uint32',
             '*migtd-hash': 'str',
-            '*vsockport': 'uint32' } }
+            '*vsockport': 'uint32',
+            '*vtpm-userid': 'str',
+            '*vtpm-type': 'str',
+            '*vtpm-path': 'str'  } }
 
 ##
 # @ThreadContextProperties:
