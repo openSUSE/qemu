@@ -63,6 +63,62 @@ int tdx_vtpm_init_base(TdxVtpm *base, TdxGuest *tdx,
     return 0;
 }
 
+TdxVtpmTransProtocolHead
+tdx_vtpm_init_trans_protocol_head(uint8_t type)
+{
+    TdxVtpmTransProtocolHead head;
+
+    head.version = 0;
+    head.type = type;
+    head.length = 0;
+    head.reserved[0] = 0;
+    head.reserved[1] = 0;
+
+    return head;
+}
+
+int tdx_vtpm_trans_send(QIOChannelSocket *socket_ioc,
+                        struct UnixSocketAddress *addr,
+                        TdxVtpmTransProtocolHead *head,
+                        struct iovec *iovec, int iovec_count)
+{
+    ssize_t ret;
+    TdxVtpmTransProtocolHead *new_pack;
+    uint32_t length = sizeof(*new_pack);
+    QIOChannel *ioc;
+    Error *local_err;
+    uint8_t *p;
+
+    for (int i = 0; i < iovec_count; ++i) {
+        length += iovec[i].iov_len;
+    }
+
+    new_pack = g_try_malloc(length);
+    if (!new_pack)
+        return -1;
+
+    p = (uint8_t*)(new_pack + 1);
+    for (int i = 0; i < iovec_count; ++i) {
+        memcpy(p, iovec[i].iov_base, iovec[i].iov_len);
+        p += iovec[i].iov_len;
+    }
+
+    *new_pack = *head;
+    new_pack->length = length;
+
+    ioc = QIO_CHANNEL(socket_ioc);
+
+    /*TODO: Remove datagram supporting after STREAM support is done. */
+    if (socket_ioc->unix_datagram) {
+        qio_channel_socket_set_dgram_send_address(socket_ioc, addr);
+    }
+    ret = qio_channel_write_all(ioc, (const char*)new_pack, length, &local_err);
+
+    g_free(new_pack);
+
+    return ret;
+}
+
 void tdx_guest_init_vtpm(TdxGuest *tdx)
 {
     TdxVmcallService *vms = &tdx->vmcall_service;
