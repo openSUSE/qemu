@@ -106,7 +106,7 @@ static bool migration_needs_multiple_sockets(void)
 static bool uri_supports_multi_channels(const char *uri)
 {
     return strstart(uri, "tcp:", NULL) || strstart(uri, "unix:", NULL) ||
-           strstart(uri, "vsock:", NULL);
+           strstart(uri, "vsock:", NULL) || strstart(uri, "file:", NULL);
 }
 
 static bool
