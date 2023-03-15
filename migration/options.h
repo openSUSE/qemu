@@ -66,6 +66,7 @@ bool migrate_live(void);
 bool migrate_multifd_packets(void);
 bool migrate_postcopy(void);
 bool migrate_tls(void);
+bool migrate_to_file(void);
 
 /* capabilities helpers */
 
