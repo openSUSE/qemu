@@ -77,6 +77,16 @@ tdx_vtpm_init_trans_protocol_head(uint8_t type)
     return head;
 }
 
+TdxVtpmCommHead tdx_vtpm_init_comm_head(uint8_t type)
+{
+    TdxVtpmCommHead head;
+
+    head.version = 0;
+    head.command = type;
+
+    return head;
+}
+
 int tdx_vtpm_trans_send(QIOChannelSocket *socket_ioc,
                         struct UnixSocketAddress *addr,
                         TdxVtpmTransProtocolHead *head,

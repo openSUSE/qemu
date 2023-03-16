@@ -21,8 +21,19 @@ int tdx_vtpm_init_base(TdxVtpm *base, TdxGuest *tdx,
                        const char* local_addr,
                        IOHandler *read, void *read_opaque);
 
+struct TdxVtpmServerPendingRequest;
 typedef struct TdxVtpmServer {
     TdxVtpm parent;
+
+    QemuMutex lock;
+
+    /*UserID -> client session */
+    GHashTable *client_session;
+
+    /*UserID -> recevied data cache */
+    GHashTable *client_data;
+
+    QLIST_HEAD(, TdxVtpmServerPendingRequest) request_list;
 
 } TdxVtpmServer;
 
@@ -38,18 +49,20 @@ typedef struct TdxVtpmClient {
     QemuMutex lock;
 } TdxVtpmClient;
 
-
 int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,
                          TdxGuest *tdx, TdxVmcallServiceType *type);
 
 enum TdxVtpmCommand {
     TDX_VTPM_SEND_MESSAGE = 1,
+    TDX_VTPM_WAIT_FOR_REQUEST = 1,
 };
 
 typedef struct TdxVtpmCommHead {
     uint8_t version;
     uint8_t command;
 } QEMU_PACKED TdxVtpmCommHead;
+
+TdxVtpmCommHead tdx_vtpm_init_comm_head(uint8_t type);
 
 typedef struct TdxVtpmCmdSendMessage {
     TdxVtpmCommHead head;
@@ -63,6 +76,21 @@ typedef struct TdxVtpmRspSendMessage {
     uint8_t reserved;
 } QEMU_PACKED TdxVtpmRspSendMessage;
 
+typedef struct TdxVtpmCmdWaitForRequest {
+    TdxVtpmCommHead head;
+    unsigned char reserved[2];
+    TdUserId user_id; // all 0 for broadcast
+} QEMU_PACKED TdxVtpmCmdWaitForRequest;
+
+typedef struct TdxVtpmRspWaitForRequest {
+    TdxVtpmCommHead head;
+    unsigned char operation;
+    unsigned char reserved;
+    TdUserId user_id;
+    unsigned char data[0];
+} QEMU_PACKED TdxVtpmRspWaitForRequest;
+
+#define TDX_VTPM_TRANS_PROTOCOL_MAX_LEN (16 * 1024)
 
 enum TdxVtpmTransProtocolType {
     TDX_VTPM_TRANS_PROTOCOL_TYPE_DATA = 1,
