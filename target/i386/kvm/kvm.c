@@ -4831,7 +4831,7 @@ int kvm_arch_put_registers(CPUState *cpu, int level)
     assert(cpu_is_stopped(cpu) || qemu_cpu_is_self(cpu));
 
     /* TODO: Allow accessing guest state for debug TDs. */
-    if (is_tdx_vm()) {
+    if (tdx_debug_enabled()) {
         CPUX86State *env = &x86_cpu->env;
 
         /*
@@ -4839,8 +4839,7 @@ int kvm_arch_put_registers(CPUState *cpu, int level)
          * Now KVM has workaround to emulate
          * #BP injection to support GDB stub feature.
          */
-        if (tdx_debug_enabled() &&
-            (env->exception_pending == 1) &&
+        if ((env->exception_pending == 1) &&
             (env->exception_nr == 3))
             return kvm_put_vcpu_events(x86_cpu, level);
 
