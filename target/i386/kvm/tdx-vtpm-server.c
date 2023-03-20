@@ -392,6 +392,10 @@ static void tdx_vtpm_server_handle_recv_data(TdxVtpmServer *server)
                                  NULL);
     if (read_size <= 0) {
         error_report("Read trans protocol fail: %d", read_size);
+        /*
+         * TODO: tdx_vtpm_server_client_disconnect() when change to
+         *       STREAM socket.
+         */
         goto out;
     }
 
@@ -546,6 +550,117 @@ static void tdx_vtpm_server_handle_wait_for_request(TdxVtpmServer *server,
     }
 }
 
+static int tdx_vtpm_server_sanity_check_report_status(TdxVmcallServiceItem *vsi)
+{
+    TdxVtpmCmdReportStatus *cmd = tdx_vmcall_service_cmd_buf(vsi);
+    int cmd_size = tdx_vmcall_service_cmd_size(vsi);
+    int rsp_size = tdx_vmcall_service_rsp_size(vsi);
+
+    if (rsp_size < sizeof(TdxVtpmRspReportStatus)) {
+        return TDG_VP_VMCALL_SERVICE_BAD_RSP_BUF_SIZE;
+    }
+
+    if (cmd->operation > TDX_VTPM_OPERATION_DESTROY) {
+        return TDG_VP_VMCALL_SERVICE_INVALID_OPERAND;
+    }
+
+    if (cmd->operation == TDX_VTPM_OPERATION_COMM &&
+        cmd_size < sizeof(*cmd)) {
+        return TDG_VP_VMCALL_SERVICE_BAD_CMD_BUF_SIZE;
+    }
+
+    if (cmd->operation == TDX_VTPM_OPERATION_CREATE &&
+        cmd_size < sizeof(*cmd)) {
+        return TDG_VP_VMCALL_SERVICE_BAD_CMD_BUF_SIZE;
+    }
+
+    if (cmd->operation == TDX_VTPM_OPERATION_DESTROY &&
+        cmd_size < sizeof(*cmd)) {
+        return TDG_VP_VMCALL_SERVICE_BAD_CMD_BUF_SIZE;
+    }
+
+    return TDG_VP_VMCALL_SERVICE_SUCCESS;
+}
+
+static int tdx_vtpm_server_send_data_message(TdxVtpmServer *server,
+                                             TdxVtpmServerClientSession *session,
+                                             uint8_t state,
+                                             void *data, int data_size)
+{
+    TdxVtpmTransProtocolData pack;
+    struct iovec i[3];
+
+    pack.head = tdx_vtpm_init_trans_protocol_head(TDX_VTPM_TRANS_PROTOCOL_TYPE_DATA);
+
+    i[0].iov_base = &state;
+    i[0].iov_len = sizeof(state);
+    i[1].iov_base = &session->user_id;
+    i[1].iov_len = sizeof(session->user_id);
+    i[2].iov_base = data;
+    i[2].iov_len = data_size;
+
+    if (tdx_vtpm_trans_send(server->parent.ioc, &session->client_addr,
+                            &pack.head, i, 3)) {
+        return -1;
+    }
+
+    return 0;
+}
+
+static void tdx_vtpm_server_prepare_rsp_report_status(TdxVmcallServiceItem *vsi)
+{
+    TdxVtpmRspReportStatus *rsp;
+
+    rsp = tdx_vmcall_service_rsp_buf(vsi);
+
+    rsp->head.version = 0;
+    rsp->head.command = TDX_VTPM_REPORT_STATUS;
+    memset(rsp->reserved, 0, sizeof(rsp->reserved));
+}
+
+static void tdx_vtpm_server_client_disconnect(TdxVtpmServer *server,
+                                              TdxVtpmServerClientSession *session)
+{
+    tdx_vtpm_server_destroy_client_session(server, session);
+}
+
+static void tdx_vtpm_server_handle_report_status(TdxVtpmServer *server, TdxVmcallServiceItem *vsi)
+{
+    TdxVtpmCmdReportStatus *cmd = tdx_vmcall_service_cmd_buf(vsi);
+    int size = tdx_vmcall_service_cmd_size(vsi);
+    TdxVtpmServerClientSession *session;
+    int ret = TDG_VP_VMCALL_SERVICE_SUCCESS;
+
+    ret = tdx_vtpm_server_sanity_check_report_status(vsi);
+    if (ret != TDG_VP_VMCALL_SERVICE_SUCCESS) {
+        goto out;
+    }
+
+    session = g_hash_table_lookup(server->client_session, &cmd->user_id);
+
+    if (cmd->operation == TDX_VTPM_OPERATION_CREATE ||
+        cmd->operation == TDX_VTPM_OPERATION_DESTROY) {
+        /*TODO: Handle here*/
+        return;
+    }
+
+    if (cmd->operation == TDX_VTPM_OPERATION_COMM) {
+        g_assert(session);
+        if (tdx_vtpm_server_send_data_message(server, session,
+                                              cmd->status,
+                                              cmd->data,
+                                              tdx_vtpm_cmd_report_status_payload_size(size))) {
+            tdx_vtpm_server_client_disconnect(server, session);
+            ret = TDG_VP_VMCALL_SERVICE_DEVICE_ERROR;
+        }
+    }
+
+ out:
+    tdx_vtpm_server_prepare_rsp_report_status(vsi);
+    tdx_vmcall_service_set_response_state(vsi, ret);
+    tdx_vmcall_service_complete_request(vsi);
+}
+
 static void tdx_vtpm_server_handle_command(TdxVtpmServer *server, TdxVmcallServiceItem *vsi)
 {
     TdxVtpmCommHead *head;
@@ -564,6 +679,9 @@ static void tdx_vtpm_server_handle_command(TdxVtpmServer *server, TdxVmcallServi
     switch(head->command) {
     case TDX_VTPM_WAIT_FOR_REQUEST:
         tdx_vtpm_server_handle_wait_for_request(server, vsi);
+        break;
+    case TDX_VTPM_REPORT_STATUS:
+        tdx_vtpm_server_handle_report_status(server, vsi);
         break;
     default:
         error_report("Not implemented cmd: %d", head->command);

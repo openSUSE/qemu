@@ -55,6 +55,7 @@ int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,
 enum TdxVtpmCommand {
     TDX_VTPM_SEND_MESSAGE = 1,
     TDX_VTPM_WAIT_FOR_REQUEST = 1,
+    TDX_VTPM_REPORT_STATUS = 2,
 };
 
 typedef struct TdxVtpmCommHead {
@@ -89,6 +90,21 @@ typedef struct TdxVtpmRspWaitForRequest {
     TdUserId user_id;
     unsigned char data[0];
 } QEMU_PACKED TdxVtpmRspWaitForRequest;
+
+typedef struct TdxVtpmCmdReportStatus {
+    TdxVtpmCommHead head;
+    unsigned char operation;
+    unsigned char status;
+    TdUserId user_id;
+    unsigned char data[0];
+} QEMU_PACKED TdxVtpmCmdReportStatus;
+#define tdx_vtpm_cmd_report_status_payload_size(size) \
+    (size) - sizeof(TdxVtpmCmdReportStatus)
+
+typedef struct TdxVtpmRspReportStatus {
+    TdxVtpmCommHead head;
+    unsigned char reserved[2];
+} QEMU_PACKED TdxVtpmRspReportStatus;
 
 #define TDX_VTPM_TRANS_PROTOCOL_MAX_LEN (16 * 1024)
 
