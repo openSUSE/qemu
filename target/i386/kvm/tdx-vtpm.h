@@ -46,6 +46,8 @@ typedef struct TdxVtpmServer {
 int tdx_vtpm_init_server(TdxVtpm *base, TdxVmcallService *vms,
                          TdxGuest *tdx, TdxVmcallServiceType *type);
 
+struct TdxVtpmClientDataEntry;
+struct TdxVtpmClientPendingRequest;
 typedef struct TdxVtpmClient {
     TdxVtpm parent;
 
@@ -53,6 +55,9 @@ typedef struct TdxVtpmClient {
     struct UnixSocketAddress server_addr;
 
     QemuMutex lock;
+
+    QSIMPLEQ_HEAD(, TdxVtpmClientDataEntry) data_queue;
+    QLIST_HEAD(, TdxVtpmClientPendingRequest) request_list;
 } TdxVtpmClient;
 
 int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,
@@ -60,6 +65,7 @@ int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,
 
 enum TdxVtpmCommand {
     TDX_VTPM_SEND_MESSAGE = 1,
+    TDX_VTPM_RECEIVE_MESSAGE = 2,
     TDX_VTPM_WAIT_FOR_REQUEST = 1,
     TDX_VTPM_REPORT_STATUS = 2,
 };
@@ -111,6 +117,18 @@ typedef struct TdxVtpmRspReportStatus {
     TdxVtpmCommHead head;
     unsigned char reserved[2];
 } QEMU_PACKED TdxVtpmRspReportStatus;
+
+typedef struct TdxVtpmCmdReceiveMessage {
+    TdxVtpmCommHead head;
+    unsigned char reserved[2];
+} QEMU_PACKED TdxVtpmCmdReceiveMessage;
+
+typedef struct TdxVtpmRspReceiveMessage {
+    TdxVtpmCommHead head;
+    unsigned char status;
+    unsigned char reserved;
+    unsigned char data[0];
+} QEMU_PACKED TdxVtpmRspReceiveMessage;
 
 #define TDX_VTPM_TRANS_PROTOCOL_MAX_LEN (16 * 1024)
 
