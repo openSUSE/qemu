@@ -1532,6 +1532,7 @@ struct tdx_get_quote_task {
     int event_notify_interrupt;
     QIOChannelSocket *ioc;
     QEMUTimer timer;
+    bool timer_armed;
 };
 
 struct x86_msi {
@@ -1635,7 +1636,8 @@ static void tdx_getquote_task_cleanup(struct tdx_get_quote_task *t, bool outlen_
     }
     qio_channel_close(QIO_CHANNEL(t->ioc), NULL);
     object_unref(OBJECT(t->ioc));
-    timer_del(&t->timer);
+    if (t->timer_armed)
+        timer_del(&t->timer);
     g_free(t->out_data);
     g_free(t);
 
@@ -1743,6 +1745,7 @@ static void tdx_transaction_start(struct tdx_get_quote_task *t)
     qemu_set_fd_handler(t->ioc->fd, tdx_get_quote_read, NULL, t);
     timer_init_ms(&t->timer, QEMU_CLOCK_VIRTUAL, getquote_timer_expired, t);
     timer_mod(&t->timer, time + TRANSACTION_TIMEOUT);
+    t->timer_armed = true;
 }
 
 static void tdx_handle_get_quote_connected(QIOTask *task, gpointer opaque)
@@ -1878,6 +1881,7 @@ static void tdx_handle_get_quote(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall)
     t->out_len = 0;
     t->hdr = hdr;
     t->ioc = ioc;
+    t->timer_armed = false;
 
     qemu_mutex_lock(&tdx->lock);
     if (!tdx->quote_generation ||
