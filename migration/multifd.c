@@ -1265,6 +1265,7 @@ static void *multifd_recv_thread(void *opaque)
     while (true) {
         uint32_t flags = 0;
         bool has_data = false;
+        p->normal_num = 0;
 
         if (p->quit) {
             break;
