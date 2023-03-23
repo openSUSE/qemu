@@ -366,6 +366,11 @@ bool migrate_live(void)
     return !migrate_suspend();
 }
 
+bool migrate_multifd_packets(void)
+{
+    return !migrate_fixed_ram();
+}
+
 bool migrate_postcopy(void)
 {
     return migrate_postcopy_ram() || migrate_dirty_bitmaps();
