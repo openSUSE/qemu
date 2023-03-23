@@ -1081,6 +1081,7 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
         exit(0);
     }
 
+    tdx_guest_init_service_query(tdx_guest);
     tdx_guest_init_vmcall_service_vtpm(tdx_guest);
     tdx_guest->parent_obj.ready = true;
 }
