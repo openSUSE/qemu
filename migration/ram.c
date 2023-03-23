@@ -111,6 +111,7 @@
  * pages region in the migration file at a time.
  */
 #define FIXED_RAM_LOAD_BUF_SIZE 0x100000
+#define FIXED_RAM_MULTIFD_LOAD_BUF_SIZE 0x100000
 
 XBZRLECacheStats xbzrle_counters;
 
@@ -3934,6 +3935,27 @@ void colo_flush_ram_cache(void)
     trace_colo_flush_ram_cache_end();
 }
 
+static int ram_load_multifd_pages(RAMBlock *block, ram_addr_t start_offset,
+                                  size_t size)
+{
+    MultiFDRecvData *data = multifd_get_recv_data();
+
+    /*
+     * Pointing the opaque directly to the host buffer, no
+     * preprocessing needed.
+     */
+    data->opaque = block->host + start_offset;
+
+    data->file_offset = block->pages_offset + start_offset;
+    data->size = size;
+
+    if (multifd_recv() < 0) {
+        return -1;
+    }
+
+    return 1;
+}
+
 static void read_ramblock_fixed_ram(QEMUFile *f, RAMBlock *block,
                                     long num_pages, unsigned long *bitmap)
 {
@@ -3951,13 +3973,19 @@ static void read_ramblock_fixed_ram(QEMUFile *f, RAMBlock *block,
 
         len = TARGET_PAGE_SIZE * (clear_bit_idx - set_bit_idx);
         offset = set_bit_idx << TARGET_PAGE_BITS;
-        read_len = MIN(len, FIXED_RAM_LOAD_BUF_SIZE);
 
         for (read = 0, completed = 0; completed < len; offset += read) {
             host = host_from_ram_block_offset(block, offset);
 
-            read = qemu_get_buffer_at(f, host, read_len,
-                                      block->pages_offset + offset);
+            if (migrate_multifd()) {
+                read_len = MIN(len, FIXED_RAM_MULTIFD_LOAD_BUF_SIZE);
+                ram_load_multifd_pages(block, offset, read_len);
+                read = read_len;
+            } else {
+                read_len = MIN(len, FIXED_RAM_LOAD_BUF_SIZE);
+                read = qemu_get_buffer_at(f, host, read_len,
+                                          block->pages_offset + offset);
+            }
             completed += read;
         }
     }
