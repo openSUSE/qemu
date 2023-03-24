@@ -66,10 +66,27 @@ void file_send_channel_create(QIOTaskFunc f, void *data)
     QIOChannelFile *ioc;
     QIOTask *task;
     Error *err = NULL;
+    int flags = outgoing_args.flags;
 
-    ioc = qio_channel_file_new_path(outgoing_args.fname,
-                                    outgoing_args.flags,
-                                    outgoing_args.mode, &err);
+    if (migrate_direct_io()) {
+#ifdef O_DIRECT
+        /*
+         * Enable O_DIRECT for the secondary channels. These are used
+         * for sending ram pages and writes should be guaranteed to be
+         * aligned to at least page size.
+         */
+        flags |= O_DIRECT;
+#else
+        error_setg(&err, "System does not support O_DIRECT");
+        error_append_hint(&err,
+                          "Try disabling direct-io migration capability\n");
+#endif
+    }
+
+    if (!err) {
+        ioc = qio_channel_file_new_path(outgoing_args.fname, flags,
+                                        outgoing_args.mode, &err);
+    }
 
     task = qio_task_new(OBJECT(ioc), f, (gpointer)data, NULL);
     if (!ioc) {
