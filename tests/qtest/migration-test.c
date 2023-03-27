@@ -1586,6 +1586,57 @@ static void test_precopy_file_fixed_ram_nonlive(void)
     test_precopy_common(&args);
 }
 
+static void *migrate_multifd_fixed_ram_start_live(QTestState *from, QTestState *to)
+{
+    migrate_fixed_ram_start_live(from, to);
+
+    migrate_set_parameter_int(from, "multifd-channels", 4);
+    migrate_set_parameter_int(to, "multifd-channels", 4);
+
+    migrate_set_capability(from, "multifd", true);
+    migrate_set_capability(to, "multifd", true);
+
+    return NULL;
+}
+
+static void *migrate_multifd_fixed_ram_start_nonlive(QTestState *from, QTestState *to)
+{
+    migrate_fixed_ram_start_nonlive(from, to);
+
+    migrate_set_parameter_int(from, "multifd-channels", 4);
+    migrate_set_parameter_int(to, "multifd-channels", 4);
+
+    migrate_set_capability(from, "multifd", true);
+    migrate_set_capability(to, "multifd", true);
+
+    return NULL;
+}
+
+static void test_multifd_file_fixed_ram_live(void)
+{
+    g_autofree char *uri = g_strdup_printf("file:%s/migfile", tmpfs);
+    MigrateCommon args = {
+        .connect_uri = uri,
+        .listen_uri = "defer",
+        .start_hook = migrate_multifd_fixed_ram_start_live,
+    };
+
+    test_precopy_common(&args);
+}
+
+static void test_multifd_file_fixed_ram_nonlive(void)
+{
+    g_autofree char *uri = g_strdup_printf("file:%s/migfile", tmpfs);
+    MigrateCommon args = {
+        .connect_uri = uri,
+        .listen_uri = "defer",
+        .start_hook = migrate_multifd_fixed_ram_start_nonlive,
+    };
+
+    test_precopy_common(&args);
+}
+
+
 static void test_precopy_tcp_plain(void)
 {
     MigrateCommon args = {
@@ -2603,11 +2654,15 @@ int main(int argc, char **argv)
     qtest_add_func("/migration/precopy/file/stream-ram",
                    test_precopy_file_stream_ram);
 
-
     qtest_add_func("/migration/precopy/file/fixed-ram/nonlive",
                    test_precopy_file_fixed_ram_nonlive);
     qtest_add_func("/migration/precopy/file/fixed-ram/live",
                    test_precopy_file_fixed_ram_live);
+
+    qtest_add_func("/migration/multifd/file/fixed-ram/nonlive",
+                   test_multifd_file_fixed_ram_nonlive);
+    qtest_add_func("/migration/multifd/file/fixed-ram/live",
+                   test_multifd_file_fixed_ram_live);
 
 #ifdef CONFIG_GNUTLS
     qtest_add_func("/migration/precopy/unix/tls/psk",
