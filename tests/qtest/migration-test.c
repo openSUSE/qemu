@@ -2183,6 +2183,46 @@ static void test_precopy_file_fixed_ram(void)
     test_file_common(&args, true);
 }
 
+static void *migrate_multifd_fixed_ram_start(QTestState *from, QTestState *to)
+{
+    migrate_fixed_ram_start(from, to);
+
+    migrate_set_parameter_int(from, "multifd-channels", 4);
+    migrate_set_parameter_int(to, "multifd-channels", 4);
+
+    migrate_set_capability(from, "multifd", true);
+    migrate_set_capability(to, "multifd", true);
+
+    return NULL;
+}
+
+static void test_multifd_file_fixed_ram_live(void)
+{
+    g_autofree char *uri = g_strdup_printf("file:%s/%s", tmpfs,
+                                           FILE_TEST_FILENAME);
+    MigrateCommon args = {
+        .connect_uri = uri,
+        .listen_uri = "defer",
+        .start_hook = migrate_multifd_fixed_ram_start,
+    };
+
+    test_file_common(&args, false);
+}
+
+static void test_multifd_file_fixed_ram(void)
+{
+    g_autofree char *uri = g_strdup_printf("file:%s/%s", tmpfs,
+                                           FILE_TEST_FILENAME);
+    MigrateCommon args = {
+        .connect_uri = uri,
+        .listen_uri = "defer",
+        .start_hook = migrate_multifd_fixed_ram_start,
+    };
+
+    test_file_common(&args, true);
+}
+
+
 static void test_precopy_tcp_plain(void)
 {
     MigrateCommon args = {
@@ -2457,6 +2497,25 @@ static void test_migrate_precopy_fd_file_fixed_ram(void)
         .start_hook = migrate_fd_file_fixed_ram_start,
         .finish_hook = test_migrate_fd_finish_hook
     };
+    test_file_common(&args, true);
+}
+
+static void *migrate_multifd_fd_fixed_ram_start(QTestState *from,
+                                                QTestState *to)
+{
+    migrate_multifd_fixed_ram_start(from, to);
+    return migrate_precopy_fd_file_start(from, to);
+}
+
+static void test_multifd_fd_fixed_ram(void)
+{
+    MigrateCommon args = {
+        .connect_uri = "fd:fd-mig",
+        .listen_uri = "defer",
+        .start_hook = migrate_multifd_fd_fixed_ram_start,
+        .finish_hook = test_migrate_fd_finish_hook
+    };
+
     test_file_common(&args, true);
 }
 #endif /* _WIN32 */
@@ -3487,6 +3546,15 @@ int main(int argc, char **argv)
                    test_precopy_file_fixed_ram);
     qtest_add_func("/migration/precopy/file/fixed-ram/live",
                    test_precopy_file_fixed_ram_live);
+
+    qtest_add_func("/migration/multifd/file/fixed-ram",
+                   test_multifd_file_fixed_ram);
+    qtest_add_func("/migration/multifd/file/fixed-ram/live",
+                   test_multifd_file_fixed_ram_live);
+#ifndef _WIN32
+    qtest_add_func("/migration/multifd/fd/fixed-ram",
+                   test_multifd_fd_fixed_ram);
+#endif
 
 #ifdef CONFIG_GNUTLS
     qtest_add_func("/migration/precopy/unix/tls/psk",
