@@ -171,7 +171,8 @@ void tdx_vmcall_service_set_timeout_handler(TdxVmcallServiceItem *vsi,
 void tdx_vmcall_service_complete_request(TdxVmcallServiceItem *vsi);
 void tdx_vmcall_service_item_ref(TdxVmcallServiceItem *vsi);
 void tdx_vmcall_service_item_unref(TdxVmcallServiceItem *vsi);
-
+TdxVmcallServiceType* tdx_vmcall_service_find_handler(QemuUUID *guid,
+                                                      TdxVmcallService *vmc);
 void tdx_vmcall_service_register_type(TdxGuest *tdx,
                                       TdxVmcallServiceType* type);
 void tdx_guest_init_vtpm(TdxGuest *tdx);

@@ -51,6 +51,7 @@ qapi_all_modules = [
   'transaction',
   'virtio',
   'yank',
+  'tdx',
 ]
 if have_system
   qapi_all_modules += [

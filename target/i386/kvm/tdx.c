@@ -2326,8 +2326,8 @@ static void __tdx_vmcall_service_complete_request(TdxVmcallSerivceDataCache *dat
     __tdx_vmcall_service_notify_guest(apic_id, notify_vector);
 }
 
-static TdxVmcallServiceType* tdx_vmcall_service_find_handler(QemuUUID *guid,
-                                                             TdxVmcallService *vmc)
+TdxVmcallServiceType* tdx_vmcall_service_find_handler(QemuUUID *guid,
+                                                      TdxVmcallService *vmc)
 {
     for (int  i = 0; i < vmc->dispatch_table_count; ++i) {
         if (!qemu_uuid_is_equal(guid, &vmc->dispatch_table[i].from)) {

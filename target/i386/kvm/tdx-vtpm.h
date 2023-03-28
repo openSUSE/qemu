@@ -22,6 +22,7 @@ int tdx_vtpm_init_base(TdxVtpm *base, TdxGuest *tdx,
                        IOHandler *read, void *read_opaque);
 
 struct TdxVtpmServerPendingRequest;
+struct TdxVtpmServerPendingManageRequest;
 typedef struct TdxVtpmServer {
     TdxVtpm parent;
 
@@ -35,6 +36,7 @@ typedef struct TdxVtpmServer {
 
     QLIST_HEAD(, TdxVtpmServerPendingRequest) request_list;
 
+    QLIST_HEAD(, TdxVtpmServerPendingManageRequest) manage_request_list;
 } TdxVtpmServer;
 
 int tdx_vtpm_init_server(TdxVtpm *base, TdxVmcallService *vms,

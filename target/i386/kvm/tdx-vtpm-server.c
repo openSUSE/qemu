@@ -8,6 +8,9 @@
 #include "tdx.h"
 #include "tdx-vmcall-service.h"
 #include "tdx-vtpm.h"
+#include "qapi-types-tdx.h"
+#include "qapi-commands-tdx.h"
+#include "qapi-events-tdx.h"
 
 #include "trace.h"
 
@@ -43,6 +46,14 @@ typedef struct TdxVtpmServerClientSessionDataNode {
     TdUserId user_id;
     QSIMPLEQ_HEAD(, TdxVtpmServerClientDataEntry) data_queue;
 } TdxVtpmServerClientSessionDataNode;
+
+typedef struct TdxVtpmServerPendingManageRequest {
+    TdUserId user_id;
+    enum TdxVtpmOperation operation;
+    char user_id_str[UUID_FMT_LEN + 1];
+
+    QLIST_ENTRY(TdxVtpmServerPendingManageRequest) list_entry;
+} TdxVtpmServerPendingManageRequest;
 
 struct g_hash_find_opaque {
     TdUserId *user_id;
@@ -295,10 +306,8 @@ static bool td_user_id_equal(const TdUserId *a, const TdUserId *b)
 static void tdx_vtpm_server_fire_wait_for_request(TdxVtpmServer *server,
                                                   TdUserId *user_id,
                                                   TdxVmcallServiceItem *vsi);
-static void tdx_vtpm_server_check_pending_request(TdxVtpmServer *server,
-                                                  TdxVtpmServerClientSession *session)
+static void tdx_vtpm_server_check_pending_request(TdxVtpmServer *server, TdUserId *user_id)
 {
-    TdUserId *user_id = &session->user_id;
     TdxVtpmServerPendingRequest *request;
     TdxVtpmCmdWaitForRequest *req_cmd;
 
@@ -353,7 +362,7 @@ static void tdx_vtpm_server_handle_trans_protocol_data(TdxVtpmServer *server,
         goto fail;
     }
 
-    tdx_vtpm_server_check_pending_request(server, session);
+    tdx_vtpm_server_check_pending_request(server, &session->user_id);
     return;
 
  fail:
@@ -624,6 +633,9 @@ static void tdx_vtpm_server_client_disconnect(TdxVtpmServer *server,
     tdx_vtpm_server_destroy_client_session(server, session);
 }
 
+static void tdx_vtpm_server_manage_instance_complete(TdxVtpmServer *server,
+                                                     TdUserId *user_id, int operation,
+                                                     int64_t result);
 static void tdx_vtpm_server_handle_report_status(TdxVtpmServer *server, TdxVmcallServiceItem *vsi)
 {
     TdxVtpmCmdReportStatus *cmd = tdx_vmcall_service_cmd_buf(vsi);
@@ -636,15 +648,17 @@ static void tdx_vtpm_server_handle_report_status(TdxVtpmServer *server, TdxVmcal
         goto out;
     }
 
-    session = g_hash_table_lookup(server->client_session, &cmd->user_id);
-
     if (cmd->operation == TDX_VTPM_OPERATION_CREATE ||
         cmd->operation == TDX_VTPM_OPERATION_DESTROY) {
-        /*TODO: Handle here*/
-        return;
+        tdx_vtpm_server_manage_instance_complete(server,
+                                                 &cmd->user_id,
+                                                 cmd->operation,
+                                                 cmd->status);
+        goto out;
     }
 
     if (cmd->operation == TDX_VTPM_OPERATION_COMM) {
+        session = g_hash_table_lookup(server->client_session, &cmd->user_id);
         g_assert(session);
         if (tdx_vtpm_server_send_data_message(server, session,
                                               cmd->status,
@@ -754,6 +768,7 @@ int tdx_vtpm_init_server(TdxVtpm *base, TdxVmcallService *vms,
 
     qemu_mutex_init(&server->lock);
     QLIST_INIT(&server->request_list);
+    QLIST_INIT(&server->manage_request_list);
 
     qemu_uuid_parse(VTPM_SERVICE_TD_GUID, &type->from);
     type->from = qemu_uuid_bswap(type->from);
@@ -761,4 +776,187 @@ int tdx_vtpm_init_server(TdxVtpm *base, TdxVmcallService *vms,
     type->vsi_size = sizeof(TdxVmcallServiceItem);
 
     return 0;
+}
+
+enum TdxVtpmInstanceManageResult {
+    TDX_VTPM_INSTANCE_MANAGE_SUCCESS,
+    TDX_VTPM_INSTANCE_MANAGE_INVALID_PARAMETER = 1001,
+    TDX_VTPM_INSTANCE_MANAGE_COMMUNICATION_LAYER_ERROR = 1002,
+    TDX_VTPM_INSTANCE_MANAGE_REQUEST_NOT_SUPPORT = 1003
+};
+
+static TdxVtpmServer *tdx_vtpm_get_server(void)
+{
+    QemuUUID uuid;
+    TdxVmcallServiceType* type;
+    MachineState *ms = MACHINE(qdev_get_machine());
+    TdxGuest *tdx = TDX_GUEST(ms->cgs);
+
+    if (!tdx)
+        return NULL;
+
+    qemu_uuid_parse(VTPM_SERVICE_TD_GUID, &uuid);
+    uuid = qemu_uuid_bswap(uuid);
+
+    type = tdx_vmcall_service_find_handler(&uuid,
+                                           &tdx->vmcall_service);
+
+    if (!type) {
+        return NULL;
+    }
+
+    return type->opaque;
+}
+
+static int tdx_vtpm_server_parse_user_id(const char *user_id, char *to_user_id)
+{
+    QemuUUID uuid;
+
+    if (!qemu_uuid_parse(user_id, &uuid)) {
+        uuid = qemu_uuid_bswap(uuid);
+        memcpy(to_user_id, uuid.data, sizeof(TdUserId));
+        return 0;
+    } else if (strlen(user_id) <= sizeof(TdUserId)) {
+        memset(to_user_id, 0, sizeof(TdUserId));
+        strcpy(to_user_id, user_id);
+        return 0;
+    }
+
+    return -1;
+}
+
+static int tdx_vtpm_server_add_manage_pending_request(TdxVtpmServer *server,
+                                                      const char *user_id_str,
+                                                      TdUserId *user_id,
+                                                      int operation)
+{
+    TdxVtpmServerPendingManageRequest *new;
+    size_t n;
+
+    new = g_try_malloc(sizeof(*new));
+    if (!new) {
+        return -1;
+    }
+
+    memcpy(&new->user_id, user_id, sizeof(TdUserId));
+    new->operation = operation;
+    n = sizeof(new->user_id_str);
+    strncpy(new->user_id_str, user_id_str, n - 1);
+    new->user_id_str[n - 1] = 0;
+
+    QLIST_INSERT_HEAD(&server->manage_request_list,
+                      new, list_entry);
+
+    return 0;
+}
+
+static TdxVtpmServerPendingManageRequest*
+tdx_vtpm_server_get_manage_pending_request(TdxVtpmServer *server,
+                                           TdUserId *user_id,
+                                           int operation)
+{
+    TdxVtpmServerPendingManageRequest *i;
+
+    QLIST_FOREACH(i, &server->manage_request_list, list_entry) {
+        if (!td_user_id_equal(&i->user_id, user_id))
+            continue;
+
+        if (i->operation != operation)
+            continue;
+
+        return i;
+    }
+
+    return NULL;
+}
+static void tdx_vtpm_server_remove_manage_pending_request(TdxVtpmServer *server,
+                                                          TdxVtpmServerPendingManageRequest *entry)
+{
+    if (!entry) {
+        return;
+    }
+    QLIST_REMOVE(entry, list_entry);
+    g_free(entry);
+}
+
+static void tdx_vtpm_server_manage_instance_complete(TdxVtpmServer *server,
+                                                     TdUserId *user_id, int operation,
+                                                     int64_t result)
+{
+    TdxVtpmServerPendingManageRequest *entry;
+
+    entry = tdx_vtpm_server_get_manage_pending_request(server, user_id, operation);
+    if (!entry)
+        return;
+
+    qapi_event_send_tdx_vtpm_operation_result(entry->user_id_str, result);
+    tdx_vtpm_server_remove_manage_pending_request(server, entry);
+}
+
+static void
+tdx_vtpm_server_manage_instance(const char *user_id, bool create,
+                                Error **errp)
+{
+    int64_t state = TDX_VTPM_INSTANCE_MANAGE_SUCCESS;
+    TdxVtpmServerClientDataEntry entry;
+    TdxVtpmServer *server;
+    TdUserId td_user_id;
+    int ret;
+
+    server = tdx_vtpm_get_server();
+    if (!server) {
+        state = TDX_VTPM_INSTANCE_MANAGE_REQUEST_NOT_SUPPORT;
+        goto out;
+    }
+
+    if (tdx_vtpm_server_parse_user_id(user_id, (char*)&td_user_id)) {
+        state = TDX_VTPM_INSTANCE_MANAGE_INVALID_PARAMETER;
+        goto out;
+    }
+
+    memset(&entry, 0, sizeof(entry));
+    if (create) {
+        entry.operation = TDX_VTPM_OPERATION_CREATE;
+    } else {
+        entry.operation = TDX_VTPM_OPERATION_DESTROY;
+    }
+
+    qemu_mutex_lock(&server->lock);
+
+    ret = tdx_vtpm_server_add_manage_pending_request(server,
+                                                     user_id,
+                                                     &td_user_id, entry.operation);
+    if (!ret) {
+        ret = tdx_vtpm_client_session_data_queue_add(server, &td_user_id, &entry);
+    }
+
+    if (!ret) {
+        tdx_vtpm_server_check_pending_request(server, &td_user_id);
+    } else {
+        TdxVtpmServerPendingManageRequest *i;
+
+        i = tdx_vtpm_server_get_manage_pending_request(server, &td_user_id,
+                                                       entry.operation);
+        tdx_vtpm_server_remove_manage_pending_request(server, i);
+        state = TDX_VTPM_INSTANCE_MANAGE_COMMUNICATION_LAYER_ERROR;
+    }
+
+    qemu_mutex_unlock(&server->lock);
+ out:
+    if (state != TDX_VTPM_INSTANCE_MANAGE_SUCCESS) {
+        qapi_event_send_tdx_vtpm_operation_result(user_id, state);
+    }
+    return;
+}
+
+void
+qmp_tdx_vtpm_create_instance(const char *user_id, Error **errp)
+{
+    return tdx_vtpm_server_manage_instance(user_id, true, errp);
+}
+
+void
+qmp_tdx_vtpm_destroy_instance(const char *user_id, Error **errp)
+{
+    return tdx_vtpm_server_manage_instance(user_id, false, errp);
 }

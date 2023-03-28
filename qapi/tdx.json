@@ -1,0 +1,83 @@
+# -*- Mode: Python -*-
+# vim: filetype=python
+#
+
+##
+# = QMP for TDX
+##
+
+##
+# @VtpmOperationResult:
+#
+# Return the vtpm instance management operation result
+#
+# @state: result code of management operation
+#
+# Since: 1.2
+##
+{ 'struct': 'VtpmOperationResult',
+  'data': {
+      'user-id' : 'str',
+      'state': 'int'} }
+
+##
+# @TDX_VTPM_OPERATION_RESULT:
+#
+# Emitted when the vTPM TD returns the operation stauts
+#
+# @state: result code of management operation
+#
+# Since: 0.13
+#
+# Example:
+#
+# <-   { "event": "RTC_CHANGE",
+#        "data": { "offset": 78 },
+#        "timestamp": { "seconds": 1267020223, "microseconds": 435656 } }
+#
+##
+{ 'event': 'TDX_VTPM_OPERATION_RESULT',
+  'data': {
+      'user-id': 'str',
+      'state': 'int' } }
+
+##
+# @tdx-vtpm-create-instance:
+#
+# Create the vtpm instance for user_id
+#
+# Returns: @int, the creation result.
+#
+# Since: 1.0
+#
+# Example:
+#
+# -> { "execute": "tdx-vtpm-create-instance", "arguments": { "user-id": "test_id_str" } }
+# <- { "return":
+#      { "state": 0,
+#        "user-id": "test_id_str"
+#      }
+#    }
+##
+{ 'command': 'tdx-vtpm-create-instance',
+  'data' : { 'user-id': 'str' } }
+##
+# @tdx-vtpm-destroy-instance:
+#
+# Create the vtpm instance for user_id
+#
+# Returns: @int, the creation result.
+#
+# Since: 1.0
+#
+# Example:
+#
+# -> { "execute": "tdx-vtpm-destroy-instance", "arguments": { "user-id": "test_id_str" } }
+# <- { "return":
+#      { "state": 0,
+#        "user-id": "test_id_str"
+#      }
+#    }
+##
+{ 'command': 'tdx-vtpm-destroy-instance',
+  'data' : { 'user-id': 'str' } }
