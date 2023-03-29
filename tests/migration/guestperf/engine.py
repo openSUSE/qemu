@@ -262,7 +262,13 @@ class Engine(object):
                     progress_history.append(progress)
 
                 if progress._status == "completed":
-                    print("Completed")
+                    print("Transferred %5dMB of non-zero pages (total %5dMB @%5dMB/s in %4dms)" % (
+                        progress._ram._normal_bytes / (1024 * 1024),
+                        progress._ram._total_bytes / (1024 * 1024),
+                        progress._ram._transfer_rate_mbs / 8,
+                        progress._duration,
+                    ))
+
                     if connect_uri[0:5] == "file:":
                         if self._verbose:
                             print("Migrating incoming")

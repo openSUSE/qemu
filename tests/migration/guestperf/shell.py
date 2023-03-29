@@ -226,8 +226,7 @@ class BatchShell(BaseShell):
                             print("Skipping %s" % name)
                         continue
 
-                    if args.verbose:
-                        print("Running %s" % name)
+                    print("Running %s" % name)
 
                     dirname = os.path.join(args.output, comparison._name)
                     filename = os.path.join(dirname, scenario._name + ".json")
