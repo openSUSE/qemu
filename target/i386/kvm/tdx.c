@@ -2178,21 +2178,26 @@ static int tdx_vmcall_service_sanity_check(X86CPU *cpu,
     for (int i = 0; i < 2; ++i) {
 
         if (!(addrs[i] & tdx_shared_bit(cpu))) {
+            VMCALL_DEBUG("gpa in r12/r13 should have shared bit\n");
             return -1;
         }
 
         if (!QEMU_IS_ALIGNED((uint64_t)addrs[i], 4096)) {
+            VMCALL_DEBUG("gpa in r12/r13 should 4K aligned\n");
             return -1;
         }
 
         /* Can't cache means the GPA may not in GPA space */
         if (tdx_vmcall_service_do_cache_data_head(addrs[i] & ~tdx_shared_bit(cpu),
                                                   &head[i])) {
-            return -1;
+           VMCALL_DEBUG("gpa in r12/r13 should be Guest physical memory\n");
+           return -1;
         }
 
         /*Length should be at least cover the head*/
         if (head[i].length < sizeof(TdxVmServiceDataHead)) {
+            VMCALL_DEBUG("length should >= Common VMCALL Service head size: %d\n",
+                         sizeof(TdxVmServiceDataHead));
             return -1;
         }
     }
@@ -2201,12 +2206,14 @@ static int tdx_vmcall_service_sanity_check(X86CPU *cpu,
     guid[1] = head[1].guid;
     /* the GUID in command/respond buffer should be same  */
     if (!qemu_uuid_is_equal(&guid[0], &guid[1])) {
+        VMCALL_DEBUG("GUID in r12/r13 should be same\n");
         return -1;
     }
 
     /* check the notify vector for input parameter ONLY*/
     vector = vmcall->in_r14;
     if (vector && (vector < 32 || vector > 255)) {
+        VMCALL_DEBUG("Vector of Service Call should in [32, 255]\n");
         return -1;
     }
 
@@ -2466,17 +2473,22 @@ static void tdx_handle_vmcall_service(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall
                                               &tdx->vmcall_service);
     if (!handler) {
         response.head.u.status = TDG_VP_VMCALL_SERVICE_NOT_SUPPORT;
+        VMCALL_DEBUG("Service not supported, please check GUID value\n");
         goto fail;
     }
 
     vsi = tdx_vmcall_service_create_service_item(handler->vsi_size, vmcall);
     if (!vsi) {
         response.head.u.status = TDG_VP_VMCALL_SERVICE_OUT_OF_RESOURCE;
+        VMCALL_DEBUG("Failed to create vsi, out of memory or incorrect vis_size:%d\n",
+                     handler->vsi_size);
         goto fail;
     }
 
     if (tdx_vmcall_service_init_service_item(cpu, vmcall, vsi)) {
         response.head.u.status = TDG_VP_VMCALL_SERVICE_OUT_OF_RESOURCE;
+        VMCALL_DEBUG("Failed to init vsi, out of memory or incorrect total length:%d\n",
+            vsi->command.head.length);
         goto fail_free;
     }
 

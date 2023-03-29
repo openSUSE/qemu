@@ -408,6 +408,10 @@ static void tdx_vtpm_server_handle_trans_protocol_data(TdxVtpmServer *server,
         goto fail_free;
     }
 
+    VMCALL_DEBUG("Received Data:\n");
+    VMCALL_DUMP_USER_ID(&session->user_id);
+    VMCALL_DUMP_DATA(entry.buf, entry.buf_size);
+
     tdx_vtpm_server_check_pending_request(server);
 
  fail:
@@ -426,7 +430,9 @@ static void tdx_vtpm_server_handle_trans_protocol(TdxVtpmServer *server,
 
     switch(head->type) {
     case TDX_VTPM_TRANS_PROTOCOL_TYPE_DATA:
+        VMCALL_DEBUG("<Socket.WaitForRequest> BEGIN\n");
         tdx_vtpm_server_handle_trans_protocol_data(server, buf, size);
+        VMCALL_DEBUG("<Socket.WaitForRequest> END\n");
         break;
     default:
         error_report("Not implemented trans protocol type: %d", head->type);
@@ -533,8 +539,13 @@ static void tdx_vtpm_server_fire_wait_for_request(TdxVtpmServer *server,
     tdx_vmcall_service_set_rsp_size(vsi, total_size);
     if (total_size > size) {
         state = TDG_VP_VMCALL_SERVICE_RSP_BUF_TOO_SMALL;
+        VMCALL_DEBUG("Response buffer too small:%d should be at least %d\n", size, total_size);
         goto out;
     }
+
+    VMCALL_DEBUG("Operation:%d Copied %d byte\n", entry->operation, entry->buf_size);
+    VMCALL_DUMP_USER_ID(user_id);
+    VMCALL_DUMP_DATA(entry->buf, entry->buf_size);
 
     rsp = tdx_vmcall_service_rsp_buf(vsi);
     tdx_vtpm_prepare_wait_for_request_response(rsp, entry->operation, user_id,
@@ -556,11 +567,13 @@ static void tdx_vtpm_server_add_wait_for_request(TdxVtpmServer *server, TdxVmcal
     entry.vsi = vsi;
     ret = tdx_vtpm_server_request_queue_add(server, &entry);
     if (ret) {
+        VMCALL_DEBUG("Failed to add WaitForRequest request, out of memory\n");
         tdx_vmcall_service_set_response_state(vsi, TDG_VP_VMCALL_SERVICE_OUT_OF_RESOURCE);
         tdx_vmcall_service_complete_request(vsi);
         return;
     }
 
+    VMCALL_DEBUG("Added WaitForRequest request\n");
     tdx_vmcall_service_set_timeout_handler(vsi,
                                            tdx_vtpm_server_wait_for_request_timeout_handler,
                                            server);
@@ -638,25 +651,33 @@ static int tdx_vtpm_server_sanity_check_report_status(TdxVmcallServiceItem *vsi)
     int rsp_size = tdx_vmcall_service_rsp_size(vsi);
 
     if (rsp_size < sizeof(TdxVtpmRspReportStatus)) {
+        VMCALL_DEBUG("Response buffer size %d shuold > %d\n", rsp_size,
+                     sizeof(TdxVtpmRspReportStatus));
         return TDG_VP_VMCALL_SERVICE_BAD_RSP_BUF_SIZE;
     }
 
     if (cmd->operation > TDX_VTPM_OPERATION_DESTROY) {
+        VMCALL_DEBUG("Invalid operation value: %d\n", cmd->operation);
         return TDG_VP_VMCALL_SERVICE_INVALID_OPERAND;
     }
 
     if (cmd->operation == TDX_VTPM_OPERATION_COMM &&
         cmd_size < sizeof(*cmd)) {
+        VMCALL_DEBUG("No payload for operation COMMUNICATION\n");
         return TDG_VP_VMCALL_SERVICE_BAD_CMD_BUF_SIZE;
     }
 
     if (cmd->operation == TDX_VTPM_OPERATION_CREATE &&
         cmd_size < sizeof(*cmd)) {
+        VMCALL_DEBUG("incorrect Command size for operation CREATE:%d should be at least %d\n",
+                     cmd_size, sizeof(*cmd));
         return TDG_VP_VMCALL_SERVICE_BAD_CMD_BUF_SIZE;
     }
 
     if (cmd->operation == TDX_VTPM_OPERATION_DESTROY &&
         cmd_size < sizeof(*cmd)) {
+        VMCALL_DEBUG("incorrect Command size for operation DESTROY:%d should be at least %d\n",
+                     cmd_size, sizeof(*cmd));
         return TDG_VP_VMCALL_SERVICE_BAD_CMD_BUF_SIZE;
     }
 
@@ -682,8 +703,13 @@ static int tdx_vtpm_server_send_data_message(TdxVtpmServer *server,
 
     if (tdx_vtpm_trans_send(server->parent.ioc, &session->client_addr,
                             &pack.head, i, 3)) {
+        VMCALL_DEBUG("Failed to send data, may peer disconnected\n");
         return -1;
     }
+
+    VMCALL_DEBUG("Sent data:\n");
+    VMCALL_DUMP_USER_ID(&session->user_id);
+    VMCALL_DUMP_DATA(data, data_size);
 
     return 0;
 }
@@ -764,10 +790,14 @@ static void tdx_vtpm_server_handle_command(TdxVtpmServer *server, TdxVmcallServi
 
     switch(head->command) {
     case TDX_VTPM_WAIT_FOR_REQUEST:
+        VMCALL_DEBUG("<WaitForRequest> BEGIN\n");
         tdx_vtpm_server_handle_wait_for_request(server, vsi, true);
+        VMCALL_DEBUG("<WaitForRequest> END\n");
         break;
     case TDX_VTPM_REPORT_STATUS:
+        VMCALL_DEBUG("<ReportStatus> BEGIN\n");
         tdx_vtpm_server_handle_report_status(server, vsi);
+        VMCALL_DEBUG("<ReportStatus> END\n");
         break;
     default:
         error_report("Not implemented cmd: %d", head->command);

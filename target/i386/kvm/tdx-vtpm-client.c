@@ -74,6 +74,7 @@ static int tdx_vtpm_sanity_check_send_message(TdxVmcallServiceItem *vsi)
 
     size = tdx_vmcall_service_cmd_size(vsi);
     if (size <= sizeof(TdxVtpmCmdSendMessage)) {
+        VMCALL_DEBUG("Incorrect Command size:%d, no payload\n",size);
         tdx_vmcall_service_set_response_state(vsi,
                                               TDG_VP_VMCALL_SERVICE_BAD_CMD_BUF_SIZE);
         return -1;
@@ -81,6 +82,8 @@ static int tdx_vtpm_sanity_check_send_message(TdxVmcallServiceItem *vsi)
 
     size = tdx_vmcall_service_rsp_size(vsi);
     if (size < sizeof(TdxVtpmRspSendMessage)) {
+        VMCALL_DEBUG("Incorrect Rseponse size:%d, should be at least:%d\n",
+                     size, sizeof(TdxVtpmRspSendMessage));
         tdx_vmcall_service_set_response_state(vsi,
                                               TDG_VP_VMCALL_SERVICE_BAD_RSP_BUF_SIZE);
         return -1;
@@ -112,12 +115,20 @@ static int tdx_vtpm_send_data_message(TdxVtpmClient *vtpm_client,
     payload[2].iov_base = cmd->data;
     payload[2].iov_len = cmd_payload_size;
 
+    VMCALL_DEBUG("<SendMessage> BEGIN:\n");
+    VMCALL_DUMP_USER_ID(vtpm_client->user_id);
+    VMCALL_DUMP_DATA(cmd->data, cmd_payload_size);
+
     if (tdx_vtpm_trans_send(vtpm_client->parent.ioc, &vtpm_client->server_addr,
                             &pack.head, payload, 3)) {
         tdx_vmcall_service_set_response_state(vsi,
                                               TDG_VP_VMCALL_SERVICE_DEVICE_ERROR);
+        VMCALL_DEBUG("<SendMessage> END Failed: %s \n",
+                     vsc_error(TDG_VP_VMCALL_SERVICE_DEVICE_ERROR));
         return -1;
     }
+
+    VMCALL_DEBUG("<SendMessage> END\n");
 
     return 0;
 }
@@ -159,6 +170,8 @@ static int tdx_vtpm_client_do_receive_message(TdxVmcallServiceItem *vsi,
     total_size = sizeof(*rsp) + size;
     tdx_vmcall_service_set_rsp_size(vsi, total_size);
     if (total_size > rsp_size) {
+        VMCALL_DEBUG("Response buffer too small:%d should at least %d without vmcall service common part\n",
+                     rsp_size, total_size);
         state = TDG_VP_VMCALL_SERVICE_RSP_BUF_TOO_SMALL;
         ret = -1;
     } else {
@@ -169,6 +182,9 @@ static int tdx_vtpm_client_do_receive_message(TdxVmcallServiceItem *vsi,
 
         state = TDG_VP_VMCALL_SERVICE_SUCCESS;
         ret = 0;
+
+        VMCALL_DEBUG("Copied :%d size\n", size);
+        VMCALL_DUMP_DATA(buf, size);
     }
 
     tdx_vmcall_service_set_response_state(vsi, state);
@@ -279,6 +295,8 @@ static void tdx_vtpm_handle_receive_message(TdxVtpmClient *vtpm_client,
 {
     int ret;
 
+    VMCALL_DEBUG("<RecviveMessage> BEGIN:\n");
+
     if (!QSIMPLEQ_EMPTY(&vtpm_client->data_queue)) {
         TdxVtpmClientDataEntry*  entry;
 
@@ -292,17 +310,21 @@ static void tdx_vtpm_handle_receive_message(TdxVtpmClient *vtpm_client,
     } else {
         TdxVtpmClientPendingRequest entry;
 
+        VMCALL_DEBUG("No data to receive\n");
         entry.vsi = vsi;
         ret = tdx_vtpm_client_request_queue_add(vtpm_client, &entry);
         if (ret) {
-            error_report("Failed to add data queue, data dropped");
+            error_report("Failed to add request queue, receive request dropped");
             return;
         }
 
+        VMCALL_DEBUG("Added receive request\n");
         tdx_vmcall_service_set_timeout_handler(vsi,
                                                tdx_vtpm_handle_receive_message_timeout_handler,
                                                vtpm_client);
     }
+
+    VMCALL_DEBUG("<RecviveMessage> END:\n");
 }
 
 static void tdx_vtpm_vmcall_service_handle_command(TdxVtpmClient *vtpm_client,
@@ -365,6 +387,9 @@ static void tdx_vtpm_client_handle_trans_protocol_data(TdxVtpmClient *client,
         }
     }
 
+    VMCALL_DEBUG("No pending receive request, saving received data, size:%d\n", payload_size);
+    VMCALL_DUMP_DATA(data->data, payload_size);
+
     data_entry.buf = data->data;
     data_entry.buf_size = payload_size;
     data_entry.state = data->state;
@@ -384,7 +409,9 @@ static void tdx_vtpm_client_handle_trans_protocol(TdxVtpmClient *client,
 
     switch(head->type) {
     case TDX_VTPM_TRANS_PROTOCOL_TYPE_DATA:
+        VMCALL_DEBUG("<socket.RecviveMessage> BEGIN\n");
         tdx_vtpm_client_handle_trans_protocol_data(client, buf, size);
+        VMCALL_DEBUG("<socket.RecviveMessage> END\n");
         break;
     default:
         error_report("Not implemented trans protocol type: %d", head->type);
