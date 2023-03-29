@@ -4814,7 +4814,7 @@ static void ram_mig_ram_block_resized(RAMBlockNotifier *n, void *host,
     RAMBlock *rb = qemu_ram_block_from_host(host, false, &offset);
     Error *err = NULL;
 
-    if (ramblock_is_ignored(rb)) {
+    if (!rb || ramblock_is_ignored(rb)) {
         return;
     }
 

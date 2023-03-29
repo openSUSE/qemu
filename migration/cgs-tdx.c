@@ -316,7 +316,7 @@ static int tdx_mig_stream_create(TdxMigStream *stream)
 
     ret = kvm_create_device(kvm_state, KVM_DEV_TYPE_TDX_MIG_STREAM, false);
     if (ret < 0) {
-        error_report("Failed to create stream due to %s", strerror(ret));
+        error_report("Failed to create stream due to %s", strerror(errno));
         return ret;
     }
     stream->fd = ret;
