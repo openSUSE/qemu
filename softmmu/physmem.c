@@ -4075,9 +4075,9 @@ int ram_block_convert_range(RAMBlock *rb, uint64_t start, size_t length,
         uint64_t bit_length = length / rb->page_size;
 
         if (shared_to_private) {
-            bitmap_clear(rb->cgs_bmap, bit_start, bit_length);
-        } else {
             bitmap_set(rb->cgs_bmap, bit_start, bit_length);
+        } else {
+            bitmap_clear(rb->cgs_bmap, bit_start, bit_length);
         }
     }
 

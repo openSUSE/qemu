@@ -67,8 +67,8 @@ struct RAMBlock {
     uint8_t clear_bmap_shift;
 
     /*
-     * Bitmap for a confidential guest to record if a page is private (0) or
-     * shared (1).
+     * Bitmap for a confidential guest to record if a page is private (1) or
+     * shared (0).
      */
     unsigned long *cgs_bmap;
 

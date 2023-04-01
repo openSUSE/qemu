@@ -1554,7 +1554,7 @@ static hwaddr ram_get_private_gpa(RAMBlock *rb, unsigned long page)
         memory_region_is_rom(rb->mr) ||
         !memory_region_is_ram(rb->mr) ||
         !rb->cgs_bmap ||
-        test_bit(page, rb->cgs_bmap)) {
+        !test_bit(page, rb->cgs_bmap)) {
         return CGS_PRIVATE_GPA_INVALID;
     }
 
@@ -4331,7 +4331,7 @@ void colo_flush_ram_cache(void)
 }
 
 static int ram_load_update_cgs_bmap(RAMBlock *block, ram_addr_t offset,
-                                    void *host, bool is_private)
+                               void *host, bool is_private, bool is_bulk_stage)
 {
     bool was_private;
     hwaddr gpa;
@@ -4341,7 +4341,19 @@ static int ram_load_update_cgs_bmap(RAMBlock *block, ram_addr_t offset,
     if (!block->cgs_bmap) {
         return 0;
     }
-    was_private = !test_bit(offset, block->cgs_bmap);
+
+    /*
+     * For the bulk stage, all the pages are first time migrated.
+     * Just update the cgs_bitmap without doing memory conversion.
+     */
+    if (is_bulk_stage) {
+        if (is_private) {
+            bitmap_set(block->cgs_bmap, offset, 1);
+        }
+	return 0;
+    }
+
+    was_private = test_bit(offset, block->cgs_bmap);
 
     if (was_private == is_private) {
         return 0;
@@ -4387,6 +4399,8 @@ static int ram_load_precopy(QEMUFile *f)
     int flags = 0, ret = 0, invalid_flags = 0, len = 0, i = 0;
     /* ADVISE is earlier, it shows the source has the postcopy capability on */
     bool postcopy_advised = postcopy_is_advised();
+    static uint64_t bulk_stage_unreceived_pages;
+
     if (!migrate_use_compression()) {
         invalid_flags |= RAM_SAVE_FLAG_COMPRESS_PAGE;
     }
@@ -4465,10 +4479,14 @@ static int ram_load_precopy(QEMUFile *f)
 
             trace_ram_load_loop(block->idstr, (uint64_t)addr, flags, host);
 
-            ret = ram_load_update_cgs_bmap(block, addr, host, is_private);
+            ret = ram_load_update_cgs_bmap(block, addr, host, is_private,
+                                           !!bulk_stage_unreceived_pages);
             if (ret) {
                 return ret;
             }
+
+	    if (bulk_stage_unreceived_pages)
+                bulk_stage_unreceived_pages--;
         }
 
         switch (flags & ~RAM_SAVE_FLAG_CONTINUE) {
@@ -4499,7 +4517,11 @@ static int ram_load_precopy(QEMUFile *f)
                             error_report_err(local_err);
                         }
                     }
-                    /* For postcopy we need to check hugepage sizes match */
+                    if (block->cgs_bmap) {
+                        bulk_stage_unreceived_pages += block->used_length / TARGET_PAGE_SIZE;
+		    }
+
+		    /* For postcopy we need to check hugepage sizes match */
                     if (postcopy_advised && migrate_postcopy_ram() &&
                         block->page_size != qemu_host_page_size) {
                         uint64_t remote_page_size = qemu_get_be64(f);
