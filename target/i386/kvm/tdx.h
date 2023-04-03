@@ -30,6 +30,10 @@ typedef struct TdxRamEntry {
     uint32_t type;
 } TdxRamEntry;
 
+/* For migration */
+typedef struct tdx_get_quote_state TdxGetQuoteState;
+struct tdx_get_quote_task;
+
 typedef struct TdxGuest {
     ConfidentialGuestSupport parent_obj;
 
@@ -48,11 +52,11 @@ typedef struct TdxGuest {
     TdxRamEntry *ram_entries;
 
     /* runtime state */
-    int event_notify_interrupt;
     uint32_t apic_id;
+    uint8_t event_notify_interrupt;
 
     /* GetQuote */
-    int quote_generation_num;
+    int32_t quote_generation_num;
     char *quote_generation_str;
     SocketAddress *quote_generation;
 
@@ -60,6 +64,10 @@ typedef struct TdxGuest {
     uint32_t migtd_pid;
     uint64_t migtd_attr;
     uint8_t migtd_hash[48];  /* sha348 digest */
+
+    /* For migration. */
+    QLIST_HEAD(, tdx_get_quote_task) get_quote_task_list;
+    TdxGetQuoteState *get_quote_state;
 } TdxGuest;
 
 #ifdef CONFIG_TDX
