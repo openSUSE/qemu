@@ -32,6 +32,12 @@
 #define MFD_HUGE_SHIFT 26
 #endif
 
+#ifndef OPEN_TREE_CLOEXEC
+#define OPEN_TREE_CLOEXEC O_CLOEXEC
+#endif
+
+int open_tree(int dirfd, const char *pathname, unsigned int flags);
+
 #if defined CONFIG_LINUX && !defined CONFIG_MEMFD
 int memfd_create(const char *name, unsigned int flags);
 #endif

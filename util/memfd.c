@@ -46,6 +46,16 @@ int memfd_create(const char *name, unsigned int flags)
 }
 #endif
 
+int open_tree(int dirfd, const char *pathname, unsigned int flags)
+{
+#if defined(CONFIG_LINUX) && defined(__NR_open_tree)
+    return syscall(__NR_open_tree, dirfd, pathname, flags);
+#else
+    errno = ENOSYS;
+    return -1;
+#endif
+}
+
 #if defined CONFIG_LINUX && !defined CONFIG_MEMFD_RESTRICTED
 int memfd_restricted(unsigned int flags)
 {
