@@ -704,7 +704,8 @@
   'base': 'MemoryBackendProperties',
   'data': { '*hugetlb': 'bool',
             '*hugetlbsize': 'size',
-            '*seal': 'bool' } }
+            '*seal': 'bool',
+            'path': 'str' } }
 
 ##
 # @MemoryBackendEpcProperties:

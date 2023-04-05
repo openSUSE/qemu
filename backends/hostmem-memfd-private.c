@@ -29,6 +29,7 @@ struct HostMemoryBackendPrivateMemfd {
 
     bool hugetlb;
     uint64_t hugetlbsize;
+    char *path;
 };
 
 static void
@@ -38,6 +39,8 @@ priv_memfd_backend_memory_alloc(HostMemoryBackend *backend, Error **errp)
     uint32_t ram_flags;
     char *name;
     int fd, priv_fd;
+    unsigned int flags;
+    int mount_fd;
 
     if (!backend->size) {
         error_setg(errp, "can't create backend with size 0");
@@ -50,7 +53,21 @@ priv_memfd_backend_memory_alloc(HostMemoryBackend *backend, Error **errp)
         return;
     }
 
-    priv_fd = qemu_memfd_restricted(backend->size, 0, -1, errp);
+    flags = 0;
+    mount_fd = -1;
+    if (m->path) {
+        flags = RMFD_USERMNT;
+        mount_fd = open_tree(AT_FDCWD, m->path, OPEN_TREE_CLOEXEC);
+        if (mount_fd == -1) {
+            error_setg(errp, "open_tree() failed at %s: %s",
+                       m->path, strerror(errno));
+            return;
+        }
+    }
+    priv_fd = qemu_memfd_restricted(backend->size, flags, mount_fd, errp);
+    if (mount_fd >= 0) {
+        close(mount_fd);
+    }
     if (priv_fd == -1) {
         return;
     }
@@ -111,6 +128,21 @@ priv_memfd_backend_get_hugetlbsize(Object *obj, Visitor *v, const char *name,
     visit_type_size(v, name, &value, errp);
 }
 
+static char *priv_memfd_backend_get_path(Object *obj, Error **errp)
+{
+    HostMemoryBackendPrivateMemfd *m = MEMORY_BACKEND_MEMFD_PRIVATE(obj);
+
+    return g_strdup(m->path);
+}
+
+static void priv_memfd_backend_set_path(Object *obj, const char *value, Error **errp)
+{
+    HostMemoryBackendPrivateMemfd *m = MEMORY_BACKEND_MEMFD_PRIVATE(obj);
+
+    g_free(m->path);
+    m->path = g_strdup(value);
+}
+
 static void
 priv_memfd_backend_instance_init(Object *obj)
 {
@@ -124,6 +156,11 @@ priv_memfd_backend_class_init(ObjectClass *oc, void *data)
 
     bc->alloc = priv_memfd_backend_memory_alloc;
 
+    object_class_property_add_str(oc, "path",
+                                  priv_memfd_backend_get_path,
+                                  priv_memfd_backend_set_path);
+    object_class_property_set_description(oc, "path",
+                                          "path to mount point of shmfs");
     if (qemu_memfd_check(MFD_HUGETLB)) {
         object_class_property_add_bool(oc, "hugetlb",
                                        priv_memfd_backend_get_hugetlb,
