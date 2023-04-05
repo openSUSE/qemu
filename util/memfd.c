@@ -26,6 +26,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qemu/error-report.h"
 
 #include "qapi/error.h"
 #include "qemu/memfd.h"
@@ -57,10 +58,10 @@ int open_tree(int dirfd, const char *pathname, unsigned int flags)
 }
 
 #if defined CONFIG_LINUX && !defined CONFIG_MEMFD_RESTRICTED
-int memfd_restricted(unsigned int flags)
+int memfd_restricted(unsigned int flags, int mount_fd)
 {
 #ifdef __NR_memfd_restricted
-    return syscall(__NR_memfd_restricted, flags);
+    return syscall(__NR_memfd_restricted, flags, mount_fd);
 #else
     errno = ENOSYS;
     return -1;
@@ -68,15 +69,22 @@ int memfd_restricted(unsigned int flags)
 }
 #endif
 
-int qemu_memfd_restricted(size_t size, unsigned int flags, Error **errp)
+int qemu_memfd_restricted(size_t size, unsigned int flags, int mount_fd, Error **errp)
 {
 #ifdef CONFIG_LINUX
     int mfd = -1;
 
-    mfd = memfd_restricted(flags);
+    mfd = memfd_restricted(flags, mount_fd);
+    if (mfd < 0 && flags && mount_fd >= 0) {
+        warn_report_once("memfd_restricted with flags 0x%x mount_fd %d doesn't work."
+                         " Defaulting flags = 0 for compatibility",
+                         flags, mount_fd);
+        mfd = memfd_restricted(0, 0);
+    }
     if (mfd < 0) {
         error_setg_errno(errp, errno,
-                         "failed to create memfd with flags 0x%x", flags);
+                         "failed to create memfd with flags 0x%x mount_fd %d",
+                         flags, mount_fd);
         return -1;
     }
 

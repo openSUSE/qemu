@@ -3619,7 +3619,7 @@ void memory_region_init_ram_restricted(MemoryRegion *mr,
         return;
     }
 
-    priv_fd = qemu_memfd_restricted(size, 0, errp);
+    priv_fd = qemu_memfd_restricted(size, 0, -1, errp);
     if (priv_fd == -1) {
         error_report("Failed to allocate restricted memfd");
         return;

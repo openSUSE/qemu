@@ -32,6 +32,10 @@
 #define MFD_HUGE_SHIFT 26
 #endif
 
+#ifndef RMFD_USERMNT
+#define RMFD_USERMNT 0x0001U
+#endif
+
 #ifndef OPEN_TREE_CLOEXEC
 #define OPEN_TREE_CLOEXEC O_CLOEXEC
 #endif
@@ -43,12 +47,12 @@ int memfd_create(const char *name, unsigned int flags);
 #endif
 
 #if defined CONFIG_LINUX && !defined CONFIG_MEMFD_RESTRICTED
-int memfd_restricted(unsigned int flags);
+int memfd_restricted(unsigned int flags, int mount_fd);
 #endif
 
 int qemu_memfd_create(const char *name, size_t size, bool hugetlb,
                       uint64_t hugetlbsize, unsigned int seals, Error **errp);
-int qemu_memfd_restricted(size_t size, unsigned int flags, Error **errp);
+int qemu_memfd_restricted(size_t size, unsigned int flags, int mount_fd, Error **errp);
 
 bool qemu_memfd_alloc_check(void);
 void *qemu_memfd_alloc(const char *name, size_t size, unsigned int seals,
