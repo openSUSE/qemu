@@ -47,7 +47,7 @@ bool cgs_mig_is_ready(void)
 int cgs_mig_savevm_state_setup(QEMUFile *f)
 {
     int ret;
-    uint32_t nr_channels = 1;
+    uint32_t nr_channels = 1, nr_pages = 1;
 
     if (!cgs_mig.savevm_state_setup) {
         return 0;
@@ -55,9 +55,10 @@ int cgs_mig_savevm_state_setup(QEMUFile *f)
 
     if (migrate_use_multifd()) {
         nr_channels = migrate_multifd_channels();
+	nr_pages = MULTIFD_PACKET_SIZE / TARGET_PAGE_SIZE;
     }
 
-    ret = cgs_mig.savevm_state_setup(nr_channels);
+    ret = cgs_mig.savevm_state_setup(nr_channels, nr_pages);
     cgs_check_error(f, ret);
 
     return ret;
@@ -105,7 +106,7 @@ long cgs_ram_save_start_epoch(QEMUFile *f)
 
 /* Return number of bytes sent or the error value (< 0) */
 long cgs_mig_savevm_state_ram(QEMUFile *f, RAMBlock *block, ram_addr_t offset,
-                              hwaddr *gfns, uint64_t gfn_num)
+                              hwaddr gpa)
 {
     long hdr_bytes, ret;
 
@@ -114,7 +115,7 @@ long cgs_mig_savevm_state_ram(QEMUFile *f, RAMBlock *block, ram_addr_t offset,
     }
 
     hdr_bytes = ram_save_cgs_ram_header(f, block, offset);
-    ret = cgs_mig.savevm_state_ram(f, gfns, gfn_num);
+    ret = cgs_mig.savevm_state_ram(f, gpa);
     /*
      * Returning 0 isn't expected. Either succeed with returning bytes of data
      * written to the file or error with a negative error code returned.
@@ -171,27 +172,34 @@ int cgs_mig_savevm_state_ram_cancel(QEMUFile *f, hwaddr gfn_end)
 
 void cgs_mig_savevm_state_cleanup(void)
 {
+    uint32_t nr_channels = 1;
+
     if (!cgs_mig.savevm_state_cleanup) {
         return;
     }
 
-    cgs_mig.savevm_state_cleanup();
+    if (migrate_use_multifd()) {
+        nr_channels = migrate_multifd_channels();
+    }
+
+    cgs_mig.savevm_state_cleanup(nr_channels);
 }
 
 int cgs_mig_loadvm_state_setup(QEMUFile *f)
 {
     int ret;
-    uint32_t nr_channels = 1;
+    uint32_t nr_channels = 1, nr_pages = 1;
 
     if (migrate_use_multifd()) {
         nr_channels = migrate_multifd_channels();
+        nr_pages = MULTIFD_PACKET_SIZE / TARGET_PAGE_SIZE;
     }
 
    if (!cgs_mig.loadvm_state_setup) {
         return 0;
     }
 
-    ret = cgs_mig.loadvm_state_setup(nr_channels);
+    ret = cgs_mig.loadvm_state_setup(nr_channels, nr_pages);
     cgs_check_error(f, ret);
 
     return ret;
@@ -213,11 +221,45 @@ int cgs_mig_loadvm_state(QEMUFile *f)
 
 void cgs_mig_loadvm_state_cleanup(void)
 {
+    uint32_t nr_channels = 1;
+
     if (!cgs_mig.loadvm_state_cleanup) {
         return;
     }
 
-    cgs_mig.loadvm_state_cleanup();
+    if (migrate_use_multifd()) {
+        nr_channels = migrate_multifd_channels();
+    }
+
+    cgs_mig.loadvm_state_cleanup(nr_channels);
+}
+
+int cgs_mig_multifd_send_prepare(MultiFDSendParams *p, Error **errp)
+{
+
+    if (!cgs_mig.multifd_send_prepare) {
+        return 0;
+    }
+
+    return cgs_mig.multifd_send_prepare(p, errp);
+}
+
+int cgs_mig_multifd_recv_pages(MultiFDRecvParams *p, Error **errp)
+{
+    if (!cgs_mig.multifd_recv_pages) {
+        return 0;
+    }
+
+    return cgs_mig.multifd_recv_pages(p, errp);
+}
+
+uint32_t cgs_mig_iov_num(uint32_t page_batch_num)
+{
+    if (!cgs_mig.iov_num) {
+        return page_batch_num;
+    }
+
+    return cgs_mig.iov_num(page_batch_num);
 }
 
 void cgs_mig_init(void)

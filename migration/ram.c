@@ -445,8 +445,6 @@ void dirty_sync_missed_zero_copy(void)
     ram_counters.dirty_sync_missed_zero_copy++;
 }
 
-#define CGS_PRIVATE_GPA_INVALID (~0UL)
-
 /* used by the search for pages to send */
 struct PageSearchStatus {
     /* Current block being searched */
@@ -1413,12 +1411,17 @@ static int ram_save_page(RAMState *rs, PageSearchStatus *pss)
 }
 
 static int ram_save_multifd_page(RAMState *rs, RAMBlock *block,
-                                 ram_addr_t offset)
+                                 ram_addr_t offset, hwaddr private_gpa)
 {
-    if (multifd_queue_page(rs->f, block, offset) < 0) {
+    if (multifd_queue_page(rs->f, block, offset, private_gpa) < 0) {
         return -1;
     }
-    ram_counters.normal++;
+
+    if (private_gpa != CGS_PRIVATE_GPA_INVALID) {
+        ram_counters.cgs_private_pages++;
+    } else {
+        ram_counters.normal++;
+    }
 
     return 1;
 }
@@ -2315,10 +2318,9 @@ static int ram_save_cgs_private_page(RAMState *rs, PageSearchStatus *pss)
 {
     RAMBlock *block = pss->block;
     ram_addr_t offset = ((ram_addr_t)pss->page) << TARGET_PAGE_BITS;
-    hwaddr gfn = pss->cgs_private_gpa >> TARGET_PAGE_BITS;
     long res;
 
-    res = cgs_mig_savevm_state_ram(rs->f, block, offset, &gfn, 1);
+    res = cgs_mig_savevm_state_ram(rs->f, block, offset, pss->cgs_private_gpa);
     if (res > 0) {
         ram_counters.transferred += res;
         ram_counters.cgs_private_pages++;
@@ -2346,6 +2348,9 @@ static int ram_save_target_page(RAMState *rs, PageSearchStatus *pss)
     int res;
 
     if (pss->cgs_private_gpa != CGS_PRIVATE_GPA_INVALID) {
+        if (migrate_use_multifd() && !migration_in_postcopy())
+            return ram_save_multifd_page(rs, block, offset,
+                                         pss->cgs_private_gpa);
         return ram_save_cgs_private_page(rs, pss);
     }
 
@@ -2377,7 +2382,8 @@ static int ram_save_target_page(RAMState *rs, PageSearchStatus *pss)
      * still see partially copied pages which is data corruption.
      */
     if (migrate_use_multifd() && !migration_in_postcopy()) {
-        return ram_save_multifd_page(rs, block, offset);
+        return ram_save_multifd_page(rs, block, offset,
+				     CGS_PRIVATE_GPA_INVALID);
     }
 
     return ram_save_page(rs, pss);
@@ -2520,8 +2526,16 @@ void ram_save_cgs_epoch_header(QEMUFile *f)
 static int ram_save_cgs_start_epoch(RAMState *rs)
 {
     long res;
+    QEMUFile *f = rs->f;
 
-     res = cgs_ram_save_start_epoch(rs->f);
+    if (migrate_use_multifd() && !migration_in_postcopy()) {
+            res = multifd_send_sync_main(f);
+            if (res < 0) {
+                return res;
+	    }
+    }
+
+    res = cgs_ram_save_start_epoch(f);
     if (res < 0) {
         return (int)res;
     } else if (res > 0) {
@@ -3681,8 +3695,7 @@ static inline RAMBlock *ram_block_from_stream(MigrationIncomingState *mis,
     return block;
 }
 
-static inline void *host_from_ram_block_offset(RAMBlock *block,
-                                               ram_addr_t offset)
+void *host_from_ram_block_offset(RAMBlock *block, ram_addr_t offset)
 {
     if (!offset_in_ramblock(block, offset)) {
         return NULL;
@@ -4330,9 +4343,10 @@ void colo_flush_ram_cache(void)
     trace_colo_flush_ram_cache_end();
 }
 
-static int ram_load_update_cgs_bmap(RAMBlock *block, ram_addr_t offset,
-                               void *host, bool is_private, bool is_bulk_stage)
+int ram_load_update_cgs_bmap(RAMBlock *block, ram_addr_t offset,
+                             bool is_private)
 {
+    unsigned long bit = offset >> TARGET_PAGE_BITS;
     bool was_private;
     hwaddr gpa;
     int ret = 0;
@@ -4342,39 +4356,20 @@ static int ram_load_update_cgs_bmap(RAMBlock *block, ram_addr_t offset,
         return 0;
     }
 
-    /*
-     * For the bulk stage, all the pages are first time migrated.
-     * Just update the cgs_bitmap without doing memory conversion.
-     */
-    if (is_bulk_stage) {
-        if (is_private) {
-            bitmap_set(block->cgs_bmap, offset, 1);
-        }
-	return 0;
-    }
-
-    was_private = test_bit(offset, block->cgs_bmap);
-
+    was_private = test_bit(bit, block->cgs_bmap);
     if (was_private == is_private) {
         return 0;
     }
 
-    /*
-     * For shared pages (i.e. pages mapped and pointed by host), gpa is
-     * searched using host address. Private pages are not mapped, and gpa
-     * equals to the offset.
-     */
-    if (host) {
-        ret = kvm_physical_memory_addr_from_host(kvm_state, host, &gpa);
-        if (!ret) {
-            error_report("%s: fail to find gpa", __func__);
-            return -ENOENT;
-        }
-    } else {
-        gpa = offset;
+    /* Unaliased GPA is the same for both private pages and shared pages */
+    ret = kvm_physical_memory_addr_from_host(kvm_state,
+                                             block->host + offset, &gpa);
+    if (!ret) {
+        error_report("%s: fail to find gpa", __func__);
+        return -ENOENT;
     }
 
-    ret = kvm_convert_memory(gpa, 4096, is_private);
+    ret = kvm_convert_memory(gpa, TARGET_PAGE_SIZE, is_private);
     if (ret) {
         error_report("%s: fail to convert, gpa=%lx, is_private=%d",
                       __func__, gpa, is_private);
@@ -4399,7 +4394,6 @@ static int ram_load_precopy(QEMUFile *f)
     int flags = 0, ret = 0, invalid_flags = 0, len = 0, i = 0;
     /* ADVISE is earlier, it shows the source has the postcopy capability on */
     bool postcopy_advised = postcopy_is_advised();
-    static uint64_t bulk_stage_unreceived_pages;
 
     if (!migrate_use_compression()) {
         invalid_flags |= RAM_SAVE_FLAG_COMPRESS_PAGE;
@@ -4441,9 +4435,7 @@ static int ram_load_precopy(QEMUFile *f)
                                                     RAM_CHANNEL_PRECOPY);
             bool is_private = flags & RAM_SAVE_FLAG_CGS_STATE;
 
-            if (!is_private) {
-                host = host_from_ram_block_offset(block, addr);
-            }
+            host = host_from_ram_block_offset(block, addr);
 
             /*
              * After going into COLO stage, we should not load the page
@@ -4468,7 +4460,7 @@ static int ram_load_precopy(QEMUFile *f)
                     host_bak = colo_cache_from_block_offset(block, addr, false);
                 }
             }
-            if (!is_private && !host) {
+            if (!host) {
                 error_report("Illegal RAM offset " RAM_ADDR_FMT, addr);
                 ret = -EINVAL;
                 break;
@@ -4479,14 +4471,10 @@ static int ram_load_precopy(QEMUFile *f)
 
             trace_ram_load_loop(block->idstr, (uint64_t)addr, flags, host);
 
-            ret = ram_load_update_cgs_bmap(block, addr, host, is_private,
-                                           !!bulk_stage_unreceived_pages);
+            ret = ram_load_update_cgs_bmap(block, addr, is_private);
             if (ret) {
                 return ret;
             }
-
-	    if (bulk_stage_unreceived_pages)
-                bulk_stage_unreceived_pages--;
         }
 
         switch (flags & ~RAM_SAVE_FLAG_CONTINUE) {
@@ -4517,9 +4505,6 @@ static int ram_load_precopy(QEMUFile *f)
                             error_report_err(local_err);
                         }
                     }
-                    if (block->cgs_bmap) {
-                        bulk_stage_unreceived_pages += block->used_length / TARGET_PAGE_SIZE;
-		    }
 
 		    /* For postcopy we need to check hugepage sizes match */
                     if (postcopy_advised && migrate_postcopy_ram() &&
@@ -4585,6 +4570,8 @@ static int ram_load_precopy(QEMUFile *f)
             break;
 
         case RAM_SAVE_FLAG_CGS_EPOCH:
+            multifd_recv_sync_main();
+            QEMU_FALLTHROUGH;
         case RAM_SAVE_FLAG_CGS_STATE:
             if (cgs_mig_loadvm_state(f) < 0) {
                 error_report(" Failed to load cgs state");

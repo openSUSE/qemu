@@ -96,4 +96,8 @@ void ram_write_tracking_stop(void);
 
 void dirty_sync_missed_zero_copy(void);
 
+void *host_from_ram_block_offset(RAMBlock *block, ram_addr_t offset);
+int ram_load_update_cgs_bmap(RAMBlock *block, ram_addr_t offset,
+                             bool is_private);
+
 #endif

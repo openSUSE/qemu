@@ -15,22 +15,27 @@
 #define QEMU_MIGRATION_CGS_H
 #include "qemu/osdep.h"
 #include "migration.h"
+#include "multifd.h"
+
+#define CGS_PRIVATE_GPA_INVALID (~0UL)
 
 typedef struct CgsMig {
     bool (*is_ready)(void);
-    int (*savevm_state_setup)(uint32_t nr_channels);
+    int (*savevm_state_setup)(uint32_t nr_channels, uint32_t nr_pages);
     int (*savevm_state_start)(QEMUFile *f);
     long (*savevm_state_ram_start_epoch)(QEMUFile *f);
-    long (*savevm_state_ram)(QEMUFile *f,
-                             hwaddr *gfns,
-                             uint64_t gfn_num);
+    long (*savevm_state_ram)(QEMUFile *f, hwaddr gpa);
     int (*savevm_state_downtime)(void);
     int (*savevm_state_end)(QEMUFile *f);
     int (*savevm_state_ram_cancel)(hwaddr gfn_end);
-    void (*savevm_state_cleanup)(void);
-    int (*loadvm_state_setup)(uint32_t nr_channels);
+    void (*savevm_state_cleanup)(uint32_t nr_channels);
+    int (*loadvm_state_setup)(uint32_t nr_channels, uint32_t nr_pages);
     int (*loadvm_state)(QEMUFile *f);
-    void (*loadvm_state_cleanup)(void);
+    void (*loadvm_state_cleanup)(uint32_t nr_channels);
+    /* Multifd support */
+    uint32_t (*iov_num)(uint32_t page_batch_num);
+    int (*multifd_send_prepare)(MultiFDSendParams *p, Error **errp);
+    int (*multifd_recv_pages)(MultiFDRecvParams *p, Error **errp);
 } CgsMig;
 
 bool cgs_mig_is_ready(void);
@@ -38,7 +43,7 @@ int cgs_mig_savevm_state_setup(QEMUFile *f);
 int cgs_mig_savevm_state_start(QEMUFile *f);
 long cgs_ram_save_start_epoch(QEMUFile *f);
 long cgs_mig_savevm_state_ram(QEMUFile *f, RAMBlock *block, ram_addr_t offset,
-                              hwaddr *gfns, uint64_t gfn_num);
+                              hwaddr gpa);
 int cgs_mig_savevm_state_downtime(QEMUFile *f);
 int cgs_mig_savevm_state_end(QEMUFile *f);
 int cgs_mig_savevm_state_ram_cancel(QEMUFile *f, hwaddr gfn_end);
@@ -46,6 +51,9 @@ void cgs_mig_savevm_state_cleanup(void);
 int cgs_mig_loadvm_state_setup(QEMUFile *f);
 int cgs_mig_loadvm_state(QEMUFile *f);
 void cgs_mig_loadvm_state_cleanup(void);
+int cgs_mig_multifd_send_prepare(MultiFDSendParams *p, Error **errp);
+int cgs_mig_multifd_recv_pages(MultiFDRecvParams *p, Error **errp);
+uint32_t cgs_mig_iov_num(uint32_t page_batch_num);
 void cgs_mig_init(void);
 
 void tdx_mig_init(CgsMig *cgs_mig);

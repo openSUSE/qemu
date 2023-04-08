@@ -1171,12 +1171,7 @@ void qemu_savevm_state_setup(QEMUFile *f)
 
     trace_savevm_state_setup();
 
-    /*
-     * If multifd is used, cgs_mig is set up by each multifd thread,
-     * and this will be supported later.
-     */
-    if (!migrate_use_multifd() &&
-        cgs_mig_savevm_state_setup(f)) {
+    if (cgs_mig_savevm_state_setup(f)) {
         return;
     }
 
@@ -2534,12 +2529,9 @@ static int qemu_loadvm_state_setup(QEMUFile *f)
 
     trace_loadvm_state_setup();
 
-    /* Multifd hasn't been supported */
-    if (!migrate_use_multifd()) {
-        ret = cgs_mig_loadvm_state_setup(f);
-        if (ret) {
-            return ret;
-        }
+    ret = cgs_mig_loadvm_state_setup(f);
+    if (ret) {
+        return ret;
     }
 
     QTAILQ_FOREACH(se, &savevm_state.handlers, entry) {

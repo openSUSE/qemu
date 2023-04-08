@@ -24,6 +24,7 @@
 #include "qemu-file.h"
 #include "trace.h"
 #include "multifd.h"
+#include "cgs.h"
 
 #include "qemu/yank.h"
 #include "io/channel-socket.h"
@@ -73,6 +74,40 @@ static void nocomp_send_cleanup(MultiFDSendParams *p, Error **errp)
     return;
 }
 
+static int nocomp_send_prepare_shared(MultiFDSendParams *p, Error **errp)
+{
+    MultiFDPages_t *pages = p->pages;
+    size_t page_size = qemu_target_page_size();
+
+    for (int i = 0; i < pages->num; i++) {
+        p->iov[p->iovs_num].iov_base = pages->block->host + pages->offset[i];
+        p->iov[p->iovs_num].iov_len = page_size;
+        p->iovs_num++;
+    }
+
+    p->next_packet_size = pages->num * page_size;
+    p->flags |= MULTIFD_FLAG_NOCOMP;
+    return 0;
+}
+
+static int nocomp_send_prepare_private(MultiFDSendParams *p, Error **errp)
+{
+    int ret;
+
+    ret = cgs_mig_multifd_send_prepare(p, errp);
+    if (ret) {
+        return ret;
+    }
+
+    p->flags |= MULTIFD_FLAG_PRIVATE;
+    return 0;
+}
+
+static inline bool multifd_pages_is_private(MultiFDPages_t *pages)
+{
+    return pages->private_gpa[0] != CGS_PRIVATE_GPA_INVALID;
+}
+
 /**
  * nocomp_send_prepare: prepare date to be able to send
  *
@@ -86,18 +121,11 @@ static void nocomp_send_cleanup(MultiFDSendParams *p, Error **errp)
  */
 static int nocomp_send_prepare(MultiFDSendParams *p, Error **errp)
 {
-    MultiFDPages_t *pages = p->pages;
-    size_t page_size = qemu_target_page_size();
-
-    for (int i = 0; i < p->normal_num; i++) {
-        p->iov[p->iovs_num].iov_base = pages->block->host + p->normal[i];
-        p->iov[p->iovs_num].iov_len = page_size;
-        p->iovs_num++;
+    if (multifd_pages_is_private(p->pages)) {
+        return nocomp_send_prepare_private(p, errp);
+    } else {
+        return nocomp_send_prepare_shared(p, errp);
     }
-
-    p->next_packet_size = p->normal_num * page_size;
-    p->flags |= MULTIFD_FLAG_NOCOMP;
-    return 0;
 }
 
 /**
@@ -126,17 +154,7 @@ static void nocomp_recv_cleanup(MultiFDRecvParams *p)
 {
 }
 
-/**
- * nocomp_recv_pages: read the data from the channel into actual pages
- *
- * For no compression we just need to read things into the correct place.
- *
- * Returns 0 for success or -1 for error
- *
- * @p: Params for the channel that we are using
- * @errp: pointer to an error
- */
-static int nocomp_recv_pages(MultiFDRecvParams *p, Error **errp)
+static int nocomp_recv_shared_pages(MultiFDRecvParams *p, Error **errp)
 {
     uint32_t flags = p->flags & MULTIFD_FLAG_COMPRESSION_MASK;
     size_t page_size = qemu_target_page_size();
@@ -151,6 +169,30 @@ static int nocomp_recv_pages(MultiFDRecvParams *p, Error **errp)
         p->iov[i].iov_len = page_size;
     }
     return qio_channel_readv_all(p->c, p->iov, p->normal_num, errp);
+}
+
+static int nocomp_recv_private_pages(MultiFDRecvParams *p, Error **errp)
+{
+	return cgs_mig_multifd_recv_pages(p, errp);
+}
+
+/**
+ * nocomp_recv_pages: read the data from the channel into actual pages
+ *
+ * For no compression we just need to read things into the correct place.
+ *
+ * Returns 0 for success or -1 for error
+ *
+ * @p: Params for the channel that we are using
+ * @errp: pointer to an error
+ */
+static int nocomp_recv_pages(MultiFDRecvParams *p, Error **errp)
+{
+    if (p->flags & MULTIFD_FLAG_PRIVATE) {
+        return nocomp_recv_private_pages(p, errp);
+    }
+
+    return nocomp_recv_shared_pages(p, errp);
 }
 
 static MultiFDMethods multifd_nocomp_ops = {
@@ -240,6 +282,7 @@ static MultiFDPages_t *multifd_pages_init(size_t size)
 
     pages->allocated = size;
     pages->offset = g_new0(ram_addr_t, size);
+    pages->private_gpa = g_new0(hwaddr, size);
 
     return pages;
 }
@@ -258,23 +301,21 @@ static void multifd_pages_clear(MultiFDPages_t *pages)
 static void multifd_send_fill_packet(MultiFDSendParams *p)
 {
     MultiFDPacket_t *packet = p->packet;
+    MultiFDPages_t *pages = p->pages;
     int i;
 
     packet->flags = cpu_to_be32(p->flags);
-    packet->pages_alloc = cpu_to_be32(p->pages->allocated);
+    packet->pages_alloc = cpu_to_be32(pages->allocated);
     packet->normal_pages = cpu_to_be32(p->normal_num);
     packet->next_packet_size = cpu_to_be32(p->next_packet_size);
     packet->packet_num = cpu_to_be64(p->packet_num);
 
-    if (p->pages->block) {
-        strncpy(packet->ramblock, p->pages->block->idstr, 256);
+    if (pages->block) {
+        strncpy(packet->ramblock, pages->block->idstr, 256);
     }
 
-    for (i = 0; i < p->normal_num; i++) {
-        /* there are architectures where ram_addr_t is 32 bit */
-        uint64_t temp = p->normal[i];
-
-        packet->offset[i] = cpu_to_be64(temp);
+    for (i = 0; i < pages->num; i++) {
+        packet->offset[i] = cpu_to_be64(pages->offset[i]);
     }
 }
 
@@ -344,13 +385,16 @@ static int multifd_recv_unfill_packet(MultiFDRecvParams *p, Error **errp)
     for (i = 0; i < p->normal_num; i++) {
         uint64_t offset = be64_to_cpu(packet->offset[i]);
 
-        if (offset > (block->used_length - page_size)) {
+	if (offset > (block->used_length - page_size)) {
             error_setg(errp, "multifd: offset too long %" PRIu64
                        " (max " RAM_ADDR_FMT ")",
                        offset, block->used_length);
             return -1;
         }
+
         p->normal[i] = offset;
+	ram_load_update_cgs_bmap(block, offset,
+                                 p->flags & MULTIFD_FLAG_PRIVATE);
     }
 
     return 0;
@@ -358,10 +402,13 @@ static int multifd_recv_unfill_packet(MultiFDRecvParams *p, Error **errp)
 
 struct {
     MultiFDSendParams *params;
-    /* array of pages to sent */
-    MultiFDPages_t *pages;
+    /* Array of shared pages to sent */
+    MultiFDPages_t *shared_pages;
+    /* Array of private pages to sent */
+    MultiFDPages_t *private_pages;
     /* global number of generated multifd packets */
-    uint64_t packet_num;
+    uint64_t private_packet_num;
+    uint64_t shared_packet_num;
     /* send channels ready */
     QemuSemaphore channels_ready;
     /*
@@ -392,13 +439,17 @@ struct {
  * false.
  */
 
-static int multifd_send_pages(QEMUFile *f)
+static int multifd_send_pages(QEMUFile *f, MultiFDPages_t *pages)
 {
     int i;
     static int next_channel;
     MultiFDSendParams *p = NULL; /* make happy gcc */
-    MultiFDPages_t *pages = multifd_send_state->pages;
     uint64_t transferred;
+
+    /* Nothing needs to be sent */
+    if (!pages->num) {
+        return 0;
+    }
 
     if (qatomic_read(&multifd_send_state->exiting)) {
         return -1;
@@ -430,8 +481,13 @@ static int multifd_send_pages(QEMUFile *f)
     assert(!p->pages->num);
     assert(!p->pages->block);
 
-    p->packet_num = multifd_send_state->packet_num++;
-    multifd_send_state->pages = p->pages;
+    if (multifd_pages_is_private(pages)) {
+        p->packet_num = multifd_send_state->private_packet_num++;
+        multifd_send_state->private_pages = p->pages;
+    } else {
+        p->packet_num = multifd_send_state->shared_packet_num++;
+        multifd_send_state->shared_pages = p->pages;
+    }
     p->pages = pages;
     transferred = ((uint64_t) pages->num) * qemu_target_page_size()
                 + p->packet_len;
@@ -444,9 +500,16 @@ static int multifd_send_pages(QEMUFile *f)
     return 1;
 }
 
-int multifd_queue_page(QEMUFile *f, RAMBlock *block, ram_addr_t offset)
+int multifd_queue_page(QEMUFile *f, RAMBlock *block,
+                       ram_addr_t offset, hwaddr private_gpa)
 {
-    MultiFDPages_t *pages = multifd_send_state->pages;
+    MultiFDPages_t *pages;
+
+    if (private_gpa == CGS_PRIVATE_GPA_INVALID) {
+        pages = multifd_send_state->shared_pages;
+    } else {
+        pages = multifd_send_state->private_pages;
+    }
 
     if (!pages->block) {
         pages->block = block;
@@ -454,6 +517,7 @@ int multifd_queue_page(QEMUFile *f, RAMBlock *block, ram_addr_t offset)
 
     if (pages->block == block) {
         pages->offset[pages->num] = offset;
+	pages->private_gpa[pages->num] = private_gpa;
         pages->num++;
 
         if (pages->num < pages->allocated) {
@@ -461,12 +525,12 @@ int multifd_queue_page(QEMUFile *f, RAMBlock *block, ram_addr_t offset)
         }
     }
 
-    if (multifd_send_pages(f) < 0) {
+    if (multifd_send_pages(f, pages) < 0) {
         return -1;
     }
 
     if (pages->block != block) {
-        return  multifd_queue_page(f, block, offset);
+        return  multifd_queue_page(f, block, offset, private_gpa);
     }
 
     return 1;
@@ -560,8 +624,10 @@ void multifd_save_cleanup(void)
     qemu_sem_destroy(&multifd_send_state->channels_ready);
     g_free(multifd_send_state->params);
     multifd_send_state->params = NULL;
-    multifd_pages_clear(multifd_send_state->pages);
-    multifd_send_state->pages = NULL;
+    multifd_pages_clear(multifd_send_state->shared_pages);
+    multifd_pages_clear(multifd_send_state->private_pages);
+    multifd_send_state->shared_pages = NULL;
+    multifd_send_state->private_pages = NULL;
     g_free(multifd_send_state);
     multifd_send_state = NULL;
 }
@@ -587,13 +653,24 @@ int multifd_send_sync_main(QEMUFile *f)
 {
     int i;
     bool flush_zero_copy;
+    MultiFDPages_t *private_pages;
+    MultiFDPages_t *shared_pages;
 
     if (!migrate_use_multifd()) {
         return 0;
     }
-    if (multifd_send_state->pages->num) {
-        if (multifd_send_pages(f) < 0) {
-            error_report("%s: multifd_send_pages fail", __func__);
+
+    private_pages = multifd_send_state->private_pages;
+    shared_pages = multifd_send_state->shared_pages;
+    if (shared_pages->num) {
+        if (multifd_send_pages(f, shared_pages) < 0) {
+            error_report("%s: send shared pages failed", __func__);
+            return -1;
+        }
+    }
+    if (private_pages->num) {
+        if (multifd_send_pages(f, private_pages) < 0) {
+            error_report("%s: send private pages failed", __func__);
             return -1;
         }
     }
@@ -624,7 +701,7 @@ int multifd_send_sync_main(QEMUFile *f)
             return -1;
         }
 
-        p->packet_num = multifd_send_state->packet_num++;
+        p->packet_num = multifd_send_state->shared_packet_num++;
         p->flags |= MULTIFD_FLAG_SYNC;
         p->pending_job++;
         qemu_file_acct_rate_limit(f, p->packet_len);
@@ -643,7 +720,7 @@ int multifd_send_sync_main(QEMUFile *f)
         trace_multifd_send_sync_main_wait(p->id);
         qemu_sem_wait(&p->sem_sync);
     }
-    trace_multifd_send_sync_main(multifd_send_state->packet_num);
+    trace_multifd_send_sync_main(multifd_send_state->shared_packet_num);
 
     return 0;
 }
@@ -677,6 +754,7 @@ static void *multifd_send_thread(void *opaque)
             uint64_t packet_num = p->packet_num;
             uint32_t flags = p->flags;
             p->normal_num = 0;
+	    MultiFDPages_t *pages = p->pages;
 
             if (use_zero_copy_send) {
                 p->iovs_num = 0;
@@ -684,8 +762,8 @@ static void *multifd_send_thread(void *opaque)
                 p->iovs_num = 1;
             }
 
-            for (int i = 0; i < p->pages->num; i++) {
-                p->normal[p->normal_num] = p->pages->offset[i];
+            for (int i = 0; i < pages->num; i++) {
+                p->normal[p->normal_num] = pages->offset[i];
                 p->normal_num++;
             }
 
@@ -700,8 +778,8 @@ static void *multifd_send_thread(void *opaque)
             p->flags = 0;
             p->num_packets++;
             p->total_normal_pages += p->normal_num;
-            p->pages->num = 0;
-            p->pages->block = NULL;
+            pages->num = 0;
+            pages->block = NULL;
             qemu_mutex_unlock(&p->mutex);
 
             trace_multifd_send(p->id, packet_num, p->normal_num, flags,
@@ -910,6 +988,7 @@ int multifd_save_setup(Error **errp)
 {
     int thread_count;
     uint32_t page_count = MULTIFD_PACKET_SIZE / qemu_target_page_size();
+    uint32_t iov_count;
     uint8_t i;
 
     if (!migrate_use_multifd()) {
@@ -923,10 +1002,15 @@ int multifd_save_setup(Error **errp)
     thread_count = migrate_multifd_channels();
     multifd_send_state = g_malloc0(sizeof(*multifd_send_state));
     multifd_send_state->params = g_new0(MultiFDSendParams, thread_count);
-    multifd_send_state->pages = multifd_pages_init(page_count);
+    multifd_send_state->shared_pages = multifd_pages_init(page_count);
+    multifd_send_state->private_pages = multifd_pages_init(page_count);
     qemu_sem_init(&multifd_send_state->channels_ready, 0);
     qatomic_set(&multifd_send_state->exiting, 0);
     multifd_send_state->ops = multifd_ops[migrate_multifd_compression()];
+    iov_count = cgs_mig_iov_num(page_count);
+    if (!iov_count) {
+        return -1;
+    }
 
     for (i = 0; i < thread_count; i++) {
         MultiFDSendParams *p = &multifd_send_state->params[i];
@@ -945,7 +1029,7 @@ int multifd_save_setup(Error **errp)
         p->packet->version = cpu_to_be32(MULTIFD_VERSION);
         p->name = g_strdup_printf("multifdsend_%d", i);
         /* We need one extra place for the packet header */
-        p->iov = g_new0(struct iovec, page_count + 1);
+        p->iov = g_new0(struct iovec, iov_count + 1);
         p->normal = g_new0(ram_addr_t, page_count);
 
         if (migrate_use_zero_copy_send()) {
@@ -1165,6 +1249,7 @@ int multifd_load_setup(Error **errp)
 {
     int thread_count;
     uint32_t page_count = MULTIFD_PACKET_SIZE / qemu_target_page_size();
+    uint32_t iov_count;
     uint8_t i;
 
     if (!migrate_use_multifd()) {
@@ -1180,6 +1265,10 @@ int multifd_load_setup(Error **errp)
     qatomic_set(&multifd_recv_state->count, 0);
     qemu_sem_init(&multifd_recv_state->sem_sync, 0);
     multifd_recv_state->ops = multifd_ops[migrate_multifd_compression()];
+    iov_count = cgs_mig_iov_num(page_count);
+    if (!iov_count) {
+        return -1;
+    }
 
     for (i = 0; i < thread_count; i++) {
         MultiFDRecvParams *p = &multifd_recv_state->params[i];
@@ -1192,7 +1281,7 @@ int multifd_load_setup(Error **errp)
                       + sizeof(uint64_t) * page_count;
         p->packet = g_malloc0(p->packet_len);
         p->name = g_strdup_printf("multifdrecv_%d", i);
-        p->iov = g_new0(struct iovec, page_count);
+        p->iov = g_new0(struct iovec, iov_count);
         p->normal = g_new0(ram_addr_t, page_count);
     }
 
