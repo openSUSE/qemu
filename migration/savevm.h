@@ -39,9 +39,10 @@ int qemu_savevm_state_resume_prepare(MigrationState *s);
 void qemu_savevm_state_header(QEMUFile *f);
 int qemu_savevm_state_iterate(QEMUFile *f, bool postcopy);
 void qemu_savevm_state_cleanup(void);
+int qemu_savevm_state_prepare_postcopy(QEMUFile *f);
 void qemu_savevm_state_complete_postcopy(QEMUFile *f);
 int qemu_savevm_state_complete_precopy(QEMUFile *f, bool iterable_only,
-                                       bool inactivate_disks);
+                                       bool inactivate_disks, bool send_cgs);
 void qemu_savevm_state_pending(QEMUFile *f, uint64_t max_size,
                                uint64_t *res_precopy_only,
                                uint64_t *res_compatible,

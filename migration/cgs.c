@@ -56,6 +56,8 @@ int cgs_mig_savevm_state_setup(QEMUFile *f)
     if (migrate_use_multifd()) {
         nr_channels = migrate_multifd_channels();
 	nr_pages = MULTIFD_PACKET_SIZE / TARGET_PAGE_SIZE;
+    } else if (migrate_postcopy_preempt()) {
+        nr_channels = RAM_CHANNEL_MAX;
     }
 
     ret = cgs_mig.savevm_state_setup(nr_channels, nr_pages);
@@ -105,8 +107,8 @@ long cgs_ram_save_start_epoch(QEMUFile *f)
 }
 
 /* Return number of bytes sent or the error value (< 0) */
-long cgs_mig_savevm_state_ram(QEMUFile *f, RAMBlock *block, ram_addr_t offset,
-                              hwaddr gpa)
+long cgs_mig_savevm_state_ram(QEMUFile *f, uint32_t channel_id,
+                              RAMBlock *block, ram_addr_t offset, hwaddr gpa)
 {
     long hdr_bytes, ret;
 
@@ -114,8 +116,8 @@ long cgs_mig_savevm_state_ram(QEMUFile *f, RAMBlock *block, ram_addr_t offset,
         return 0;
     }
 
-    hdr_bytes = ram_save_cgs_ram_header(f, block, offset);
-    ret = cgs_mig.savevm_state_ram(f, gpa);
+    hdr_bytes = ram_save_cgs_ram_header(f, block, offset, false);
+    ret = cgs_mig.savevm_state_ram(f, channel_id, gpa);
     /*
      * Returning 0 isn't expected. Either succeed with returning bytes of data
      * written to the file or error with a negative error code returned.
@@ -126,15 +128,15 @@ long cgs_mig_savevm_state_ram(QEMUFile *f, RAMBlock *block, ram_addr_t offset,
     return hdr_bytes + ret;
 }
 
-int cgs_mig_savevm_state_downtime(QEMUFile *f)
+int cgs_mig_savevm_state_pause(QEMUFile *f)
 {
     int ret;
 
-    if (!cgs_mig.savevm_state_downtime) {
+    if (!cgs_mig.savevm_state_pause) {
         return 0;
     }
 
-    ret = cgs_mig.savevm_state_downtime();
+    ret = cgs_mig.savevm_state_pause();
     cgs_check_error(f, ret);
 
     return ret;
@@ -156,18 +158,39 @@ int cgs_mig_savevm_state_end(QEMUFile *f)
 }
 
 /* gfn_end indicates the last private page that has been migrated. */
-int cgs_mig_savevm_state_ram_cancel(QEMUFile *f, hwaddr gfn_end)
+int cgs_mig_savevm_state_ram_abort(QEMUFile *f, hwaddr gfn_end)
 {
     int ret;
+
+    if (!cgs_mig.savevm_state_ram_abort) {
+        return 0;
+    }
+
+    ret = cgs_mig.savevm_state_ram_abort(gfn_end);
+    cgs_check_error(f, ret);
+
+    return ret;
+}
+
+bool cgs_mig_savevm_state_need_ram_cancel(void)
+{
+    return !!cgs_mig.savevm_state_ram_cancel;
+}
+
+long cgs_mig_savevm_state_ram_cancel(QEMUFile *f, RAMBlock *block,
+                                     ram_addr_t offset, hwaddr gpa)
+{
+    long hdr_bytes, ret;
 
     if (!cgs_mig.savevm_state_ram_cancel) {
         return 0;
     }
 
-    ret = cgs_mig.savevm_state_ram_cancel(gfn_end);
+    hdr_bytes = ram_save_cgs_ram_header(f, block, offset, true);
+    ret = cgs_mig.savevm_state_ram_cancel(f, gpa);
     cgs_check_error(f, ret);
 
-    return ret;
+    return hdr_bytes + ret;
 }
 
 void cgs_mig_savevm_state_cleanup(void)
@@ -180,6 +203,8 @@ void cgs_mig_savevm_state_cleanup(void)
 
     if (migrate_use_multifd()) {
         nr_channels = migrate_multifd_channels();
+    } else if (migrate_postcopy_preempt()) {
+        nr_channels = RAM_CHANNEL_MAX;
     }
 
     cgs_mig.savevm_state_cleanup(nr_channels);
@@ -193,10 +218,8 @@ int cgs_mig_loadvm_state_setup(QEMUFile *f)
     if (migrate_use_multifd()) {
         nr_channels = migrate_multifd_channels();
         nr_pages = MULTIFD_PACKET_SIZE / TARGET_PAGE_SIZE;
-    }
-
-   if (!cgs_mig.loadvm_state_setup) {
-        return 0;
+    } else if (migrate_postcopy_preempt()) {
+        nr_channels = RAM_CHANNEL_MAX;
     }
 
     ret = cgs_mig.loadvm_state_setup(nr_channels, nr_pages);
@@ -205,7 +228,7 @@ int cgs_mig_loadvm_state_setup(QEMUFile *f)
     return ret;
 }
 
-int cgs_mig_loadvm_state(QEMUFile *f)
+int cgs_mig_loadvm_state(QEMUFile *f, uint32_t channel_id)
 {
     int ret;
 
@@ -213,7 +236,7 @@ int cgs_mig_loadvm_state(QEMUFile *f)
         return 0;
     }
 
-    ret = cgs_mig.loadvm_state(f);
+    ret = cgs_mig.loadvm_state(f, channel_id);
     cgs_check_error(f, ret);
 
     return ret;
@@ -229,6 +252,8 @@ void cgs_mig_loadvm_state_cleanup(void)
 
     if (migrate_use_multifd()) {
         nr_channels = migrate_multifd_channels();
+    } else if (migrate_postcopy_preempt()) {
+        nr_channels = RAM_CHANNEL_MAX;
     }
 
     cgs_mig.loadvm_state_cleanup(nr_channels);

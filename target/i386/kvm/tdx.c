@@ -1571,7 +1571,8 @@ static void tdx_handle_map_gpa(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall)
     }
 
     if (size > 0) {
-        ret = kvm_convert_memory(gpa, size, private);
+        ret = kvm_convert_memory(gpa, size, private,
+                                 cpu->parent_obj.cpu_index);
     }
 
     if (!ret) {

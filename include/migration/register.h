@@ -27,6 +27,7 @@ typedef struct SaveVMHandlers {
     /* This runs both outside and inside the iothread lock.  */
     bool (*is_active)(void *opaque);
     bool (*has_postcopy)(void *opaque);
+    int (*prepare_postcopy)(QEMUFile *f, void *opaque);
 
     /* is_active_iterate
      * If it is not NULL then qemu_savevm_state_iterate will skip iteration if

@@ -86,6 +86,7 @@
 #define RAM_SAVE_FLAG_COMPRESS_PAGE    0x100
 #define RAM_SAVE_FLAG_CGS_EPOCH        0x200
 #define RAM_SAVE_FLAG_CGS_STATE        0x400
+#define RAM_SAVE_FLAG_CGS_STATE_CANCEL 0x800
 
 XBZRLECacheStats xbzrle_counters;
 
@@ -211,9 +212,11 @@ bool ramblock_recv_bitmap_test_byte_offset(RAMBlock *rb, uint64_t byte_offset)
     return test_bit(byte_offset >> TARGET_PAGE_BITS, rb->receivedmap);
 }
 
-void ramblock_recv_bitmap_set(RAMBlock *rb, void *host_addr)
+void ramblock_recv_bitmap_set(RAMBlock *rb, ram_addr_t offset)
 {
-    set_bit_atomic(ramblock_recv_bitmap_offset(host_addr, rb), rb->receivedmap);
+    unsigned long bit = offset >> TARGET_PAGE_BITS;
+
+    set_bit_atomic(bit, rb->receivedmap);
 }
 
 void ramblock_recv_bitmap_set_range(RAMBlock *rb, void *host_addr,
@@ -2130,7 +2133,7 @@ static bool get_queued_page(RAMState *rs, PageSearchStatus *pss)
             }
         }
 
-    } while (block && !dirty);
+    } while (block && !dirty && !migrate_postcopy_preempt());
 
     if (block) {
         /* See comment above postcopy_preempted_contains() */
@@ -2161,6 +2164,7 @@ static bool get_queued_page(RAMState *rs, PageSearchStatus *pss)
          */
         pss->block = block;
         pss->page = offset >> TARGET_PAGE_BITS;
+        pss->cgs_private_gpa = ram_get_private_gpa(pss->block, pss->page);
 
         /*
          * This unqueued page would break the "one round" check, even is
@@ -2209,7 +2213,8 @@ static void migration_page_queue_free(RAMState *rs)
  * @start: starting address from the start of the RAMBlock
  * @len: length (in bytes) to send
  */
-int ram_save_queue_pages(const char *rbname, ram_addr_t start, ram_addr_t len)
+int ram_save_queue_pages(const char *rbname, ram_addr_t start,
+                         ram_addr_t len, bool is_private)
 {
     RAMBlock *ramblock;
     RAMState *rs = ram_state;
@@ -2245,6 +2250,16 @@ int ram_save_queue_pages(const char *rbname, ram_addr_t start, ram_addr_t len)
                      RAM_ADDR_FMT " blocklen=" RAM_ADDR_FMT,
                      __func__, start, len, ramblock->used_length);
         return -1;
+    }
+
+    if (ramblock->cgs_bmap) {
+	if (is_private) {
+            bitmap_set(ramblock->cgs_bmap, start >> TARGET_PAGE_BITS,
+                       len >> TARGET_PAGE_BITS);
+        } else {
+            bitmap_clear(ramblock->cgs_bmap, start >> TARGET_PAGE_BITS,
+                         len >> TARGET_PAGE_BITS);
+        }
     }
 
     struct RAMSrcPageRequest *new_entry =
@@ -2314,13 +2329,20 @@ static bool save_compress_page(RAMState *rs, RAMBlock *block, ram_addr_t offset)
     return false;
 }
 
-static int ram_save_cgs_private_page(RAMState *rs, PageSearchStatus *pss)
+static int ram_save_cgs_private_page(RAMState *rs,
+                                     PageSearchStatus *pss, bool cancel)
 {
     RAMBlock *block = pss->block;
     ram_addr_t offset = ((ram_addr_t)pss->page) << TARGET_PAGE_BITS;
     long res;
 
-    res = cgs_mig_savevm_state_ram(rs->f, block, offset, pss->cgs_private_gpa);
+    if (cancel) {
+        res = cgs_mig_savevm_state_ram_cancel(rs->f, block, offset,
+                                              pss->cgs_private_gpa);
+    } else {
+        res = cgs_mig_savevm_state_ram(rs->f, rs->postcopy_channel,
+                                       block, offset, pss->cgs_private_gpa);
+    }
     if (res > 0) {
         ram_counters.transferred += res;
         ram_counters.cgs_private_pages++;
@@ -2329,7 +2351,7 @@ static int ram_save_cgs_private_page(RAMState *rs, PageSearchStatus *pss)
         return res;
     }
 
-    /* Return the number of pages (i.e. 1) succeeded to be saved */
+    /* Return the number of pages (i.e. 1) succeeded to be saved/cancelled */
     return 1;
 }
 
@@ -2351,7 +2373,7 @@ static int ram_save_target_page(RAMState *rs, PageSearchStatus *pss)
         if (migrate_use_multifd() && !migration_in_postcopy())
             return ram_save_multifd_page(rs, block, offset,
                                          pss->cgs_private_gpa);
-        return ram_save_cgs_private_page(rs, pss);
+        return ram_save_cgs_private_page(rs, pss, false);
     }
 
     if (control_save_page(rs, block, offset, &res)) {
@@ -2512,10 +2534,13 @@ static void postcopy_preempt_reset_channel(RAMState *rs)
     }
 }
 
-size_t ram_save_cgs_ram_header(QEMUFile *f, RAMBlock *block, ram_addr_t offset)
+size_t ram_save_cgs_ram_header(QEMUFile *f, RAMBlock *block,
+                               ram_addr_t offset, bool cancel)
 {
-    return save_page_header(ram_state, f, block,
-                            offset | RAM_SAVE_FLAG_CGS_STATE);
+    uint64_t flags = cancel ? RAM_SAVE_FLAG_CGS_STATE_CANCEL :
+                              RAM_SAVE_FLAG_CGS_STATE;
+
+    return save_page_header(ram_state, f, block, offset | flags);
 }
 
 void ram_save_cgs_epoch_header(QEMUFile *f)
@@ -2570,7 +2595,7 @@ void ram_save_cancel(void)
     }
     gfn = gpa >> TARGET_PAGE_BITS;
 
-    ret = cgs_mig_savevm_state_ram_cancel(ram_state->f, gfn);
+    ret = cgs_mig_savevm_state_ram_abort(ram_state->f, gfn);
     if (ret) {
         error_report("%s failed: %s", __func__, strerror(ret));
     }
@@ -2611,7 +2636,7 @@ static int ram_save_host_page(RAMState *rs, PageSearchStatus *pss)
         postcopy_preempt_choose_channel(rs, pss);
     }
 
-    if (rs->cgs_start_epoch) {
+    if (!migration_in_postcopy() && rs->cgs_start_epoch) {
         ram_save_cgs_start_epoch(rs);
     }
 
@@ -3584,6 +3609,59 @@ static int ram_save_complete(QEMUFile *f, void *opaque)
     return 0;
 }
 
+static int ram_prepare_postcopy(QEMUFile *f, void *opaque)
+{
+    RAMState **temp = opaque;
+    RAMState *rs = *temp;
+    PageSearchStatus pss;
+    hwaddr last_gpa;
+    bool again, found;
+    int ret = 0;
+
+    if (!rs->last_seen_block ||
+        !cgs_mig_savevm_state_need_ram_cancel()) {
+        goto out;
+    }
+
+    pss.block = QLIST_FIRST_RCU(&ram_list.blocks);
+    pss.page = 0;
+    pss.cgs_private_gpa = CGS_PRIVATE_GPA_INVALID;
+    pss.complete_round = false;
+
+    last_gpa = ram_get_private_gpa(rs->last_seen_block, rs->last_page);
+
+    rs->last_sent_block = NULL;
+    ram_save_cgs_start_epoch(rs);
+    WITH_RCU_READ_LOCK_GUARD() {
+        migration_bitmap_sync_precopy(rs);
+
+        /* flush all remaining blocks regardless of rate limiting */
+        for (; pss.complete_round == false; pss.page++) {
+            found = find_dirty_block(rs, &pss, &again);
+            if (!found) {
+                continue;
+            }
+
+            if (pss.cgs_private_gpa == CGS_PRIVATE_GPA_INVALID) {
+                continue;
+            }
+            if (pss.cgs_private_gpa >= last_gpa) {
+                break;
+            }
+            ret = ram_save_cgs_private_page(rs, &pss, true);
+            if (ret < 0) {
+                return ret;
+            }
+        }
+    }
+
+out:
+    qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
+    qemu_fflush(f);
+
+    return 0;
+}
+
 static void ram_save_pending(QEMUFile *f, void *opaque, uint64_t max_size,
                              uint64_t *res_precopy_only,
                              uint64_t *res_compatible,
@@ -4110,7 +4188,7 @@ int ram_postcopy_incoming_init(MigrationIncomingState *mis)
  * @f: QEMUFile where to send the data
  * @channel: the channel to use for loading
  */
-int ram_load_postcopy(QEMUFile *f, int channel)
+int ram_load_postcopy(QEMUFile *f, uint32_t channel)
 {
     int flags = 0, ret = 0;
     bool place_needed = false;
@@ -4123,6 +4201,7 @@ int ram_load_postcopy(QEMUFile *f, int channel)
         void *page_buffer = NULL;
         void *place_source = NULL;
         RAMBlock *block = NULL;
+        bool is_private = false;
         uint8_t ch;
         int len;
 
@@ -4142,7 +4221,9 @@ int ram_load_postcopy(QEMUFile *f, int channel)
 
         trace_ram_load_postcopy_loop(channel, (uint64_t)addr, flags);
         if (flags & (RAM_SAVE_FLAG_ZERO | RAM_SAVE_FLAG_PAGE |
-                     RAM_SAVE_FLAG_COMPRESS_PAGE)) {
+                     RAM_SAVE_FLAG_COMPRESS_PAGE | RAM_SAVE_FLAG_CGS_STATE)) {
+            is_private = flags & RAM_SAVE_FLAG_CGS_STATE;
+
             block = ram_block_from_stream(mis, f, flags, channel);
             if (!block) {
                 ret = -EINVAL;
@@ -4160,47 +4241,50 @@ int ram_load_postcopy(QEMUFile *f, int channel)
                 ret = -EINVAL;
                 break;
             }
-            tmp_page->target_pages++;
-            matches_target_page_size = block->page_size == TARGET_PAGE_SIZE;
-            /*
-             * Postcopy requires that we place whole host pages atomically;
-             * these may be huge pages for RAMBlocks that are backed by
-             * hugetlbfs.
-             * To make it atomic, the data is read into a temporary page
-             * that's moved into place later.
-             * The migration protocol uses,  possibly smaller, target-pages
-             * however the source ensures it always sends all the components
-             * of a host page in one chunk.
-             */
-            page_buffer = tmp_page->tmp_huge_page +
-                          host_page_offset_from_ram_block_offset(block, addr);
-            /* If all TP are zero then we can optimise the place */
-            if (tmp_page->target_pages == 1) {
-                tmp_page->host_addr =
-                    host_page_from_ram_block_offset(block, addr);
-            } else if (tmp_page->host_addr !=
-                       host_page_from_ram_block_offset(block, addr)) {
-                /* not the 1st TP within the HP */
-                error_report("Non-same host page detected on channel %d: "
-                             "Target host page %p, received host page %p "
-                             "(rb %s offset 0x"RAM_ADDR_FMT" target_pages %d)",
-                             channel, tmp_page->host_addr,
-                             host_page_from_ram_block_offset(block, addr),
-                             block->idstr, addr, tmp_page->target_pages);
-                ret = -EINVAL;
-                break;
-            }
 
-            /*
-             * If it's the last part of a host page then we place the host
-             * page
-             */
-            if (tmp_page->target_pages ==
-                (block->page_size / TARGET_PAGE_SIZE)) {
-                place_needed = true;
+            if (!is_private) {
+                tmp_page->target_pages++;
+                matches_target_page_size = block->page_size == TARGET_PAGE_SIZE;
+                /*
+                 * Postcopy requires that we place whole host pages atomically;
+                 * these may be huge pages for RAMBlocks that are backed by
+                 * hugetlbfs.
+                 * To make it atomic, the data is read into a temporary page
+                 * that's moved into place later.
+                 * The migration protocol uses,  possibly smaller, target-pages
+                 * however the source ensures it always sends all the components
+                 * of a host page in one chunk.
+                 */
+                page_buffer = tmp_page->tmp_huge_page +
+                           host_page_offset_from_ram_block_offset(block, addr);
+                /* If all TP are zero then we can optimise the place */
+                if (tmp_page->target_pages == 1) {
+                    tmp_page->host_addr =
+                        host_page_from_ram_block_offset(block, addr);
+                } else if (tmp_page->host_addr !=
+                           host_page_from_ram_block_offset(block, addr)) {
+                    /* not the 1st TP within the HP */
+                    error_report("Non-same host page detected on channel %d: "
+                                 "Target host page %p, received host page %p "
+                                 "(rb %s offset 0x"RAM_ADDR_FMT" target_pages %d)",
+                                 channel, tmp_page->host_addr,
+                                 host_page_from_ram_block_offset(block, addr),
+                                 block->idstr, addr, tmp_page->target_pages);
+                    ret = -EINVAL;
+                    break;
+                 }
+
+                /*
+                 * If it's the last part of a host page then we place the host
+                 * page
+                 */
+                if (tmp_page->target_pages ==
+                    (block->page_size / TARGET_PAGE_SIZE)) {
+                    place_needed = true;
+                }
+                place_source = tmp_page->tmp_huge_page;
             }
-            place_source = tmp_page->tmp_huge_page;
-        }
+	}
 
         switch (flags & ~RAM_SAVE_FLAG_CONTINUE) {
         case RAM_SAVE_FLAG_ZERO:
@@ -4250,12 +4334,31 @@ int ram_load_postcopy(QEMUFile *f, int channel)
             /* normal exit */
             multifd_recv_sync_main();
             break;
+
+        case RAM_SAVE_FLAG_CGS_EPOCH:
+        case RAM_SAVE_FLAG_CGS_STATE:
+            ret = cgs_mig_loadvm_state(f, channel);
+            if (ret < 0) {
+                error_report(" Failed to load cgs state");
+                ret = -EINVAL;
+            }
+            break;
+
         default:
             error_report("Unknown combination of migration flags: 0x%x"
                          " (postcopy mode)", flags);
             ret = -EINVAL;
             break;
         }
+
+	if (is_private) {
+            ramblock_recv_bitmap_set(block, addr);
+            ret = ram_load_update_cgs_bmap(block, addr, is_private);
+            if (ret) {
+                return ret;
+            }
+            postcopy_remove_from_sent_list(block, addr, channel);
+	}
 
         /* Got the whole host page, wait for decompress before placing. */
         if (place_needed) {
@@ -4369,7 +4472,7 @@ int ram_load_update_cgs_bmap(RAMBlock *block, ram_addr_t offset,
         return -ENOENT;
     }
 
-    ret = kvm_convert_memory(gpa, TARGET_PAGE_SIZE, is_private);
+    ret = kvm_convert_memory(gpa, TARGET_PAGE_SIZE, is_private, INT_MAX);
     if (ret) {
         error_report("%s: fail to convert, gpa=%lx, is_private=%d",
                       __func__, gpa, is_private);
@@ -4402,6 +4505,7 @@ static int ram_load_precopy(QEMUFile *f)
     while (!ret && !(flags & RAM_SAVE_FLAG_EOS)) {
         ram_addr_t addr, total_ram_bytes;
         void *host = NULL, *host_bak = NULL;
+        bool need_sync = false;
         uint8_t ch;
 
         /*
@@ -4430,10 +4534,13 @@ static int ram_load_precopy(QEMUFile *f)
 
         if (flags & (RAM_SAVE_FLAG_ZERO | RAM_SAVE_FLAG_PAGE |
                      RAM_SAVE_FLAG_COMPRESS_PAGE | RAM_SAVE_FLAG_XBZRLE |
-                     RAM_SAVE_FLAG_CGS_STATE)) {
+                     RAM_SAVE_FLAG_CGS_STATE |
+                     RAM_SAVE_FLAG_CGS_STATE_CANCEL)) {
             RAMBlock *block = ram_block_from_stream(mis, f, flags,
                                                     RAM_CHANNEL_PRECOPY);
-            bool is_private = flags & RAM_SAVE_FLAG_CGS_STATE;
+            bool is_private = flags & (RAM_SAVE_FLAG_CGS_STATE |
+                                       RAM_SAVE_FLAG_CGS_STATE_CANCEL);
+            bool set_private = flags & RAM_SAVE_FLAG_CGS_STATE;
 
             host = host_from_ram_block_offset(block, addr);
 
@@ -4465,13 +4572,13 @@ static int ram_load_precopy(QEMUFile *f)
                 ret = -EINVAL;
                 break;
             }
-            if (!is_private && !migration_incoming_in_colo_state()) {
-                ramblock_recv_bitmap_set(block, host);
+            if (!migration_incoming_in_colo_state()) {
+                ramblock_recv_bitmap_set(block, addr);
             }
 
             trace_ram_load_loop(block->idstr, (uint64_t)addr, flags, host);
 
-            ret = ram_load_update_cgs_bmap(block, addr, is_private);
+            ret = ram_load_update_cgs_bmap(block, addr, set_private);
             if (ret) {
                 return ret;
             }
@@ -4570,12 +4677,21 @@ static int ram_load_precopy(QEMUFile *f)
             break;
 
         case RAM_SAVE_FLAG_CGS_EPOCH:
-            multifd_recv_sync_main();
+            need_sync = true;
             QEMU_FALLTHROUGH;
         case RAM_SAVE_FLAG_CGS_STATE:
-            if (cgs_mig_loadvm_state(f) < 0) {
+        case RAM_SAVE_FLAG_CGS_STATE_CANCEL:
+            if (need_sync) {
+                multifd_recv_barrier();
+            }
+
+            if (cgs_mig_loadvm_state(f, 0) < 0) {
                 error_report(" Failed to load cgs state");
                 ret = -EINVAL;
+            }
+
+            if (need_sync) {
+                multifd_recv_unbarrier();
             }
             break;
 
@@ -4807,6 +4923,7 @@ static SaveVMHandlers savevm_ram_handlers = {
     .save_live_complete_postcopy = ram_save_complete,
     .save_live_complete_precopy = ram_save_complete,
     .has_postcopy = ram_has_postcopy,
+    .prepare_postcopy = ram_prepare_postcopy,
     .save_live_pending = ram_save_pending,
     .load_state = ram_load,
     .save_cleanup = ram_save_cleanup,

@@ -907,6 +907,98 @@ static void postcopy_pause_fault_thread(MigrationIncomingState *mis)
     trace_postcopy_pause_fault_thread_continued();
 }
 
+void postcopy_remove_from_sent_list(RAMBlock *rb, ram_addr_t offset, uint32_t channel)
+{
+    MigrationIncomingState *mis = migration_incoming_get_current();
+    CgsPrivateFaultReq *req, *next;
+
+    qemu_spin_lock(&mis->req_sent_list_lock);
+    QSIMPLEQ_FOREACH_SAFE(req, &mis->private_fault_req_sent_list, next_req, next) {
+        if (req->rb == rb && req->offset == offset) {
+            QSIMPLEQ_REMOVE(&mis->private_fault_req_sent_list,
+                            req, CgsPrivateFaultReq, next_req);
+            qemu_sem_post(&req->sem);
+	}
+    }
+    qemu_spin_unlock(&mis->req_sent_list_lock);
+}
+
+static bool postcopy_add_pending_req_to_sent_list(CgsPrivateFaultReq *req)
+{
+    MigrationIncomingState *mis = migration_incoming_get_current();
+    RAMBlock *rb = req->rb;
+    ram_addr_t offset = req->offset;
+    bool added = false;
+
+    qemu_spin_lock(&mis->req_sent_list_lock);
+    if (test_bit(offset >> qemu_target_page_bits(), rb->receivedmap)) {
+        qemu_sem_post(&req->sem);
+    } else {
+        QSIMPLEQ_INSERT_TAIL(&mis->private_fault_req_sent_list, req, next_req);
+	added = true;
+    }
+    qemu_spin_unlock(&mis->req_sent_list_lock);
+
+    return added;
+}
+
+void postcopy_add_private_fault_to_pending_list(RAMBlock *rb,
+                                                ram_addr_t offset,
+                                                hwaddr gpa,
+                                                int cpu_index)
+{
+    MigrationIncomingState *mis = migration_incoming_get_current();
+    CgsPrivateFaultReq *req = &mis->private_fault_req[cpu_index];
+
+    req->rb = rb;
+    req->offset = offset;
+    req->gpa = gpa;
+
+    qemu_spin_lock(&mis->req_pending_list_lock);
+    QSIMPLEQ_INSERT_TAIL(&mis->private_fault_req_pending_list, req, next_req);
+    qemu_spin_unlock(&mis->req_pending_list_lock);
+
+    postcopy_fault_thread_notify(mis);
+    qemu_sem_wait(&req->sem);
+}
+
+static int postcopy_send_private_fault_page(MigrationIncomingState *mis)
+{
+    CgsPrivateFaultReq *req;
+    int ret = 0;
+    bool need_send = false;
+
+    while (1) {
+        qemu_spin_lock(&mis->req_pending_list_lock);
+        req = QSIMPLEQ_FIRST(&mis->private_fault_req_pending_list);
+        if (!req) {
+            qemu_spin_unlock(&mis->req_pending_list_lock);
+            break;
+        }
+        QSIMPLEQ_REMOVE_HEAD(&mis->private_fault_req_pending_list, next_req);
+	qemu_spin_unlock(&mis->req_pending_list_lock);
+
+        need_send = postcopy_add_pending_req_to_sent_list(req);
+        if (!need_send) {
+            continue;
+	}
+
+	ret = migrate_send_rp_message_req_pages(mis, req->rb,
+                                                req->offset, true);
+        if (ret) {
+            error_report("%s: ret=%d\n", __func__, ret);
+	    break;
+#if 0 // add retry later
+            /* May be network failure, try to wait for recovery */
+            postcopy_pause_fault_thread(mis);
+                goto retry;
+#endif
+        }
+    }
+
+    return ret;
+}
+
 /*
  * Handle faults detected by the USERFAULT markings
  */
@@ -981,6 +1073,8 @@ static void *postcopy_ram_fault_thread(void *opaque)
                 break;
             }
         }
+
+        postcopy_send_private_fault_page(mis);
 
         if (pfd[0].revents) {
             poll_result--;

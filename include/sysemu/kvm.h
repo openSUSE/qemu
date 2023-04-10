@@ -586,7 +586,8 @@ bool kvm_dirty_ring_enabled(void);
 uint32_t kvm_dirty_ring_size(void);
 
 int kvm_encrypt_reg_region(hwaddr start, hwaddr size, bool reg_region);
-int kvm_convert_memory(hwaddr start, hwaddr size, bool shared_to_private);
+int kvm_convert_memory(hwaddr start, hwaddr size,
+                       bool shared_to_private, int cpu_index);
 
 typedef void (*set_memory_region_debug_ops)(void *handle, MemoryRegion *mr);
 void kvm_setup_set_memory_region_debug_ops(struct KVMState *s,

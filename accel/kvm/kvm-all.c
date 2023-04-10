@@ -46,6 +46,8 @@
 #include "sysemu/hw_accel.h"
 #include "kvm-cpus.h"
 #include "sysemu/dirtylimit.h"
+#include "migration/migration.h"
+#include "migration/misc.h"
 
 #include "hw/boards.h"
 #include "monitor/stats.h"
@@ -2862,7 +2864,20 @@ int kvm_encrypt_reg_region(hwaddr start, hwaddr size, bool reg_region)
     return r;
 }
 
-int kvm_convert_memory(hwaddr start, hwaddr size, bool shared_to_private)
+static bool is_postcopy_private_fault(RAMBlock *rb, ram_addr_t offset,
+                                      bool shared_to_private)
+{
+    unsigned long bit = offset >> TARGET_PAGE_BITS;
+
+    if (!shared_to_private || !migration_in_incoming_postcopy()) {
+        return false;
+    }
+
+    return !test_bit(bit, rb->receivedmap);
+}
+
+int kvm_convert_memory(hwaddr start, hwaddr size,
+                       bool shared_to_private, int cpu_index)
 {
     MemoryRegionSection section;
     void *addr;
@@ -2877,18 +2892,25 @@ int kvm_convert_memory(hwaddr start, hwaddr size, bool shared_to_private)
     }
 
     if (memory_region_can_be_private(section.mr)) {
-        ret = kvm_encrypt_reg_region(start, size, shared_to_private);
-    
         addr = memory_region_get_ram_ptr(section.mr) +
                section.offset_within_region;
         rb = qemu_ram_block_from_host(addr, false, &offset);
-        /*
-         * With KVM_MEMORY_(UN)ENCRYPT_REG_REGION by kvm_encrypt_reg_region(),
-         * operation on underlying file descriptor is only for releasing
-         * unnecessary pages.
-         */
-        memory_region_convert_mem_attr(&section, !shared_to_private);
-        (void)ram_block_convert_range(rb, offset, size, shared_to_private);
+        if (is_postcopy_private_fault(rb, offset, shared_to_private)) {
+            assert(cpu_index != INT_MAX);
+            postcopy_add_private_fault_to_pending_list(rb, offset,
+                                                       start, cpu_index);
+            ret = kvm_encrypt_reg_region(start, size, shared_to_private);
+        } else {
+            ret = kvm_encrypt_reg_region(start, size, shared_to_private);
+
+            /*
+             * With KVM_MEMORY_(UN)ENCRYPT_REG_REGION by kvm_encrypt_reg_region(),
+             * operation on underlying file descriptor is only for releasing
+             * unnecessary pages.
+             */
+            memory_region_convert_mem_attr(&section, !shared_to_private);
+            (void)ram_block_convert_range(rb, offset, size, shared_to_private);
+        }
     } else {
         warn_report("Unknown start 0x%"HWADDR_PRIx" size 0x%"HWADDR_PRIx" shared_to_private %d",
                     start, size, shared_to_private);
@@ -3058,7 +3080,8 @@ int kvm_cpu_exec(CPUState *cpu)
             break;
         case KVM_EXIT_MEMORY_FAULT:
             ret = kvm_convert_memory(run->memory.gpa, run->memory.size,
-                                     run->memory.flags & KVM_MEMORY_EXIT_FLAG_PRIVATE);
+                                     run->memory.flags & KVM_MEMORY_EXIT_FLAG_PRIVATE,
+                                     cpu->cpu_index);
             break;
         default:
             DPRINTF("kvm_arch_handle_exit\n");

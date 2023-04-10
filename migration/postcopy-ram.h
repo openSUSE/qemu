@@ -183,6 +183,8 @@ int postcopy_wake_shared(struct PostCopyFD *pcfd, uint64_t client_addr,
 int postcopy_request_shared_page(struct PostCopyFD *pcfd, RAMBlock *rb,
                                  uint64_t client_addr, uint64_t offset);
 
+void postcopy_remove_from_sent_list(RAMBlock *rb, ram_addr_t offset, uint32_t channel);
+
 /* Hard-code channels for now for postcopy preemption */
 enum PostcopyChannels {
     RAM_CHANNEL_PRECOPY = 0,

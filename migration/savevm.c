@@ -50,6 +50,7 @@
 #include "qemu/error-report.h"
 #include "sysemu/cpus.h"
 #include "exec/memory.h"
+#include "exec/ramblock.h"
 #include "exec/target_page.h"
 #include "exec/confidential-guest-support.h"
 #include "trace.h"
@@ -68,6 +69,7 @@
 #include "net/announce.h"
 #include "qemu/yank.h"
 #include "yank_functions.h"
+#include "sysemu/kvm.h"
 
 const unsigned int postcopy_ram_discard_version;
 
@@ -1011,6 +1013,7 @@ int qemu_savevm_send_packaged(QEMUFile *f, const uint8_t *buf, size_t len)
     qemu_savevm_command_send(f, MIG_CMD_PACKAGED, 4, (uint8_t *)&tmp);
 
     qemu_put_buffer(f, buf, len);
+    qemu_fflush(f);
 
     return 0;
 }
@@ -1424,11 +1427,6 @@ int qemu_savevm_state_complete_precopy_non_iterable(QEMUFile *f,
         }
     }
 
-    ret = cgs_mig_savevm_state_end(f);
-    if (ret) {
-        return ret;
-    }
-
     if (!in_postcopy) {
         /* Postcopy stream will still be going */
         qemu_put_byte(f, QEMU_VM_EOF);
@@ -1447,8 +1445,34 @@ int qemu_savevm_state_complete_precopy_non_iterable(QEMUFile *f,
     return 0;
 }
 
+int qemu_savevm_state_prepare_postcopy(QEMUFile *f)
+{
+    SaveStateEntry *se;
+    int ret;
+
+    if (!migration_in_postcopy()) {
+        return -1;
+    }
+
+    QTAILQ_FOREACH(se, &savevm_state.handlers, entry) {
+        if (!se->ops || !se->ops->prepare_postcopy) {
+            continue;
+        }
+
+        save_section_header(f, se, QEMU_VM_SECTION_PART);
+        ret = se->ops->prepare_postcopy(f, se->opaque);
+        save_section_footer(f, se);
+	if (ret < 0) {
+            qemu_file_set_error(f, ret);
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
 int qemu_savevm_state_complete_precopy(QEMUFile *f, bool iterable_only,
-                                       bool inactivate_disks)
+                                       bool inactivate_disks, bool send_cgs)
 {
     int ret;
     Error *local_err = NULL;
@@ -1464,6 +1488,13 @@ int qemu_savevm_state_complete_precopy(QEMUFile *f, bool iterable_only,
 
     if (!in_postcopy || iterable_only) {
         ret = qemu_savevm_state_complete_precopy_iterable(f, in_postcopy);
+        if (ret) {
+            return ret;
+        }
+    }
+
+    if (send_cgs) {
+        ret = cgs_mig_savevm_state_end(f);
         if (ret) {
             return ret;
         }
@@ -1567,7 +1598,7 @@ static int qemu_savevm_state(QEMUFile *f, Error **errp)
 
     ret = qemu_file_get_error(f);
     if (ret == 0) {
-        qemu_savevm_state_complete_precopy(f, false, false);
+        qemu_savevm_state_complete_precopy(f, false, false, true);
         ret = qemu_file_get_error(f);
     }
     qemu_savevm_state_cleanup();
@@ -1592,7 +1623,7 @@ static int qemu_savevm_state(QEMUFile *f, Error **errp)
 void qemu_savevm_live_state(QEMUFile *f)
 {
     /* save QEMU_VM_SECTION_END section */
-    qemu_savevm_state_complete_precopy(f, true, false);
+    qemu_savevm_state_complete_precopy(f, true, false, true);
     qemu_put_byte(f, QEMU_VM_EOF);
 }
 
@@ -2068,7 +2099,8 @@ static gboolean postcopy_sync_page_req(gpointer key, gpointer value,
         return FALSE;
     }
 
-    ret = migrate_send_rp_message_req_pages(mis, rb, rb_offset);
+    /*TODO: check cgs_bmap for private/shared */
+    ret = migrate_send_rp_message_req_pages(mis, rb, rb_offset, false);
     if (ret) {
         /* Please refer to above comment. */
         error_report("%s: send rp message failed for addr %p",
@@ -2186,6 +2218,7 @@ static int loadvm_handle_cmd_packaged(MigrationIncomingState *mis)
     QEMUFile *packf = qemu_file_new_input(QIO_CHANNEL(bioc));
 
     ret = qemu_loadvm_state_main(packf, mis);
+
     trace_loadvm_handle_cmd_packaged_main(ret);
     qemu_fclose(packf);
     object_unref(OBJECT(bioc));
@@ -2670,7 +2703,7 @@ retry:
             break;
         case QEMU_VM_SECTION_CGS_START:
         case QEMU_VM_SECTION_CGS_END:
-            ret = cgs_mig_loadvm_state(f);
+            ret = cgs_mig_loadvm_state(f, 0);
             if (section_type == QEMU_VM_SECTION_CGS_END && !ret) {
                 machine = MACHINE(qdev_get_machine());
                 machine->cgs->ready = true;

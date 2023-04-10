@@ -1150,7 +1150,7 @@ int multifd_load_cleanup(Error **errp)
     return 0;
 }
 
-void multifd_recv_sync_main(void)
+void multifd_recv_barrier(void)
 {
     int i;
 
@@ -1162,6 +1162,15 @@ void multifd_recv_sync_main(void)
 
         trace_multifd_recv_sync_main_wait(p->id);
         qemu_sem_wait(&multifd_recv_state->sem_sync);
+    }
+}
+
+void multifd_recv_unbarrier(void)
+{
+    int i;
+
+    if (!migrate_use_multifd()) {
+        return;
     }
     for (i = 0; i < migrate_multifd_channels(); i++) {
         MultiFDRecvParams *p = &multifd_recv_state->params[i];
@@ -1175,6 +1184,12 @@ void multifd_recv_sync_main(void)
         qemu_sem_post(&p->sem_sync);
     }
     trace_multifd_recv_sync_main(multifd_recv_state->packet_num);
+}
+
+void multifd_recv_sync_main(void)
+{
+    multifd_recv_barrier();
+    multifd_recv_unbarrier();
 }
 
 static void *multifd_recv_thread(void *opaque)
