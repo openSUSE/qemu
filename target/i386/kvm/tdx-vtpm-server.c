@@ -441,41 +441,28 @@ static void tdx_vtpm_server_handle_trans_protocol(TdxVtpmServer *server,
 
 static void tdx_vtpm_server_handle_recv_data(TdxVtpmServer *server)
 {
-    TdxVtpmTransProtocolHead *head;
     QIOChannelSocket *ioc = server->parent.ioc;
+    int size;
     void *data;
     int read_size;
 
-    data = g_try_malloc(TDX_VTPM_TRANS_PROTOCOL_MAX_LEN);
-    if (!data) {
-        error_report("Out of memory");
-        return;
-    }
-
     read_size = qio_channel_read(QIO_CHANNEL(ioc),
-                                 data, TDX_VTPM_TRANS_PROTOCOL_MAX_LEN,
+                                 socket_recv_buffer_get_buf(&server->recv_buf),
+                                 socket_recv_buffer_get_free_size(&server->recv_buf),
                                  NULL);
     if (read_size <= 0) {
-        error_report("Read trans protocol fail: %d", read_size);
         /*
          * TODO: tdx_vtpm_server_client_disconnect() when change to
          *       STREAM socket.
          */
-        goto out;
+        return;
     }
 
-    head = data;
-    if (head->length > TDX_VTPM_TRANS_PROTOCOL_MAX_LEN) {
-        error_report("Exceed max len of trans protocol:%d", head->length);
-        exit(-1);
+    socket_recv_buffer_update_used_size(&server->recv_buf, read_size);
+    while (!socket_recv_buffer_next(&server->recv_buf, &data, &size)) {
+        /*handle the received trans protocol here*/
+        tdx_vtpm_server_handle_trans_protocol(server, data, size);
     }
-
-    /*handle the received trans protocol here*/
-    tdx_vtpm_server_handle_trans_protocol(server, data, read_size);
-
- out:
-    g_free(data);
-    return;
 }
 
 static void tdx_vtpm_socket_server_recv(void *opaque)
@@ -878,6 +865,8 @@ int tdx_vtpm_init_server(TdxVtpm *base, TdxVmcallService *vms,
     type->to = tdx_vtpm_vmcall_service_server_handler;
     type->vsi_size = sizeof(TdxVmcallServiceItem);
 
+    if (socket_recv_buffer_init(&server->recv_buf, 256))
+        return -1;
     return 0;
 }
 

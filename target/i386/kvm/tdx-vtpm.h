@@ -54,6 +54,7 @@ typedef struct TdxVtpmServer {
 
     QSIMPLEQ_HEAD(, TdxVtpmServerSessionDataIndex) session_data_index;
 
+    SocketRecvBuffer recv_buf;
 } TdxVtpmServer;
 
 int tdx_vtpm_init_server(TdxVtpm *base, TdxVmcallService *vms,
