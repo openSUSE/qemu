@@ -4042,7 +4042,7 @@ void ram_block_alloc_cgs_bitmap(RAMBlock *rb)
         return;
     }
 
-    rb->cgs_bmap = g_malloc0(rb->max_length);
+    rb->cgs_bmap = bitmap_new(rb->max_length >> TARGET_PAGE_BITS);
 }
 
 int ram_block_convert_range(RAMBlock *rb, uint64_t start, size_t length,
