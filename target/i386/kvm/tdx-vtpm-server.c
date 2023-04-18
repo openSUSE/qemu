@@ -31,9 +31,21 @@ typedef struct TdxVtpmServerClientDataEntry {
     QSIMPLEQ_ENTRY(TdxVtpmServerClientDataEntry) queue_entry;
 } TdxVtpmServerClientDataEntry;
 
+enum TdxVtpmServerClientSessionState
+{
+    VTPM_SERVER_CLIENT_SESSION_INIT,
+    VTPM_SERVER_CLIENT_SESSION_CONNECTING,
+    VTPM_SERVER_CLIENT_SESSION_READY,
+};
+
 typedef struct TdxVtpmServerClientSession {
+    uint32_t ref_count;
+
     TdUserId user_id;
     struct UnixSocketAddress client_addr;
+    QIOChannelSocket *ioc;
+    enum TdxVtpmServerClientSessionState state;
+    TdxVtpmServer *server;
 } TdxVtpmServerClientSession;
 
 typedef struct TdxVtpmServerPendingRequest {
@@ -66,6 +78,29 @@ struct g_hash_find_opaque {
 };
 
 static TdUserId null_user_id;
+
+static void tdx_vtpm_server_client_session_ref(TdxVtpmServerClientSession *session)
+{
+    uint32_t ref;
+
+    g_assert(session);
+    ref = qatomic_fetch_inc(&session->ref_count);
+    g_assert(ref < INT_MAX);
+}
+
+static void tdx_vtpm_server_client_session_unref(TdxVtpmServerClientSession *session)
+{
+    g_assert(session);
+    g_assert(session->ref_count > 0);
+    if (qatomic_fetch_dec(&session->ref_count) == 1) {
+        if (session->ioc) {
+
+            /* Unref for ref when session creation */
+            object_unref(OBJECT(session->ioc));
+        }
+        g_free(session);
+    }
+}
 
 static int tdx_vtpm_server_client_session_set_addr(TdxVtpmServerClientSession* session,
                                                     struct UnixSocketAddress *addr)
@@ -116,6 +151,25 @@ tdx_vtpm_server_create_client_session(TdxVtpmServer *server,
  fail_free:
     tdx_vtpm_server_destroy_client_session(server, new);
     return NULL;
+}
+
+static TdxVtpmServerClientSession*
+tdx_vtpm_server_create_client_session_v2(TdxVtpmServer *server,
+                                         QIOChannelSocket *ioc)
+{
+    TdxVtpmServerClientSession* new;
+
+    new = g_malloc0(sizeof(*new));
+    if (!new)
+        return NULL;
+
+    tdx_vtpm_server_client_session_ref(new);
+    object_ref(OBJECT(ioc));
+    new->ioc = ioc;
+    new->state = VTPM_SERVER_CLIENT_SESSION_INIT;
+    new->server = server;
+
+    return new;
 }
 
 static void
@@ -467,12 +521,19 @@ static void tdx_vtpm_server_handle_recv_data(TdxVtpmServer *server)
 
 static void tdx_vtpm_socket_server_recv(void *opaque)
 {
-    TdxVtpmServer *server = opaque;
+    TdxVtpmServerClientSession *session = opaque;
+    TdxVtpmServer *server  = session->server;
+
+    /*Disconnect immediately due to we haven't introduce new trans_protocol
+      for getting user id */
+    object_unref(OBJECT(session->ioc));
+    tdx_vtpm_server_client_session_unref(session);
+    printf("%s: Dropped connection due to new trans_protocol is not supported\n",
+           __func__);
+    return;
 
     qemu_mutex_lock(&server->lock);
-
     tdx_vtpm_server_handle_recv_data(server);
-
     qemu_mutex_unlock(&server->lock);
 }
 
@@ -832,9 +893,21 @@ static void tdx_vtpm_socket_server_accept(QIONetListener *listener,
                                           QIOChannelSocket *new_client_ioc,
                                           void *opaque)
 {
-    void *unused  __attribute__((unused)) = (void*)tdx_vtpm_socket_server_recv;
+    TdxVtpmServer *server = opaque;
+    TdxVtpmServerClientSession *new;
 
-    warn_report("New client dropped");
+    new = tdx_vtpm_server_create_client_session_v2(server, new_client_ioc);
+    if (!new) {
+        warn_report("Failed to create new client session, disconnected");
+        return;
+    }
+
+    /*ref for socket IO callback*/
+    object_ref(OBJECT(new_client_ioc));
+    qio_channel_set_blocking(QIO_CHANNEL(new_client_ioc), false, NULL);
+    qemu_set_fd_handler(new_client_ioc->fd,
+                        tdx_vtpm_socket_server_recv,
+                        NULL, new);
 }
 
 static void tdx_vtpm_socket_server_listen(QIOTask *task, gpointer opaque)
