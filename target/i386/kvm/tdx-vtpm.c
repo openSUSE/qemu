@@ -115,6 +115,27 @@ int tdx_vtpm_trans_send(QIOChannelSocket *socket_ioc,
     return ret;
 }
 
+int tdx_vtpm_trans_send_direct(QIOChannelSocket *socket_ioc,
+                               struct UnixSocketAddress *addr,
+                               TdxVtpmTransProtocolHead *head,
+                               uint32_t size)
+{
+    ssize_t ret;
+    QIOChannel *ioc;
+    Error *local_err;
+
+    head->length = size;
+    ioc = QIO_CHANNEL(socket_ioc);
+
+    /*TODO: Remove datagram supporting after STREAM support is done. */
+    if (socket_ioc->unix_datagram) {
+        qio_channel_socket_set_dgram_send_address(socket_ioc, addr);
+    }
+    ret = qio_channel_write_all(ioc, (const char*)head, size, &local_err);
+
+    return ret;
+}
+
 void tdx_guest_init_vtpm(TdxGuest *tdx)
 {
     TdxVmcallService *vms = &tdx->vmcall_service;

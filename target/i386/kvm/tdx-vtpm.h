@@ -147,7 +147,8 @@ typedef struct TdxVtpmRspReceiveMessage {
 } QEMU_PACKED TdxVtpmRspReceiveMessage;
 
 enum TdxVtpmTransProtocolType {
-    TDX_VTPM_TRANS_PROTOCOL_TYPE_DATA = 1,
+    TDX_VTPM_TRANS_PROTOCOL_TYPE_SYNC = 1,
+    TDX_VTPM_TRANS_PROTOCOL_TYPE_DATA,
 };
 
 typedef struct TdxVtpmTransProtocolHead {
@@ -170,9 +171,26 @@ typedef struct TdxVtpmTransProtocolData {
 #define trans_protocol_data_payload_size(item) \
     ((item)->head.length - sizeof(TdxVtpmTransProtocolData))
 
+enum TdxVtpmClientType {
+    TDX_VTPM_CLIENT_TYTE_INVALID,
+    TDX_VTPM_CLIENT_TYPE_USER,
+};
+
+typedef struct TdxVtpmTransProtocolSync {
+    TdxVtpmTransProtocolHead head;
+
+    /*payload*/
+    uint8_t client_type;
+    uint8_t user_id[16];
+} QEMU_PACKED TdxVtpmTransProtocolSync;
+
 int tdx_vtpm_trans_send(QIOChannelSocket *socket_ioc,
                         struct UnixSocketAddress *addr,
                         TdxVtpmTransProtocolHead *head,
                         struct iovec *iovec, int iovec_count);
 
+int tdx_vtpm_trans_send_direct(QIOChannelSocket *socket_ioc,
+                               struct UnixSocketAddress *addr,
+                               TdxVtpmTransProtocolHead *head,
+                               uint32_t size);
 #endif

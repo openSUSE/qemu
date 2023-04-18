@@ -455,6 +455,18 @@ static void tdx_vtpm_socket_client_recv(void *opaque)
     qemu_mutex_unlock(&client->lock);
 }
 
+static int tdx_vtpm_client_send_sync(TdxVtpmClient *client)
+{
+    TdxVtpmTransProtocolSync sync;
+
+    sync.head = tdx_vtpm_init_trans_protocol_head(TDX_VTPM_TRANS_PROTOCOL_TYPE_SYNC);
+    sync.client_type = TDX_VTPM_CLIENT_TYPE_USER;
+    memcpy(sync.user_id, client->user_id, sizeof(sync.user_id));
+
+    return tdx_vtpm_trans_send_direct(client->parent.ioc, NULL,
+                                      &sync.head, sizeof(sync));
+}
+
 static void tdx_vtpm_client_connected(QIOTask *task, gpointer opaque)
 {
     TdxVtpmClient *client = opaque;
@@ -473,6 +485,12 @@ static void tdx_vtpm_client_connected(QIOTask *task, gpointer opaque)
     qemu_set_fd_handler(client->parent.ioc->fd,
                         tdx_vtpm_socket_client_recv,
                         NULL, client);
+
+    ret = tdx_vtpm_client_send_sync(client);
+    if (ret) {
+        warn_report("Failed to send SYNC message to vTPM Server, connection closed");
+        object_unref(client->parent.ioc);
+    }
 }
 
 static QIOChannelSocket *tdx_vtpm_client_setup_communication(TdxVtpmClient *client,
