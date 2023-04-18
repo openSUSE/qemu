@@ -23,6 +23,7 @@ int socket_recv_buffer_next(SocketRecvBuffer *srb, void **data, int *size);
 void* socket_recv_buffer_get_buf(SocketRecvBuffer *srb);
 int socket_recv_buffer_get_free_size(SocketRecvBuffer *srb);
 void socket_recv_buffer_update_used_size(SocketRecvBuffer *srb, int new_used_size);
+void socket_recv_buffer_deinit(SocketRecvBuffer *srb);
 
 typedef unsigned char TdUserId[16];
 typedef struct TdxVtpm {

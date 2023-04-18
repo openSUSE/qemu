@@ -256,3 +256,10 @@ void socket_recv_buffer_update_used_size(SocketRecvBuffer *srb, int new_used_siz
 {
     srb->used_size += new_used_size;
 }
+
+void socket_recv_buffer_deinit(SocketRecvBuffer *srb)
+{
+    if (srb) {
+        g_free(srb->buf);
+    }
+}

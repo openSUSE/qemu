@@ -46,6 +46,8 @@ typedef struct TdxVtpmServerClientSession {
     QIOChannelSocket *ioc;
     enum TdxVtpmServerClientSessionState state;
     TdxVtpmServer *server;
+
+    SocketRecvBuffer recv_buf;
 } TdxVtpmServerClientSession;
 
 typedef struct TdxVtpmServerPendingRequest {
@@ -97,6 +99,7 @@ static void tdx_vtpm_server_client_session_unref(TdxVtpmServerClientSession *ses
 
             /* Unref for ref when session creation */
             object_unref(OBJECT(session->ioc));
+            socket_recv_buffer_deinit(&session->recv_buf);
         }
         g_free(session);
     }
@@ -162,6 +165,11 @@ tdx_vtpm_server_create_client_session_v2(TdxVtpmServer *server,
     new = g_malloc0(sizeof(*new));
     if (!new)
         return NULL;
+
+    if (socket_recv_buffer_init(&new->recv_buf, 256)) {
+        g_free(new);
+        return NULL;
+    }
 
     tdx_vtpm_server_client_session_ref(new);
     object_ref(OBJECT(ioc));
@@ -420,16 +428,18 @@ tdx_vtpm_client_session_data_index_remove(TdxVtpmServer *server,
     g_free(node);
 }
 
-static void tdx_vtpm_server_handle_trans_protocol_data(TdxVtpmServer *server,
+static void tdx_vtpm_server_handle_trans_protocol_data(TdxVtpmServerClientSession *session,
                                                        void *buf, int size)
 {
     TdxVtpmTransProtocolData *data = buf;
     TdUserId *user_id = (TdUserId*)data->user_id;
-    TdxVtpmServerClientSession *session;
+    TdxVtpmServer *server = session->server;
     TdxVtpmServerClientDataEntry entry;
     struct UnixSocketAddress addr;
     char path[PATH_MAX];
     int ret;
+
+    qemu_mutex_lock(&server->lock);
 
     addr.path = path;
     qio_channel_socket_get_dgram_recv_address(server->parent.ioc, &addr);
@@ -477,7 +487,45 @@ static void tdx_vtpm_server_handle_trans_protocol_data(TdxVtpmServer *server,
     return;
 }
 
-static void tdx_vtpm_server_handle_trans_protocol(TdxVtpmServer *server,
+static void tdx_vtpm_server_client_disconnect(TdxVtpmServerClientSession *session);
+static void tdx_vtpm_server_handle_trans_protocol_sync(TdxVtpmServerClientSession *session,
+                                                       void *buf, int size)
+{
+    TdxVtpmTransProtocolSync *sync = buf;
+    TdxVtpmServerClientSession *exist;
+    TdxVtpmServer *server = session->server;
+    int ret;
+
+    if (sync->client_type != TDX_VTPM_CLIENT_TYPE_USER) {
+        warn_report("Unknow vtpm client type:%d, disconnected", sync->client_type);
+        tdx_vtpm_server_client_disconnect(session);
+        return;
+    }
+
+    qemu_mutex_lock(&server->lock);
+
+    exist = g_hash_table_lookup(server->client_session, sync->user_id);
+    if (!exist) {
+        /*Ref for add into client_session*/
+        tdx_vtpm_server_client_session_ref(session);
+        ret = g_hash_table_insert(server->client_session, sync->user_id,
+                                  session);
+        if (!ret) {
+            error_report("Failed to insert client session, disconnected");
+            tdx_vtpm_server_client_session_unref(session);
+            tdx_vtpm_server_client_disconnect(session);
+        }
+
+    } else {
+        /*TODO: Handle kick off here*/
+        g_assert(true);
+    }
+
+    qemu_mutex_unlock(&server->lock);
+    return;
+}
+
+static void tdx_vtpm_server_handle_trans_protocol(TdxVtpmServerClientSession *session,
                                                   void *buf, int size)
 {
     TdxVtpmTransProtocolHead *head = buf;
@@ -485,56 +533,45 @@ static void tdx_vtpm_server_handle_trans_protocol(TdxVtpmServer *server,
     switch(head->type) {
     case TDX_VTPM_TRANS_PROTOCOL_TYPE_DATA:
         VMCALL_DEBUG("<Socket.WaitForRequest> BEGIN\n");
-        tdx_vtpm_server_handle_trans_protocol_data(server, buf, size);
+        tdx_vtpm_server_handle_trans_protocol_data(session, buf, size);
         VMCALL_DEBUG("<Socket.WaitForRequest> END\n");
+        break;
+    case TDX_VTPM_TRANS_PROTOCOL_TYPE_SYNC:
+        tdx_vtpm_server_handle_trans_protocol_sync(session, buf, size);
         break;
     default:
         error_report("Not implemented trans protocol type: %d", head->type);
     }
 }
 
-static void tdx_vtpm_server_handle_recv_data(TdxVtpmServer *server)
+static void tdx_vtpm_server_handle_recv_data(TdxVtpmServerClientSession *session)
 {
-    QIOChannelSocket *ioc = server->parent.ioc;
+    QIOChannelSocket *ioc = session->ioc;
     int size;
     void *data;
     int read_size;
 
     read_size = qio_channel_read(QIO_CHANNEL(ioc),
-                                 socket_recv_buffer_get_buf(&server->recv_buf),
-                                 socket_recv_buffer_get_free_size(&server->recv_buf),
+                                 socket_recv_buffer_get_buf(&session->recv_buf),
+                                 socket_recv_buffer_get_free_size(&session->recv_buf),
                                  NULL);
     if (read_size <= 0) {
-        /*
-         * TODO: tdx_vtpm_server_client_disconnect() when change to
-         *       STREAM socket.
-         */
+        tdx_vtpm_server_client_disconnect(session);
         return;
     }
 
-    socket_recv_buffer_update_used_size(&server->recv_buf, read_size);
-    while (!socket_recv_buffer_next(&server->recv_buf, &data, &size)) {
+    socket_recv_buffer_update_used_size(&session->recv_buf, read_size);
+    while (!socket_recv_buffer_next(&session->recv_buf, &data, &size)) {
         /*handle the received trans protocol here*/
-        tdx_vtpm_server_handle_trans_protocol(server, data, size);
+        tdx_vtpm_server_handle_trans_protocol(session, data, size);
     }
 }
 
 static void tdx_vtpm_socket_server_recv(void *opaque)
 {
     TdxVtpmServerClientSession *session = opaque;
-    TdxVtpmServer *server  = session->server;
 
-    /*Disconnect immediately due to we haven't introduce new trans_protocol
-      for getting user id */
-    object_unref(OBJECT(session->ioc));
-    tdx_vtpm_server_client_session_unref(session);
-    printf("%s: Dropped connection due to new trans_protocol is not supported\n",
-           __func__);
-    return;
-
-    qemu_mutex_lock(&server->lock);
-    tdx_vtpm_server_handle_recv_data(server);
-    qemu_mutex_unlock(&server->lock);
+    tdx_vtpm_server_handle_recv_data(session);
 }
 
 static void tdx_vtpm_server_wait_for_request_timeout_handler(TdxVmcallServiceItem *vsi,
@@ -773,10 +810,15 @@ static void tdx_vtpm_server_prepare_rsp_report_status(TdxVmcallServiceItem *vsi)
     memset(rsp->reserved, 0, sizeof(rsp->reserved));
 }
 
-static void tdx_vtpm_server_client_disconnect(TdxVtpmServer *server,
-                                              TdxVtpmServerClientSession *session)
+static void tdx_vtpm_server_client_disconnect(TdxVtpmServerClientSession *session)
 {
-    tdx_vtpm_server_destroy_client_session(server, session);
+    /*TODO: disconnection handle not completed, so let's assert always here*/
+    g_assert(true);
+
+    tdx_vtpm_server_client_session_unref(session);
+
+
+    // tdx_vtpm_server_destroy_client_session(session->server, session);
 }
 
 static void tdx_vtpm_server_manage_instance_complete(TdxVtpmServer *server,
@@ -810,7 +852,7 @@ static void tdx_vtpm_server_handle_report_status(TdxVtpmServer *server, TdxVmcal
                                               cmd->status,
                                               cmd->data,
                                               tdx_vtpm_cmd_report_status_payload_size(size))) {
-            tdx_vtpm_server_client_disconnect(server, session);
+            tdx_vtpm_server_client_disconnect(session);
             ret = TDG_VP_VMCALL_SERVICE_DEVICE_ERROR;
         }
     }
