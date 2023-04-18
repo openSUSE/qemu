@@ -828,17 +828,76 @@ static gboolean g_hash_equal(gconstpointer a, gconstpointer b)
     return td_user_id_equal(a, b);
 }
 
+static void tdx_vtpm_socket_server_accept(QIONetListener *listener,
+                                          QIOChannelSocket *new_client_ioc,
+                                          void *opaque)
+{
+    void *unused  __attribute__((unused)) = (void*)tdx_vtpm_socket_server_recv;
+
+    warn_report("New client dropped");
+}
+
+static void tdx_vtpm_socket_server_listen(QIOTask *task, gpointer opaque)
+{
+    TdxVtpmServer *server = opaque;
+
+    server->listener_ioc = qio_net_listener_new();
+    if (!server->listener_ioc) {
+        error_report("Failed to create listener object, stop accept client.");
+        return;
+    }
+
+    qio_net_listener_set_client_func(server->listener_ioc,
+                                     tdx_vtpm_socket_server_accept, server,
+                                     NULL);
+    qio_net_listener_add(server->listener_ioc, server->parent.ioc);
+}
+
+static QIOChannelSocket *tdx_vtpm_server_setup_communication(TdxVtpmServer *server,
+                                                             const char *remote_addr)
+{
+    SocketAddress *addr;
+    Error *local_err;
+    QIOChannelSocket *ioc;
+
+    addr = socket_parse(remote_addr, &local_err);
+    if (!addr)
+        return NULL;
+
+    ioc = qio_channel_socket_new();
+    if (!ioc)
+        goto free_addr;
+
+    server->parent.ioc = ioc;
+    qio_channel_socket_listen_async(ioc, addr, 10,
+                                    tdx_vtpm_socket_server_listen,
+                                    server, NULL, NULL);
+    qapi_free_SocketAddress(addr);
+    return ioc;
+
+ free_addr:
+    qapi_free_SocketAddress(addr);
+    return NULL;
+}
+
 int tdx_vtpm_init_server(TdxVtpm *base, TdxVmcallService *vms,
                          TdxGuest *tdx, TdxVmcallServiceType *type)
 {
     int ret;
+    QIOChannelSocket *ioc;
     TdxVtpmServer *server = container_of(base,
                                          TdxVtpmServer, parent);
 
-    ret = tdx_vtpm_init_base(base, tdx, vms->vtpm_path,
-                             tdx_vtpm_socket_server_recv, server);
-    if (ret)
+    ioc = tdx_vtpm_server_setup_communication(server, vms->vtpm_path);
+    if (!ioc) {
+        error_report("Failed to bind on %s for vTPM Server.", vms->vtpm_path);
+        return -1;
+    }
+
+    ret = tdx_vtpm_init_base2(base, ioc, tdx);
+    if (ret) {
         return ret;
+    }
 
     server->client_session = g_hash_table_new_full(g_uuid_hash, g_hash_equal,
                                                    NULL, NULL);

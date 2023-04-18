@@ -63,6 +63,15 @@ int tdx_vtpm_init_base(TdxVtpm *base, TdxGuest *tdx,
     return 0;
 }
 
+int tdx_vtpm_init_base2(TdxVtpm *base, QIOChannelSocket *ioc, TdxGuest *tdx)
+{
+    base->ioc = ioc;
+    base->tdx = tdx;
+
+    return 0;
+}
+
+
 TdxVtpmTransProtocolHead
 tdx_vtpm_init_trans_protocol_head(uint8_t type)
 {

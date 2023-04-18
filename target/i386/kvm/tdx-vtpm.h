@@ -9,6 +9,7 @@
 #include "qemu/osdep.h"
 #include "sysemu/sysemu.h"
 #include "qemu/uuid.h"
+#include "io/net-listener.h"
 
 typedef struct SocketRecvBuffer {
     void *buf;
@@ -33,6 +34,7 @@ QIOChannelSocket* tdx_vtpm_setup_communication(const char *local_addr);
 int tdx_vtpm_init_base(TdxVtpm *base, TdxGuest *tdx,
                        const char* local_addr,
                        IOHandler *read, void *read_opaque);
+int tdx_vtpm_init_base2(TdxVtpm *base, QIOChannelSocket *ioc, TdxGuest *tdx);
 
 struct TdxVtpmServerPendingRequest;
 struct TdxVtpmServerPendingManageRequest;
@@ -55,6 +57,7 @@ typedef struct TdxVtpmServer {
     QSIMPLEQ_HEAD(, TdxVtpmServerSessionDataIndex) session_data_index;
 
     SocketRecvBuffer recv_buf;
+    QIONetListener *listener_ioc;
 } TdxVtpmServer;
 
 int tdx_vtpm_init_server(TdxVtpm *base, TdxVmcallService *vms,
