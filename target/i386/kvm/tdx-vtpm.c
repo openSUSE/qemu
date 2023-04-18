@@ -117,7 +117,6 @@ int tdx_vtpm_trans_send(QIOChannelSocket *socket_ioc,
     new_pack->length = length;
 
     ioc = QIO_CHANNEL(socket_ioc);
-
     /*TODO: Remove datagram supporting after STREAM support is done. */
     if (socket_ioc->unix_datagram) {
         qio_channel_socket_set_dgram_send_address(socket_ioc, addr);
