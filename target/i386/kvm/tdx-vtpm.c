@@ -171,3 +171,81 @@ void tdx_guest_init_vtpm(TdxGuest *tdx)
  free:
     g_free(instance);
 }
+
+int socket_recv_buffer_init(SocketRecvBuffer *srb, int init_size)
+{
+    if (!srb)
+        return -1;
+
+    srb->buf = g_try_malloc(init_size);
+    if (!srb->buf)
+        return -1;
+
+    srb->size = init_size;
+    srb->used_size = 0;
+    srb->update_buf = false;
+    return 0;
+}
+
+int socket_recv_buffer_next(SocketRecvBuffer *srb,
+                            void **data, int *size)
+{
+    TdxVtpmTransProtocolHead *head;
+
+    if (!srb)
+        return -1;
+
+    if (!srb->buf)
+        return -1;
+
+    if (!srb->used_size)
+        return 1;
+
+    head = srb->buf;
+    if (srb->update_buf) {
+        int remain_size;
+
+        remain_size = srb->used_size - head->length;
+        memcpy(srb->buf, srb->buf + head->length, remain_size);
+        srb->used_size = remain_size;
+        srb->update_buf = false;
+    }
+
+    if (srb->used_size <= sizeof(*head))
+        return 1;
+
+    if (head->length > srb->size) {
+        srb->buf = g_realloc(srb->buf,
+                             head->length);
+        if (!srb->buf) {
+            error_report("No enough memory, data dropped");
+            return -1;
+        }
+        srb->size = head->length;
+        return 1;
+    }
+
+    if (head->length > srb->used_size) {
+        return 1;
+    }
+
+    *data = srb->buf;
+    *size = head->length;
+    srb->update_buf = true;
+    return 0;
+}
+
+void* socket_recv_buffer_get_buf(SocketRecvBuffer *srb)
+{
+    return srb->buf + srb->used_size;
+}
+
+int socket_recv_buffer_get_free_size(SocketRecvBuffer *srb)
+{
+    return srb->size - srb->used_size;
+}
+
+void socket_recv_buffer_update_used_size(SocketRecvBuffer *srb, int new_used_size)
+{
+    srb->used_size += new_used_size;
+}

@@ -10,6 +10,19 @@
 #include "sysemu/sysemu.h"
 #include "qemu/uuid.h"
 
+typedef struct SocketRecvBuffer {
+    void *buf;
+    int size;
+    int used_size;
+    bool update_buf;
+} SocketRecvBuffer;
+
+int socket_recv_buffer_init(SocketRecvBuffer *srb, int init_size);
+int socket_recv_buffer_next(SocketRecvBuffer *srb, void **data, int *size);
+void* socket_recv_buffer_get_buf(SocketRecvBuffer *srb);
+int socket_recv_buffer_get_free_size(SocketRecvBuffer *srb);
+void socket_recv_buffer_update_used_size(SocketRecvBuffer *srb, int new_used_size);
+
 typedef unsigned char TdUserId[16];
 typedef struct TdxVtpm {
     TdxGuest *tdx;
