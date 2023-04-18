@@ -72,6 +72,8 @@ typedef struct TdxVtpmClient {
 
     QSIMPLEQ_HEAD(, TdxVtpmClientDataEntry) data_queue;
     QLIST_HEAD(, TdxVtpmClientPendingRequest) request_list;
+
+    SocketRecvBuffer recv_buf;
 } TdxVtpmClient;
 
 int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,
@@ -143,8 +145,6 @@ typedef struct TdxVtpmRspReceiveMessage {
     unsigned char reserved;
     unsigned char data[0];
 } QEMU_PACKED TdxVtpmRspReceiveMessage;
-
-#define TDX_VTPM_TRANS_PROTOCOL_MAX_LEN (16 * 1024)
 
 enum TdxVtpmTransProtocolType {
     TDX_VTPM_TRANS_PROTOCOL_TYPE_DATA = 1,

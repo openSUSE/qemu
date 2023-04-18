@@ -420,34 +420,24 @@ static void tdx_vtpm_client_handle_trans_protocol(TdxVtpmClient *client,
 
 static void tdx_vtpm_client_handle_recv_data(TdxVtpmClient *client)
 {
-    TdxVtpmTransProtocolHead *head;
     QIOChannelSocket *ioc = client->parent.ioc;
+    int size;
     void *data;
     int read_size;
 
-    data = g_try_malloc(TDX_VTPM_TRANS_PROTOCOL_MAX_LEN);
-    if (!data) {
-        error_report("Out of memory");
-        return;
-    }
-
     read_size = qio_channel_read(QIO_CHANNEL(ioc),
-                                 data, TDX_VTPM_TRANS_PROTOCOL_MAX_LEN,
+                                 socket_recv_buffer_get_buf(&client->recv_buf),
+                                 socket_recv_buffer_get_free_size(&client->recv_buf),
                                  NULL);
     if (read_size <= 0) {
         error_report("Read trans protocol failed: %d", read_size);
-        goto out;
+        return;
     }
 
-    head = data;
-    if (head->length > TDX_VTPM_TRANS_PROTOCOL_MAX_LEN) {
-        error_report("Exceed max len of trans protocol:%d", head->length);
-        exit(-1);
+    socket_recv_buffer_update_used_size(&client->recv_buf, read_size);
+    while (!socket_recv_buffer_next(&client->recv_buf, &data, &size)) {
+        tdx_vtpm_client_handle_trans_protocol(client, data, size);
     }
-
-    tdx_vtpm_client_handle_trans_protocol(client, data, read_size);
- out:
-    g_free(data);
 }
 
 static void tdx_vtpm_socket_client_recv(void *opaque)
@@ -500,6 +490,9 @@ int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,
                              tdx_vtpm_socket_client_recv,
                              client);
     if (ret)
+        goto free;
+
+    if (socket_recv_buffer_init(&client->recv_buf, 256))
         goto free;
 
     qemu_uuid_parse(VTPM_USER_GUID, &type->from);
