@@ -444,11 +444,63 @@ static void tdx_vtpm_socket_client_recv(void *opaque)
 {
     TdxVtpmClient *client = opaque;
 
+    printf("%s: Close connection\n", __func__);
+    object_unref(OBJECT(client->parent.ioc));
+    return;
+
     qemu_mutex_lock(&client->lock);
 
     tdx_vtpm_client_handle_recv_data(client);
 
     qemu_mutex_unlock(&client->lock);
+}
+
+static void tdx_vtpm_client_connected(QIOTask *task, gpointer opaque)
+{
+    TdxVtpmClient *client = opaque;
+    int ret;
+
+    ret = qio_task_propagate_error(task, NULL);
+    if (ret) {
+        warn_report("Failed to connect vTPM Server");
+        object_unref(client->parent.ioc);
+        return;
+    }
+
+    /* Do NOT need ref client->parent.ioc again for IO callback,
+       because qio_channel_socket_connect_async() already did thid before */
+    qio_channel_set_blocking(QIO_CHANNEL(client->parent.ioc), false, NULL);
+    qemu_set_fd_handler(client->parent.ioc->fd,
+                        tdx_vtpm_socket_client_recv,
+                        NULL, client);
+}
+
+static QIOChannelSocket *tdx_vtpm_client_setup_communication(TdxVtpmClient *client,
+                                                             const char *remote_addr)
+{
+    SocketAddress *addr;
+    Error *local_err;
+    QIOChannelSocket *ioc;
+
+    addr = socket_parse(remote_addr, &local_err);
+    if (!addr)
+        return NULL;
+
+    ioc = qio_channel_socket_new();
+    if (!ioc)
+        goto free_addr;
+
+    client->parent.ioc = ioc;
+    /* qio_channel_socket_connect_async refs ioc */
+    qio_channel_socket_connect_async(ioc, addr, tdx_vtpm_client_connected,
+                                     client, NULL, NULL);
+
+    qapi_free_SocketAddress(addr);
+    return ioc;
+
+ free_addr:
+    qapi_free_SocketAddress(addr);
+    return NULL;
 }
 
 int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,
@@ -460,6 +512,7 @@ int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,
                                          TdxVtpmClient, parent);
     QemuUUID uuid;
     bool is_uuid = false;
+    QIOChannelSocket *ioc;
 
     if (!qemu_uuid_parse(vms->vtpm_userid, &uuid)) {
         is_uuid = true;
@@ -486,9 +539,13 @@ int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,
         uuid = qemu_uuid_bswap(uuid);
         memcpy(client->user_id, &uuid, sizeof(client->user_id));
     }
-    ret = tdx_vtpm_init_base(base, tdx, local_addr,
-                             tdx_vtpm_socket_client_recv,
-                             client);
+
+    ioc = tdx_vtpm_client_setup_communication(client, vms->vtpm_path);
+    if (!ioc) {
+        goto free;
+    }
+
+    ret = tdx_vtpm_init_base2(base, ioc, tdx);
     if (ret)
         goto free;
 
