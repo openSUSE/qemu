@@ -61,6 +61,13 @@ typedef struct TdxVtpmServer {
 int tdx_vtpm_init_server(TdxVtpm *base, TdxVmcallService *vms,
                          TdxGuest *tdx, TdxVmcallServiceType *type);
 
+enum TdxVtpmClientState {
+    TDX_VTPM_CLIENT_STATE_INIT,
+    TDX_VTPM_CLIENT_STATE_CONNECTING,
+    TDX_VTPM_CLIENT_STATE_DISCONNECTED,
+    TDX_VTPM_CLIENT_STATE_CONNECTED,
+};
+
 struct TdxVtpmClientDataEntry;
 struct TdxVtpmClientPendingRequest;
 typedef struct TdxVtpmClient {
@@ -75,6 +82,7 @@ typedef struct TdxVtpmClient {
     QLIST_HEAD(, TdxVtpmClientPendingRequest) request_list;
 
     SocketRecvBuffer recv_buf;
+    enum TdxVtpmClientState state;
 } TdxVtpmClient;
 
 int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,

@@ -343,6 +343,13 @@ static void tdx_vtpm_vmcall_service_handle_command(TdxVtpmClient *vtpm_client,
         return;
     }
 
+    if (vtpm_client->state != TDX_VTPM_CLIENT_STATE_CONNECTED) {
+        tdx_vmcall_service_set_response_state(vsi,
+                                              TDG_VP_VMCALL_SERVICE_DEVICE_ERROR);
+        tdx_vmcall_service_complete_request(vsi);
+        return;
+    }
+
     switch (cmd_head->command) {
     case TDX_VTPM_SEND_MESSAGE:
         tdx_vtpm_handle_send_message(vtpm_client, vsi);
@@ -418,6 +425,19 @@ static void tdx_vtpm_client_handle_trans_protocol(TdxVtpmClient *client,
     }
 }
 
+static void tdx_vtpm_client_disconnected(TdxVtpmClient *client)
+{
+    if (client->state == TDX_VTPM_CLIENT_STATE_DISCONNECTED) {
+        return;
+    }
+
+    if (client->parent.ioc) {
+        object_unref(client->parent.ioc);
+    }
+
+    client->state = TDX_VTPM_CLIENT_STATE_DISCONNECTED;
+}
+
 static void tdx_vtpm_client_handle_recv_data(TdxVtpmClient *client)
 {
     QIOChannelSocket *ioc = client->parent.ioc;
@@ -431,6 +451,7 @@ static void tdx_vtpm_client_handle_recv_data(TdxVtpmClient *client)
                                  NULL);
     if (read_size <= 0) {
         error_report("Read trans protocol failed: %d", read_size);
+        tdx_vtpm_client_disconnected(client);
         return;
     }
 
@@ -443,10 +464,6 @@ static void tdx_vtpm_client_handle_recv_data(TdxVtpmClient *client)
 static void tdx_vtpm_socket_client_recv(void *opaque)
 {
     TdxVtpmClient *client = opaque;
-
-    printf("%s: Close connection\n", __func__);
-    object_unref(OBJECT(client->parent.ioc));
-    return;
 
     qemu_mutex_lock(&client->lock);
 
@@ -475,7 +492,7 @@ static void tdx_vtpm_client_connected(QIOTask *task, gpointer opaque)
     ret = qio_task_propagate_error(task, NULL);
     if (ret) {
         warn_report("Failed to connect vTPM Server");
-        object_unref(client->parent.ioc);
+        tdx_vtpm_client_disconnected(client);
         return;
     }
 
@@ -487,9 +504,11 @@ static void tdx_vtpm_client_connected(QIOTask *task, gpointer opaque)
                         NULL, client);
 
     ret = tdx_vtpm_client_send_sync(client);
-    if (ret) {
+    if (!ret) {
+        client->state = TDX_VTPM_CLIENT_STATE_CONNECTED;
+    } else {
         warn_report("Failed to send SYNC message to vTPM Server, connection closed");
-        object_unref(client->parent.ioc);
+        tdx_vtpm_client_disconnected(client);
     }
 }
 
@@ -508,6 +527,7 @@ static QIOChannelSocket *tdx_vtpm_client_setup_communication(TdxVtpmClient *clie
     if (!ioc)
         goto free_addr;
 
+    client->state = TDX_VTPM_CLIENT_STATE_CONNECTING;
     client->parent.ioc = ioc;
     /* qio_channel_socket_connect_async refs ioc */
     qio_channel_socket_connect_async(ioc, addr, tdx_vtpm_client_connected,
