@@ -34,7 +34,7 @@ typedef struct TdxVtpmServerClientDataEntry {
 enum TdxVtpmServerClientSessionState
 {
     VTPM_SERVER_CLIENT_SESSION_INIT,
-    VTPM_SERVER_CLIENT_SESSION_CONNECTING,
+    VTPM_SERVER_CLIENT_SESSION_WAIT_SYNC,
     VTPM_SERVER_CLIENT_SESSION_READY,
 };
 
@@ -105,60 +105,12 @@ static void tdx_vtpm_server_client_session_unref(TdxVtpmServerClientSession *ses
     }
 }
 
-static int tdx_vtpm_server_client_session_set_addr(TdxVtpmServerClientSession* session,
-                                                    struct UnixSocketAddress *addr)
-{
-    if (!g_strcmp0(session->client_addr.path, addr->path))
-        return 0;
-
-    g_free(session->client_addr.path);
-    session->client_addr = *addr;
-    session->client_addr.path = g_strdup(addr->path);
-    if (addr->path && !session->client_addr.path)
-        return -1;
-    return 0;
-}
-
 static int tdx_vtpm_client_session_data_queue_add(TdxVtpmServer *server,
                                                   TdUserId* user_id,
                                                   TdxVtpmServerClientDataEntry *entry);
-static void tdx_vtpm_server_destroy_client_session(TdxVtpmServer *server,
-                                                   TdxVtpmServerClientSession *session);
-static TdxVtpmServerClientSession*
-tdx_vtpm_server_create_client_session(TdxVtpmServer *server,
-                                      TdUserId *user_id,
-                                      struct UnixSocketAddress *addr)
-{
-    TdxVtpmServerClientSession* new;
-    int ret;
-
-    new = g_malloc0(sizeof(*new));
-    if (!new)
-        return NULL;
-
-    memcpy(new->user_id, user_id, sizeof(new->user_id));
-    if (tdx_vtpm_server_client_session_set_addr(new, addr)) {
-        g_free(new);
-        return NULL;
-    }
-
-    ret = g_hash_table_insert(server->client_session,
-                              &new->user_id, new);
-    if (!ret) {
-        error_report("Failed to insert client session");
-        goto fail_free;
-    }
-
-    return new;
-
- fail_free:
-    tdx_vtpm_server_destroy_client_session(server, new);
-    return NULL;
-}
 
 static TdxVtpmServerClientSession*
-tdx_vtpm_server_create_client_session_v2(TdxVtpmServer *server,
-                                         QIOChannelSocket *ioc)
+tdx_vtpm_server_create_client_session(TdxVtpmServer *server, QIOChannelSocket *ioc)
 {
     TdxVtpmServerClientSession* new;
 
@@ -251,19 +203,30 @@ tdx_vtpm_client_session_get_data_node(TdxVtpmServer *server,
 static void tdx_vtpm_server_destroy_client_session(TdxVtpmServer *server,
                                                    TdxVtpmServerClientSession *session)
 {
-    TdUserId user_id;
-    TdxVtpmServerClientSessionDataNode *data_node;
+    qemu_mutex_lock(&server->lock);
 
-    memcpy(&user_id, &session->user_id, sizeof(user_id));
-    g_hash_table_remove(server->client_session, &user_id);
-    data_node = tdx_vtpm_client_session_get_data_node(server,
-                                                      &user_id, false);
-    if (data_node)
-        tdx_vtpm_client_session_remove_data_node_entry(data_node);
-    tdx_vtpm_client_session_remove_data_node(server, &user_id);
+    if (session->state == VTPM_SERVER_CLIENT_SESSION_READY) {
+        TdxVtpmServerClientSessionDataNode *data_node;
 
-    g_free(session->client_addr.path);
-    g_free(session);
+        data_node = tdx_vtpm_client_session_get_data_node(server,
+                                                          &session->user_id, false);
+        if (data_node) {
+            tdx_vtpm_client_session_remove_data_node_entry(data_node);
+        }
+        tdx_vtpm_client_session_remove_data_node(server, &session->user_id);
+
+        g_hash_table_remove(server->client_session, &session->user_id);
+        /*unref the ref for insert to client_session*/
+        tdx_vtpm_server_client_session_unref(session);
+    }
+
+    /*unref the ref for IO socket callback*/
+    tdx_vtpm_server_client_session_unref(session);
+
+    /*Delete the client session */
+    tdx_vtpm_server_client_session_unref(session);
+
+    qemu_mutex_unlock(&server->lock);
 }
 
 static int tdx_vtpm_client_session_data_queue_add(TdxVtpmServer *server,
@@ -432,35 +395,21 @@ static void tdx_vtpm_server_handle_trans_protocol_data(TdxVtpmServerClientSessio
                                                        void *buf, int size)
 {
     TdxVtpmTransProtocolData *data = buf;
-    TdUserId *user_id = (TdUserId*)data->user_id;
     TdxVtpmServer *server = session->server;
     TdxVtpmServerClientDataEntry entry;
     struct UnixSocketAddress addr;
     char path[PATH_MAX];
     int ret;
 
-    qemu_mutex_lock(&server->lock);
-
     addr.path = path;
     qio_channel_socket_get_dgram_recv_address(server->parent.ioc, &addr);
-
-    session = g_hash_table_lookup(server->client_session, user_id);
-    if (!session) {
-        session = tdx_vtpm_server_create_client_session(server,
-                                                        user_id, &addr);
-        if (!session) {
-            error_report("Failed to create client session, data dropped");
-            goto fail;
-        }
-    } else {
-        if (tdx_vtpm_server_client_session_set_addr(session, &addr)) {
-            error_report("Failed to update session peer address, will lose later message to client");
-        }
-    }
 
     entry.operation = TDX_VTPM_OPERATION_COMM;
     entry.buf = data->data;
     entry.buf_size = trans_protocol_data_payload_size(data);
+
+    qemu_mutex_lock(&server->lock);
+
     ret = tdx_vtpm_client_session_data_queue_add(server, &session->user_id, &entry);
     if (ret) {
         error_report("Failed to push data entry");
@@ -488,13 +437,34 @@ static void tdx_vtpm_server_handle_trans_protocol_data(TdxVtpmServerClientSessio
 }
 
 static void tdx_vtpm_server_client_disconnect(TdxVtpmServerClientSession *session);
+
+/* server->lock must be hold */
+static void tdx_vtpm_server_client_session_ready(TdxVtpmServer *server,
+                                                 TdxVtpmServerClientSession *session,
+                                                 const uint8_t *user_id)
+{
+    int ret;
+
+    memcpy(&session->user_id, user_id, sizeof(session->user_id));
+    /*Ref for add into client_session*/
+    tdx_vtpm_server_client_session_ref(session);
+    ret = g_hash_table_insert(server->client_session, &session->user_id,
+                              session);
+    if (ret) {
+        session->state = VTPM_SERVER_CLIENT_SESSION_READY;
+    } else {
+        error_report("Failed to insert client session, disconnected");
+        tdx_vtpm_server_client_session_unref(session);
+        tdx_vtpm_server_client_disconnect(session);
+    }
+}
+
 static void tdx_vtpm_server_handle_trans_protocol_sync(TdxVtpmServerClientSession *session,
                                                        void *buf, int size)
 {
     TdxVtpmTransProtocolSync *sync = buf;
     TdxVtpmServerClientSession *exist;
     TdxVtpmServer *server = session->server;
-    int ret;
 
     if (sync->client_type != TDX_VTPM_CLIENT_TYPE_USER) {
         warn_report("Unknow vtpm client type:%d, disconnected", sync->client_type);
@@ -506,16 +476,7 @@ static void tdx_vtpm_server_handle_trans_protocol_sync(TdxVtpmServerClientSessio
 
     exist = g_hash_table_lookup(server->client_session, sync->user_id);
     if (!exist) {
-        /*Ref for add into client_session*/
-        tdx_vtpm_server_client_session_ref(session);
-        ret = g_hash_table_insert(server->client_session, sync->user_id,
-                                  session);
-        if (!ret) {
-            error_report("Failed to insert client session, disconnected");
-            tdx_vtpm_server_client_session_unref(session);
-            tdx_vtpm_server_client_disconnect(session);
-        }
-
+        tdx_vtpm_server_client_session_ready(server, session, sync->user_id);
     } else {
         /*TODO: Handle kick off here*/
         g_assert(true);
@@ -812,13 +773,14 @@ static void tdx_vtpm_server_prepare_rsp_report_status(TdxVmcallServiceItem *vsi)
 
 static void tdx_vtpm_server_client_disconnect(TdxVtpmServerClientSession *session)
 {
-    /*TODO: disconnection handle not completed, so let's assert always here*/
-    g_assert(true);
 
-    tdx_vtpm_server_client_session_unref(session);
+    TdxVtpmServer *server = session->server;
 
+    /*unref for IO socket callback, this MUST be done before destory the session*/
+    qemu_set_fd_handler(session->ioc->fd, NULL, NULL, NULL);
+    object_unref(OBJECT(session->ioc));
 
-    // tdx_vtpm_server_destroy_client_session(session->server, session);
+    tdx_vtpm_server_destroy_client_session(server, session);
 }
 
 static void tdx_vtpm_server_manage_instance_complete(TdxVtpmServer *server,
@@ -847,7 +809,10 @@ static void tdx_vtpm_server_handle_report_status(TdxVtpmServer *server, TdxVmcal
 
     if (cmd->operation == TDX_VTPM_OPERATION_COMM) {
         session = g_hash_table_lookup(server->client_session, &cmd->user_id);
-        g_assert(session);
+        if (!session) {
+            ret = TDG_VP_VMCALL_SERVICE_DEVICE_ERROR;
+            goto out;
+        }
         if (tdx_vtpm_server_send_data_message(server, session,
                                               cmd->status,
                                               cmd->data,
@@ -938,14 +903,17 @@ static void tdx_vtpm_socket_server_accept(QIONetListener *listener,
     TdxVtpmServer *server = opaque;
     TdxVtpmServerClientSession *new;
 
-    new = tdx_vtpm_server_create_client_session_v2(server, new_client_ioc);
+    new = tdx_vtpm_server_create_client_session(server, new_client_ioc);
     if (!new) {
         warn_report("Failed to create new client session, disconnected");
         return;
     }
 
+    new->state = VTPM_SERVER_CLIENT_SESSION_WAIT_SYNC;
     /*ref for socket IO callback*/
     object_ref(OBJECT(new_client_ioc));
+    tdx_vtpm_server_client_session_ref(new);
+
     qio_channel_set_blocking(QIO_CHANNEL(new_client_ioc), false, NULL);
     qemu_set_fd_handler(new_client_ioc->fd,
                         tdx_vtpm_socket_server_recv,
