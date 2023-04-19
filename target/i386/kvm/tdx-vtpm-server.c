@@ -36,6 +36,7 @@ enum TdxVtpmServerClientSessionState
     VTPM_SERVER_CLIENT_SESSION_INIT,
     VTPM_SERVER_CLIENT_SESSION_WAIT_SYNC,
     VTPM_SERVER_CLIENT_SESSION_READY,
+    VTPM_SERVER_CLIENT_SESSION_ZOMBIE,
 };
 
 typedef struct TdxVtpmServerClientSession {
@@ -200,20 +201,27 @@ tdx_vtpm_client_session_get_data_node(TdxVtpmServer *server,
     return data_node;
 }
 
+/* server->lock must be hold */
+static void tdx_vtpm_server_destroy_client_session_data_node(TdxVtpmServer *server,
+                                                             TdxVtpmServerClientSession *session)
+{
+    TdxVtpmServerClientSessionDataNode *data_node;
+
+    data_node = tdx_vtpm_client_session_get_data_node(server,
+                                                      &session->user_id, false);
+    if (data_node) {
+        tdx_vtpm_client_session_remove_data_node_entry(data_node);
+    }
+    tdx_vtpm_client_session_remove_data_node(server, &session->user_id);
+}
+
 static void tdx_vtpm_server_destroy_client_session(TdxVtpmServer *server,
                                                    TdxVtpmServerClientSession *session)
 {
     qemu_mutex_lock(&server->lock);
 
     if (session->state == VTPM_SERVER_CLIENT_SESSION_READY) {
-        TdxVtpmServerClientSessionDataNode *data_node;
-
-        data_node = tdx_vtpm_client_session_get_data_node(server,
-                                                          &session->user_id, false);
-        if (data_node) {
-            tdx_vtpm_client_session_remove_data_node_entry(data_node);
-        }
-        tdx_vtpm_client_session_remove_data_node(server, &session->user_id);
+        tdx_vtpm_server_destroy_client_session_data_node(server, session);
 
         g_hash_table_remove(server->client_session, &session->user_id);
         /*unref the ref for insert to client_session*/
@@ -459,6 +467,22 @@ static void tdx_vtpm_server_client_session_ready(TdxVtpmServer *server,
     }
 }
 
+/* server->lock must be hold */
+static void tdx_vtpm_server_client_session_kick_down(TdxVtpmServer *server,
+                                                     TdxVtpmServerClientSession *session)
+{
+    gboolean ret;
+
+    session->state = VTPM_SERVER_CLIENT_SESSION_ZOMBIE;
+    ret = g_hash_table_remove(server->client_session, &session->user_id);
+    if (ret) {
+        /* Unref for removed from client_session */
+        tdx_vtpm_server_client_session_unref(session);
+    }
+
+    tdx_vtpm_server_destroy_client_session_data_node(server, session);
+}
+
 static void tdx_vtpm_server_handle_trans_protocol_sync(TdxVtpmServerClientSession *session,
                                                        void *buf, int size)
 {
@@ -475,12 +499,10 @@ static void tdx_vtpm_server_handle_trans_protocol_sync(TdxVtpmServerClientSessio
     qemu_mutex_lock(&server->lock);
 
     exist = g_hash_table_lookup(server->client_session, sync->user_id);
-    if (!exist) {
-        tdx_vtpm_server_client_session_ready(server, session, sync->user_id);
-    } else {
-        /*TODO: Handle kick off here*/
-        g_assert(true);
+    if (exist) {
+        tdx_vtpm_server_client_session_kick_down(server, exist);
     }
+    tdx_vtpm_server_client_session_ready(server, session, sync->user_id);
 
     qemu_mutex_unlock(&server->lock);
     return;
@@ -511,6 +533,11 @@ static void tdx_vtpm_server_handle_recv_data(TdxVtpmServerClientSession *session
     int size;
     void *data;
     int read_size;
+
+    if (session->state == VTPM_SERVER_CLIENT_SESSION_ZOMBIE) {
+        tdx_vtpm_server_client_disconnect(session);
+        return;
+    }
 
     read_size = qio_channel_read(QIO_CHANNEL(ioc),
                                  socket_recv_buffer_get_buf(&session->recv_buf),
