@@ -3240,6 +3240,70 @@ void qemu_guest_free_page_hint(void *addr, size_t len)
     }
 }
 
+#define FIXED_RAM_HDR_VERSION 1
+struct FixedRamHeader {
+    uint32_t version;
+    uint64_t page_size;
+    uint64_t bitmap_offset;
+    uint64_t pages_offset;
+    /* end of v1 */
+} QEMU_PACKED;
+
+static void fixed_ram_insert_header(QEMUFile *file, RAMBlock *block)
+{
+    g_autofree struct FixedRamHeader *header;
+    size_t header_size, bitmap_size;
+    long num_pages;
+
+    header = g_new0(struct FixedRamHeader, 1);
+    header_size = sizeof(struct FixedRamHeader);
+
+    num_pages = block->used_length >> TARGET_PAGE_BITS;
+    bitmap_size = BITS_TO_LONGS(num_pages) * sizeof(unsigned long);
+
+    /*
+     * Save the file offsets of where the bitmap and the pages should
+     * go as they are written at the end of migration and during the
+     * iterative phase, respectively.
+     */
+    block->bitmap_offset = qemu_get_offset(file) + header_size;
+    block->pages_offset = ROUND_UP(block->bitmap_offset +
+                                   bitmap_size, 0x100000);
+
+    header->version = cpu_to_be32(FIXED_RAM_HDR_VERSION);
+    header->page_size = cpu_to_be64(TARGET_PAGE_SIZE);
+    header->bitmap_offset = cpu_to_be64(block->bitmap_offset);
+    header->pages_offset = cpu_to_be64(block->pages_offset);
+
+    qemu_put_buffer(file, (uint8_t *) header, header_size);
+}
+
+static int fixed_ram_read_header(QEMUFile *file, struct FixedRamHeader *header)
+{
+    size_t ret, header_size = sizeof(struct FixedRamHeader);
+
+    ret = qemu_get_buffer(file, (uint8_t *)header, header_size);
+    if (ret != header_size) {
+        return -1;
+    }
+
+    /* migration stream is big-endian */
+    be32_to_cpus(&header->version);
+
+    if (header->version > FIXED_RAM_HDR_VERSION) {
+        error_report("Migration fixed-ram capability version mismatch (expected %d, got %d)",
+                     FIXED_RAM_HDR_VERSION, header->version);
+        return -1;
+    }
+
+    be64_to_cpus(&header->page_size);
+    be64_to_cpus(&header->bitmap_offset);
+    be64_to_cpus(&header->pages_offset);
+
+
+    return 0;
+}
+
 /*
  * Each of ram_save_setup, ram_save_iterate and ram_save_complete has
  * long-running RCU critical section.  When rcu-reclaims in the code
@@ -3291,29 +3355,8 @@ static int ram_save_setup(QEMUFile *f, void *opaque)
             }
 
             if (migrate_fixed_ram()) {
-                long num_pages = block->used_length >> TARGET_PAGE_BITS;
-                long bitmap_size = BITS_TO_LONGS(num_pages) * sizeof(unsigned long);
-
-                /* Needed for external programs (think analyze-migration.py) */
-                qemu_put_be64(f, bitmap_size);
-
-                /*
-                 * The bitmap starts after pages_offset, so add 8 to
-                 * account for the pages_offset size.
-                 */
-                block->bitmap_offset = qemu_get_offset(f) + 8;
-
-                /*
-                 * Make pages_offset aligned to 1 MiB to account for
-                 * migration file movement between filesystems with
-                 * possibly different alignment restrictions when
-                 * using O_DIRECT.
-                 */
-                block->pages_offset = ROUND_UP(block->bitmap_offset +
-                                               bitmap_size, 0x100000);
-                qemu_put_be64(f, block->pages_offset);
-
-                /* Now prepare offset for next ramblock */
+                fixed_ram_insert_header(f, block);
+                /* prepare offset for next ramblock */
                 qemu_set_offset(f, block->pages_offset + block->used_length, SEEK_SET);
             }
         }
@@ -4349,21 +4392,24 @@ static void read_ramblock_fixed_ram(QEMUFile *f, RAMBlock *block,
 static int parse_ramblock_fixed_ram(QEMUFile *f, RAMBlock *block, ram_addr_t length)
 {
     g_autofree unsigned long *dirty_bitmap = NULL;
+    struct FixedRamHeader header;
     size_t bitmap_size;
     long num_pages;
     int ret = 0;
 
-    /* 1. read the bitmap size */
-    num_pages = length >> TARGET_PAGE_BITS;
-    bitmap_size = qemu_get_be64(f);
+    ret = fixed_ram_read_header(f, &header);
+    if (ret < 0) {
+        error_report("Error reading fixed-ram header");
+        return -EINVAL;
+    }
 
-    assert(bitmap_size == BITS_TO_LONGS(num_pages) * sizeof(unsigned long));
+    block->pages_offset = header.pages_offset;
+    num_pages = length / header.page_size;
+    bitmap_size = BITS_TO_LONGS(num_pages) * sizeof(unsigned long);
 
-    block->pages_offset = qemu_get_be64(f);
-
-    /* 2. read the actual bitmap */
     dirty_bitmap = g_malloc0(bitmap_size);
-    if (qemu_get_buffer(f, (uint8_t *)dirty_bitmap, bitmap_size) != bitmap_size) {
+    if (qemu_get_buffer_at(f, (uint8_t *)dirty_bitmap, bitmap_size,
+                           header.bitmap_offset) != bitmap_size) {
         error_report("Error parsing dirty bitmap");
         return -EINVAL;
     }
