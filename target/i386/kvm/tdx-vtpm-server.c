@@ -786,7 +786,7 @@ static int tdx_vtpm_server_send_data_message(TdxVtpmServer *server,
     i[2].iov_base = data;
     i[2].iov_len = data_size;
 
-    if (tdx_vtpm_trans_send(server->parent.ioc, &session->client_addr,
+    if (tdx_vtpm_trans_send(session->ioc, &session->client_addr,
                             &pack.head, i, 3)) {
         VMCALL_DEBUG("Failed to send data, may peer disconnected\n");
         return -1;
