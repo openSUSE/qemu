@@ -55,6 +55,11 @@ typedef struct TdxVtpmServerPendingManageRequest {
     QLIST_ENTRY(TdxVtpmServerPendingManageRequest) list_entry;
 } TdxVtpmServerPendingManageRequest;
 
+typedef struct TdxVtpmServerSessionDataIndex {
+    TdUserId user_id;
+    QSIMPLEQ_ENTRY(TdxVtpmServerSessionDataIndex) queue_entry;
+} TdxVtpmServerSessionDataIndex;
+
 struct g_hash_find_opaque {
     TdUserId *user_id;
     TdUserId result;
@@ -303,30 +308,66 @@ static bool td_user_id_equal(const TdUserId *a, const TdUserId *b)
     return !memcmp(a, b, sizeof(*a));
 }
 
-static void tdx_vtpm_server_fire_wait_for_request(TdxVtpmServer *server,
-                                                  TdUserId *user_id,
-                                                  TdxVmcallServiceItem *vsi);
-static void tdx_vtpm_server_check_pending_request(TdxVtpmServer *server, TdUserId *user_id)
+static int tdx_vtpm_server_handle_wait_for_request(TdxVtpmServer *server,
+                                                   TdxVmcallServiceItem *vsi, bool add);
+static void tdx_vtpm_server_check_pending_request(TdxVtpmServer *server)
 {
     TdxVtpmServerPendingRequest *request;
-    TdxVtpmCmdWaitForRequest *req_cmd;
+    int ret;
 
     QLIST_FOREACH(request, &server->request_list, list_entry) {
-        req_cmd = tdx_vmcall_service_cmd_buf(request->vsi);
-
-        if (!td_user_id_equal(&null_user_id, &req_cmd->user_id) &&
-            !td_user_id_equal(user_id, &req_cmd->user_id))
+        ret = tdx_vtpm_server_handle_wait_for_request(server, request->vsi, false);
+        if (ret) {
             continue;
-
-        tdx_vtpm_server_fire_wait_for_request(server, user_id, request->vsi);
+        }
         tdx_vtpm_server_request_queue_remove(server, request);
-
         break;
     }
 }
 
+static int
+tdx_vtpm_client_session_data_index_add(TdxVtpmServer *server,
+                                       TdUserId *user_id)
+{
+    TdxVtpmServerSessionDataIndex *new;
+
+    new = g_malloc(sizeof(*new));
+    if (!new)
+        return -1;
+
+    memcpy(&new->user_id, user_id, sizeof(new->user_id));
+    QSIMPLEQ_INSERT_TAIL(&server->session_data_index, new, queue_entry);
+
+    return 0;
+}
+
+static TdxVtpmServerSessionDataIndex *
+tdx_vtpm_client_session_data_index_get(TdxVtpmServer *server)
+{
+    if (QSIMPLEQ_EMPTY(&server->session_data_index)) {
+        return NULL;
+    }
+    return QSIMPLEQ_FIRST(&server->session_data_index);
+}
+
+static void
+tdx_vtpm_client_session_data_index_remove(TdxVtpmServer *server,
+                                          TdxVtpmServerSessionDataIndex *node)
+{
+    if (!node)
+        return;
+
+    if (QSIMPLEQ_EMPTY(&server->session_data_index))
+        return;
+
+    QSIMPLEQ_REMOVE(&server->session_data_index, node,
+                    TdxVtpmServerSessionDataIndex, queue_entry);
+
+    g_free(node);
+}
+
 static void tdx_vtpm_server_handle_trans_protocol_data(TdxVtpmServer *server,
-                                                        void *buf, int size)
+                                                       void *buf, int size)
 {
     TdxVtpmTransProtocolData *data = buf;
     TdUserId *user_id = (TdUserId*)data->user_id;
@@ -361,11 +402,20 @@ static void tdx_vtpm_server_handle_trans_protocol_data(TdxVtpmServer *server,
         error_report("Failed to push data entry");
         goto fail;
     }
+    ret = tdx_vtpm_client_session_data_index_add(server, &session->user_id);
+    if (ret) {
+        error_report("Failed to push request session entry");
+        goto fail_free;
+    }
 
-    tdx_vtpm_server_check_pending_request(server, &session->user_id);
-    return;
+    tdx_vtpm_server_check_pending_request(server);
 
  fail:
+    qemu_mutex_unlock(&server->lock);
+    return;
+ fail_free:
+    tdx_vtpm_client_session_data_queue_remove(server, &session->user_id);
+    qemu_mutex_unlock(&server->lock);
     return;
 }
 
@@ -469,19 +519,14 @@ static void tdx_vtpm_prepare_wait_for_request_response(TdxVtpmRspWaitForRequest 
 
 static void tdx_vtpm_server_fire_wait_for_request(TdxVtpmServer *server,
                                                   TdUserId *user_id,
+                                                  TdxVtpmServerClientDataEntry *entry,
+                                                  TdxVtpmServerSessionDataIndex *session_data_index,
                                                   TdxVmcallServiceItem *vsi)
 {
-    TdxVtpmServerClientDataEntry *entry;
     TdxVtpmRspWaitForRequest *rsp;
     int state = TDG_VP_VMCALL_SERVICE_SUCCESS;
     int size;
     int total_size;
-
-    entry = tdx_vtpm_client_session_data_queue_get(server, user_id);
-    if (!entry) {
-        state = TDG_VP_VMCALL_SERVICE_DEVICE_ERROR;
-        goto out;
-    }
 
     size = tdx_vmcall_service_rsp_size(vsi);
     total_size = sizeof(TdxVtpmRspWaitForRequest) + entry->buf_size;
@@ -495,7 +540,9 @@ static void tdx_vtpm_server_fire_wait_for_request(TdxVtpmServer *server,
     tdx_vtpm_prepare_wait_for_request_response(rsp, entry->operation, user_id,
                                                entry->buf, entry->buf_size);
     tdx_vtpm_client_session_data_queue_remove(server, user_id);
-
+    if (session_data_index) {
+        tdx_vtpm_client_session_data_index_remove(server, session_data_index);
+    }
  out:
     tdx_vmcall_service_set_response_state(vsi, state);
     tdx_vmcall_service_complete_request(vsi);
@@ -537,26 +584,51 @@ static gboolean g_hash_find_pending_data(gpointer key, gpointer value, gpointer 
     return true;
 }
 
-static void tdx_vtpm_server_handle_wait_for_request(TdxVtpmServer *server,
-                                                    TdxVmcallServiceItem *vsi)
+static int tdx_vtpm_server_handle_wait_for_request(TdxVtpmServer *server,
+                                                   TdxVmcallServiceItem *vsi,
+                                                   bool add)
 {
     TdxVtpmCmdWaitForRequest *cmd;
-
-    struct g_hash_find_opaque opaque = {};
-    gpointer find_ret;
+    TdUserId *user_id = NULL;
+    TdxVtpmServerClientDataEntry *entry = NULL;
+    TdxVtpmServerSessionDataIndex *session_data_index = NULL;
 
     cmd = tdx_vmcall_service_cmd_buf(vsi);
-    if (!td_user_id_equal(&cmd->user_id, &null_user_id)) {
+    if (td_user_id_equal(&cmd->user_id, &null_user_id)) {
+        do {
+            tdx_vtpm_client_session_data_index_remove(server, session_data_index);
+            session_data_index = tdx_vtpm_client_session_data_index_get(server);
+            if (!session_data_index) {
+                break;
+            }
+            entry = tdx_vtpm_client_session_data_queue_get(server,
+                                                           &session_data_index->user_id);
+        } while (!entry);
+        if (session_data_index) {
+            user_id = &session_data_index->user_id;
+        }
+    } else {
+        struct g_hash_find_opaque opaque = {};
+        gpointer find_ret;
+
         opaque.user_id = &cmd->user_id;
+        find_ret = g_hash_table_find(server->client_data,
+                                     g_hash_find_pending_data, &opaque);
+        if (find_ret) {
+            user_id = &opaque.result;
+            entry = tdx_vtpm_client_session_data_queue_get(server, user_id);
+        }
     }
 
-    find_ret = g_hash_table_find(server->client_data,
-                                 g_hash_find_pending_data, &opaque);
-    if (find_ret) {
-        tdx_vtpm_server_fire_wait_for_request(server, &opaque.result, vsi);
-    } else {
+    if (user_id) {
+        tdx_vtpm_server_fire_wait_for_request(server, user_id,
+                                              entry, session_data_index, vsi);
+        return 0;
+    } else if (add) {
         tdx_vtpm_server_add_wait_for_request(server, vsi);
     }
+
+    return 1;
 }
 
 static int tdx_vtpm_server_sanity_check_report_status(TdxVmcallServiceItem *vsi)
@@ -692,7 +764,7 @@ static void tdx_vtpm_server_handle_command(TdxVtpmServer *server, TdxVmcallServi
 
     switch(head->command) {
     case TDX_VTPM_WAIT_FOR_REQUEST:
-        tdx_vtpm_server_handle_wait_for_request(server, vsi);
+        tdx_vtpm_server_handle_wait_for_request(server, vsi, true);
         break;
     case TDX_VTPM_REPORT_STATUS:
         tdx_vtpm_server_handle_report_status(server, vsi);
@@ -769,6 +841,7 @@ int tdx_vtpm_init_server(TdxVtpm *base, TdxVmcallService *vms,
     qemu_mutex_init(&server->lock);
     QLIST_INIT(&server->request_list);
     QLIST_INIT(&server->manage_request_list);
+    QSIMPLEQ_INIT(&server->session_data_index);
 
     qemu_uuid_parse(VTPM_SERVICE_TD_GUID, &type->from);
     type->from = qemu_uuid_bswap(type->from);
@@ -897,6 +970,7 @@ static void
 tdx_vtpm_server_manage_instance(const char *user_id, bool create,
                                 Error **errp)
 {
+    TdxVtpmServerPendingManageRequest *i;
     int64_t state = TDX_VTPM_INSTANCE_MANAGE_SUCCESS;
     TdxVtpmServerClientDataEntry entry;
     TdxVtpmServer *server;
@@ -926,26 +1000,35 @@ tdx_vtpm_server_manage_instance(const char *user_id, bool create,
     ret = tdx_vtpm_server_add_manage_pending_request(server,
                                                      user_id,
                                                      &td_user_id, entry.operation);
-    if (!ret) {
-        ret = tdx_vtpm_client_session_data_queue_add(server, &td_user_id, &entry);
+    if (ret) {
+        goto fail;
+    }
+    ret = tdx_vtpm_client_session_data_queue_add(server, &td_user_id, &entry);
+    if (ret) {
+        goto fail_manage_request;
+    }
+    ret = tdx_vtpm_client_session_data_index_add(server, &td_user_id);
+    if (ret) {
+        goto fail_session_data;
     }
 
-    if (!ret) {
-        tdx_vtpm_server_check_pending_request(server, &td_user_id);
-    } else {
-        TdxVtpmServerPendingManageRequest *i;
-
-        i = tdx_vtpm_server_get_manage_pending_request(server, &td_user_id,
-                                                       entry.operation);
-        tdx_vtpm_server_remove_manage_pending_request(server, i);
-        state = TDX_VTPM_INSTANCE_MANAGE_COMMUNICATION_LAYER_ERROR;
-    }
+    tdx_vtpm_server_check_pending_request(server);
 
     qemu_mutex_unlock(&server->lock);
+
+    return;
+
+ fail_session_data:
+    tdx_vtpm_client_session_data_queue_remove(server, &td_user_id);
+ fail_manage_request:
+    i = tdx_vtpm_server_get_manage_pending_request(server, &td_user_id,
+                                                   entry.operation);
+    tdx_vtpm_server_remove_manage_pending_request(server, i);
+ fail:
+    state = TDX_VTPM_INSTANCE_MANAGE_COMMUNICATION_LAYER_ERROR;
+    qemu_mutex_unlock(&server->lock);
  out:
-    if (state != TDX_VTPM_INSTANCE_MANAGE_SUCCESS) {
-        qapi_event_send_tdx_vtpm_operation_result(user_id, state);
-    }
+    qapi_event_send_tdx_vtpm_operation_result(user_id, state);
     return;
 }
 
