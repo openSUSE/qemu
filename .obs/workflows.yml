@@ -1,0 +1,16 @@
+pr_workflow:
+  steps:
+    - branch_package:
+        source_project: Devel:Virt:SLE-15-SP5:Staging
+        source_package: qemu
+        target_project: Devel:Virt:SLE-15-SP5:Staging:PRs
+  filters:
+    event: pull_request
+rebuild_workflow:
+  steps:
+    # Will automatically rebuild the package
+    - trigger_services:
+        project: Devel:Virt:SLE-15-SP5:Staging
+        package: qemu
+  filters:
+    event: push
