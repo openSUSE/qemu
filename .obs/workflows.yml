@@ -1,0 +1,16 @@
+pr_workflow:
+  steps:
+    - branch_package:
+        source_project: Virtualization:Staging
+        source_package: qemu
+        target_project: Virtualization:Staging:PRs
+  filters:
+    event: pull_request
+rebuild_workflow:
+  steps:
+    # Will automatically rebuild the package
+    - trigger_services:
+        project: Virtualization:Staging
+        package: qemu
+  filters:
+    event: push
