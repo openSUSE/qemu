@@ -1,0 +1,10 @@
+rebuild:
+  steps:
+    - trigger_services:
+        project: Virtualization:Staging
+        package: qemu
+    - rebuild_package:
+        project: Virtualization:Staging
+        package: qemu
+  filters:
+    event: push
