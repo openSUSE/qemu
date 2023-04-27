@@ -172,6 +172,8 @@ struct MemoryRegion {
     RAMBlock *ram_block;
     Object *owner;
     const MemoryRegionIOMMUOps *iommu_ops;
+    /* owner as TYPE_DEVICE. Used for re-entrancy checks in MR access hotpath */
+    DeviceState *dev;
 
     const MemoryRegionOps *ops;
     void *opaque;
@@ -196,6 +198,9 @@ struct MemoryRegion {
     unsigned ioeventfd_nb;
     MemoryRegionIoeventfd *ioeventfds;
     NotifierList iommu_notify;
+
+    /* For devices designed to perform re-entrant IO into their own IO MRs */
+    bool disable_reentrancy_guard;
 };
 
 /**
