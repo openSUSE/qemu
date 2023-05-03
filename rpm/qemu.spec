@@ -1666,11 +1666,18 @@ cp %{rpmfilesdir}/supported.s390.txt docs/supported.rst
 sed -i '/^\ \ \ about\/index.*/i \ \ \ supported.rst' docs/index.rst
 %endif
 
-# This is typically done when generating tarballs (see scripts/make-release).
-# Since we're building from a git clone, we need to do it ourselves (and
-# it's the reason why we need git as a BuildRequires:).
-(cd roms/seabios && git describe --tags --long --dirty > .version)
-(cd roms/skiboot && ./make_version.sh > .version)
+# When generating an upstream release tarball, the following commands
+# are run (see scripts/make-release):
+#  (cd roms/seabios && git describe --tags --long --dirty > .version)
+#  (cd roms/skiboot && ./make_version.sh > .version)
+# This has not happened for the archive we're using, since it's cloned
+# from a git branch. We, therefore, assumed that the following commands
+# have been run, and the result committed to the repository (with seabios
+# and skiboot at the proper commit/tag/...):
+#  (cd roms/seabios && git describe --tags --long --dirty > rpm/seabios_version)
+#  (cd roms/skiboot && ./make_version.sh > rpm/skiboot_version)
+cp %{rpmfilesdir}/seabios_version roms/seabios/.version
+cp %{rpmfilesdir}/skiboot_version roms/skiboot/.version
 find . -iname ".git" -exec rm -rf {} +
 
 mkdir -p %blddir
