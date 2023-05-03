@@ -15,31 +15,7 @@
 # Please submit bugfixes or comments via https://bugs.opensuse.org/
 #
 
-
-%global flavor @BUILD_FLAVOR@%{nil}
-%define name_suffix %{nil}
-%define summary_string Machine emulator and virtualizer
-#define name_suffix -linux-user
-#define summary_string CPU emulator for user space
-
-%define _buildshell /bin/bash
-
-%define srcdir %{_builddir}/%buildsubdir
-%define blddir %srcdir/build
-%define rpmfilesdir %{_builddir}/%{srcname}-%{qemuver}/rpm
-
-%define build_x86_firmware 0
-%define build_ppc_firmware 0
-%define build_opensbi_firmware 0
-%define kvm_available 0
-%define legacy_qemu_kvm 0
-%define force_fit_virtio_pxe_rom 1
-
-%if "%{?distribution}" == ""
-%define distro private-build
-%else
-%define distro %{distribution}
-%endif
+%include %{_sourcedir}/common.inc
 
 # So, we have openSUSE:Factory, and we have "ports". In openSUSE:Factory, we
 # have i586 and x86_64. In the :ARM port, we have aarch64, armv6l and armv7l.
@@ -92,8 +68,6 @@
 %define with_daxctl 1
 %endif
 
-%bcond_with chkqtests
-
 # enforce pxe rom sizes for migration compatability from SLE 11 SP3 forward
 # the following need to be > 64K
 %define supported_nics_large {e1000 rtl8139}
@@ -102,28 +76,9 @@
 # Though not required, make unsupported pxe roms migration compatable as well
 %define unsupported_nics {eepro100 ne2k_pci pcnet}
 
-# non-x86 archs still seem to have some issues with Link Time Optimization
-%ifnarch %ix86 x86_64
-%define _lto_cflags %{nil}
-%endif
-
-%define generic_qemu_description \
-QEMU provides full machine emulation and cross architecture usage. It closely\
-integrates with KVM and Xen virtualization, allowing for excellent performance.\
-Many options are available for defining the emulated environment, including\
-traditional devices, direct host device access, and interfaces specific to\
-virtualization.
-
-%bcond_with system_membarrier
-%bcond_with malloc_trim
-
-%define qemuver 7.1.0
-%define srcver  7.1.0
-%define sbver   1.16.0_0_gd239552
-%define srcname qemu
-Name:           qemu%{name_suffix}
+Name:           qemu
 URL:            https://www.qemu.org/
-Summary:        %{summary_string}
+Summary:        Machine emulator and virtualizer
 License:        BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
 Group:          System/Emulators/PC
 Version:        %qemuver
@@ -132,21 +87,6 @@ Source:         %{srcname}-%{srcver}.tar.xz
 Source200:      qemu-rpmlintrc
 Source303:      README.PACKAGING
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
-%if "%{name}" == "qemu-linux-user"
-# Build dependencies exclusive to qemu-linux-user
-BuildRequires:  glib2-devel-static >= 2.56
-BuildRequires:  glibc-devel-static
-BuildRequires:  (pcre-devel-static if glib2-devel-static < 2.73 else pcre2-devel-static)
-# passing filelist check for /usr/lib/binfmt.d
-BuildRequires:  systemd
-BuildRequires:  zlib-devel-static
-# we must not install the qemu-linux-user package when under QEMU build
-%if 0%{?qemu_user_space_build:1}
-#!BuildIgnore:  post-build-checks
-%endif
-# End of build dependencies for qemu-linux-user
-%else
-# Build dependencies exclusive to qemu
 %if %{build_x86_firmware}
 %ifnarch %ix86 x86_64
 # We must cross-compile on non-x86*
@@ -248,19 +188,13 @@ BuildRequires:  pkgconfig(vte-2.91)
 BuildRequires:  pkgconfig(xkbcommon)
 BuildRequires:  pkgconfig(zlib)
 %{?systemd_ordering}
-# End of build dependencies for qemu
-%endif
-# Common build dependencies between qemu and qemu-linux-user
 BuildRequires:  fdupes
 BuildRequires:  gcc-c++
-BuildRequires:  git-core
 BuildRequires:  meson
 BuildRequires:  ninja >= 1.7
 BuildRequires:  perl-Text-Markdown
 BuildRequires:  python3-base >= 3.6
 BuildRequires:  python3-setuptools
-%if "%{name}" == "qemu"
-# Requires, Recommends, etc exclusive to qemu
 %if %{kvm_available}
 %ifarch %ix86 x86_64
 Requires:       qemu-x86
@@ -336,9 +270,6 @@ Suggests:       qemu-vhost-user-gpu
 Obsoletes:      qemu-audio-oss < %{qemuver}
 Obsoletes:      qemu-audio-sdl < %{qemuver}
 Obsoletes:      qemu-ui-sdl < %{qemuver}
-# End of Requires, Recommends, etc for qemu.
-# There isn't any for qemu-linux-user.
-%endif
 
 %package headless
 Summary:        Minimum set of packages for having a functional QEMU
@@ -360,61 +291,6 @@ Requires:       qemu-chardev-spice
 
 This meta-package brings in, as dependencies, the minimum set of packages
 currently necessary for having a functional (headless) QEMU/KVM stack.
-
-%if "%{name}" == "qemu-linux-user"
-# Description and files for the qemu-linux-user package
-
-%description
-QEMU provides CPU emulation along with other related capabilities. This package
-provides programs to run user space binaries and libraries meant for another
-architecture. The syscall interface is intercepted and execution below the
-syscall layer occurs on the native hardware and operating system.
-
-%files
-%defattr(-, root, root)
-%doc README.rst VERSION
-%license COPYING COPYING.LIB LICENSE
-%_bindir/qemu-aarch64
-%_bindir/qemu-aarch64_be
-%_bindir/qemu-alpha
-%_bindir/qemu-arm
-%_bindir/qemu-armeb
-%_bindir/qemu-cris
-%_bindir/qemu-hexagon
-%_bindir/qemu-hppa
-%_bindir/qemu-i386
-%_bindir/qemu-loongarch64
-%_bindir/qemu-m68k
-%_bindir/qemu-microblaze
-%_bindir/qemu-microblazeel
-%_bindir/qemu-mips
-%_bindir/qemu-mips64
-%_bindir/qemu-mips64el
-%_bindir/qemu-mipsel
-%_bindir/qemu-mipsn32
-%_bindir/qemu-mipsn32el
-%_bindir/qemu-nios2
-%_bindir/qemu-or1k
-%_bindir/qemu-ppc
-%_bindir/qemu-ppc64
-%_bindir/qemu-ppc64le
-%_bindir/qemu-riscv32
-%_bindir/qemu-riscv64
-%_bindir/qemu-s390x
-%_bindir/qemu-sh4
-%_bindir/qemu-sh4eb
-%_bindir/qemu-sparc
-%_bindir/qemu-sparc32plus
-%_bindir/qemu-sparc64
-%_bindir/qemu-x86_64
-%_bindir/qemu-xtensa
-%_bindir/qemu-xtensaeb
-%_sbindir/qemu-binfmt-conf.sh
-%_prefix/lib/binfmt.d/qemu-*.conf
-
-# End of description and files for qemu-linux-user
-%else
-# Description and files for qemu and all its subpackages
 
 %description
 %{generic_qemu_description}
@@ -1570,14 +1446,8 @@ network adapters available with QEMU.
 # End of "if build_x86_firmware"
 %endif
 
-# End of description and files for qemu and all its subpackages
-%endif
-
 %prep
 %autosetup -n %{srcname}-%{srcver}
-
-%if "%{name}" == "qemu"
-# Specific preparation steps for builfding qemu
 
 # for the record, this set of firmware files is installed, but we don't
 # build (yet): bamboo.dtb canyonlands.dtb hppa-firmware.img openbios-ppc
@@ -1650,9 +1520,6 @@ efi-rtl8139.rom efi-virtio.rom efi-vmxnet3.rom}
 %{?riscv64_default_built_firmware} %{?riscv64_extra_built_firmware} \
 %{?s390x_default_built_firmware} %{?s390x_extra_built_firmware} \
 %{?x86_default_built_firmware} %{?x86_extra_built_firmware} }
-
-# End of source preparation for qemu
-%endif
 
 %build
 
@@ -1844,15 +1711,6 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 %if "%{_lto_cflags}" != "%{nil}"
 	--enable-lto \
 %endif
-%if "%{name}" == "qemu-linux-user"
-	--disable-install-blobs \
-	--enable-attr \
-	--enable-coroutine-pool \
-	--enable-linux-user \
-	--enable-selinux \
-	--enable-tcg \
-	--static \
-%else
 	--audio-drv-list=pa,alsa,jack,oss \
 	--enable-auth-pam \
 %ifarch x86_64
@@ -1958,14 +1816,11 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-zstd \
 	--with-coroutine=ucontext \
 	--with-default-devices
-# End of configure option ("name == qemu-linux-user" above)
-%endif
 
 echo "=== Content of config-host.mak: ==="
 cat config-host.mak
 echo "=== ==="
 
-%if "%{name}" == "qemu"
 # For building QEMU and all the "default" firmwares, for each arch,
 # for the package qemu, we first need to delete the firmware files that
 # we intend to build...
@@ -1975,14 +1830,9 @@ for i in %built_firmware
 do
   unlink %srcdir/pc-bios/$i
 done
-# End of unlinking pre-built firmwares for qemu
-%endif
-
-# Common build steps for qemu and qemu-linux-user
 
 %make_build
 
-%if "%{name}" == "qemu"
 # ... Then, we need to reinstate the firmwares that have been built already
 for i in %{?s390x_default_built_firmware}
 do
@@ -2074,27 +1924,10 @@ done
 # End of "if build_x86_firmware"
 %endif
 
-# End of the build for qemu
-%endif
-
 %install
 cd %blddir
 
 %make_build install DESTDIR=%{buildroot}
-
-%if "%{name}" == "qemu-linux-user"
-# Additional installation steps specific to qemu-linux-user
-
-rm -rf %{buildroot}%_datadir/qemu/keymaps
-unlink %{buildroot}%_datadir/qemu/trace-events-all
-install -d -m 755 %{buildroot}%_sbindir
-install -m 755 scripts/qemu-binfmt-conf.sh %{buildroot}%_sbindir
-install -d -m 755 %{buildroot}%{_prefix}/lib/binfmt.d/
-scripts/qemu-binfmt-conf.sh --systemd ALL --persistent yes --exportdir %{buildroot}%{_prefix}/lib/binfmt.d/
-
-# End of additional installation steps for qemu-linux-user
-%else
-# Additional installation steps specific to qemu
 
 %find_lang %name
 install -d -m 0755 %{buildroot}%_datadir/%name/firmware
@@ -2199,17 +2032,11 @@ done
 
 %suse_update_desktop_file qemu
 
-# End of additional installation steps for qemu
-%endif
-
 # Common install steps for qemu and qemu-linux-user
 %fdupes -s %{buildroot}
 
 %check
 cd %blddir
-
-%if "%{name}" == "qemu"
-# Let's try to run 'make check' for the qemu package
 
 # Patch 'increase x86_64 physical bits to 42' requires that the DSDT used for
 # acpi [q]tests is modified too. But it's binary, and that means we cannot
@@ -2249,44 +2076,5 @@ make -O V=1 VERBOSE=1 -j1 check-qtest
 # Last step will be to run a full check-report, but we will
 # enable this at a later point
 #make -O V=1 VERBOSE=1 -j1 check-report.junit.xml
-
-# End of checks for qemu
-%else
-# Let's run the relevant check for the qemu-linux-user package
-
-%ifarch %ix86
-%define qemu_arch i386
-%endif
-%ifarch x86_64
-%define qemu_arch x86_64
-%endif
-%ifarch %arm
-%define qemu_arch arm
-%endif
-%ifarch aarch64
-%define qemu_arch aarch64
-%endif
-%ifarch ppc
-%define qemu_arch ppc
-%endif
-%ifarch ppc64
-%define qemu_arch ppc64
-%endif
-%ifarch ppc64le
-%define qemu_arch ppc64le
-%endif
-%ifarch s390x
-%define qemu_arch s390x
-%endif
-
-%ifarch %ix86 x86_64 %arm aarch64 ppc ppc64 ppc64le s390x
-%ifnarch %arm
-%{qemu_arch}-linux-user/qemu-%{qemu_arch} %_bindir/ls > /dev/null
-%endif
-%endif
-
-%make_build check-softfloat
-# End of the checks for qemu-linux-user
-%endif
 
 %changelog
