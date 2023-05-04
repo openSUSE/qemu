@@ -215,6 +215,10 @@ int cgs_mig_loadvm_state_setup(QEMUFile *f)
     int ret;
     uint32_t nr_channels = 1, nr_pages = 1;
 
+    if (!cgs_mig.loadvm_state_setup) {
+        return 0;
+    }
+
     if (migrate_use_multifd()) {
         nr_channels = migrate_multifd_channels();
         nr_pages = MULTIFD_PACKET_SIZE / TARGET_PAGE_SIZE;
