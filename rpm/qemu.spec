@@ -195,6 +195,7 @@ BuildRequires:  ninja >= 1.7
 BuildRequires:  perl-Text-Markdown
 BuildRequires:  python3-base >= 3.6
 BuildRequires:  python3-setuptools
+BuildRequires:  coreutils
 %if %{kvm_available}
 %ifarch %ix86 x86_64
 Requires:       qemu-x86
@@ -1826,7 +1827,10 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 
 echo "=== Content of config-host.mak: ==="
 cat config-host.mak
+echo "=== Space on the disk: ==="
+df -h
 echo "=== ==="
+
 
 # For building QEMU and all the "default" firmwares, for each arch,
 # for the package qemu, we first need to delete the firmware files that

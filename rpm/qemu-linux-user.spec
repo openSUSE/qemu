@@ -50,6 +50,7 @@ BuildRequires:  ninja >= 1.7
 BuildRequires:  perl-Text-Markdown
 BuildRequires:  python3-base >= 3.6
 BuildRequires:  python3-setuptools
+BuildRequires:  coreutils
 
 %description
 QEMU provides CPU emulation along with other related capabilities. This package
@@ -309,6 +310,8 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 
 echo "=== Content of config-host.mak: ==="
 cat config-host.mak
+echo "=== Space on the disk: ==="
+df -h
 echo "=== ==="
 
 %make_build
