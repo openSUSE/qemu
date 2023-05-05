@@ -956,7 +956,6 @@ static QIOChannelSocket *tdx_vtpm_server_setup_communication(TdxVtpmServer *serv
 int tdx_vtpm_init_server(TdxVtpm *base, TdxVmcallService *vms,
                          TdxGuest *tdx, TdxVmcallServiceType *type)
 {
-    int ret;
     QIOChannelSocket *ioc;
     TdxVtpmServer *server = container_of(base,
                                          TdxVtpmServer, parent);
@@ -967,11 +966,7 @@ int tdx_vtpm_init_server(TdxVtpm *base, TdxVmcallService *vms,
         return -1;
     }
 
-    ret = tdx_vtpm_init_base2(base, ioc, tdx);
-    if (ret) {
-        return ret;
-    }
-
+    tdx_vtpm_init_base(base, ioc, tdx);
     server->client_session = g_hash_table_new_full(g_uuid_hash, g_hash_equal,
                                                    NULL, NULL);
     if (!server->client_session) {

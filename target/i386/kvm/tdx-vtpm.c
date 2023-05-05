@@ -43,32 +43,10 @@ QIOChannelSocket* tdx_vtpm_setup_communication(const char *local_addr)
     return NULL;
 }
 
-int tdx_vtpm_init_base(TdxVtpm *base, TdxGuest *tdx,
-                       const char* local_addr,
-                       IOHandler *read, void *read_opaque)
-{
-    QIOChannelSocket *ioc;
-
-    ioc = tdx_vtpm_setup_communication(local_addr);
-    if (!ioc) {
-        error_report("Failed to setup communication:%s",
-                     local_addr);
-        return -1;
-    }
-    qemu_set_fd_handler(ioc->fd, read, NULL, read_opaque);
-
-    base->ioc = ioc;
-    base->tdx = tdx;
-
-    return 0;
-}
-
-int tdx_vtpm_init_base2(TdxVtpm *base, QIOChannelSocket *ioc, TdxGuest *tdx)
+void tdx_vtpm_init_base(TdxVtpm *base, QIOChannelSocket *ioc, TdxGuest *tdx)
 {
     base->ioc = ioc;
     base->tdx = tdx;
-
-    return 0;
 }
 
 

@@ -506,7 +506,6 @@ static QIOChannelSocket *tdx_vtpm_client_setup_communication(TdxVtpmClient *clie
 int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,
                          TdxGuest *tdx, TdxVmcallServiceType *type)
 {
-    int ret;
     char *local_addr;
     TdxVtpmClient *client = container_of(base,
                                          TdxVtpmClient, parent);
@@ -545,10 +544,7 @@ int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,
         goto free;
     }
 
-    ret = tdx_vtpm_init_base2(base, ioc, tdx);
-    if (ret)
-        goto free;
-
+    tdx_vtpm_init_base(base, ioc, tdx);
     if (socket_recv_buffer_init(&client->recv_buf, 256))
         goto free;
 

@@ -31,10 +31,7 @@ typedef struct TdxVtpm {
 } TdxVtpm;
 
 QIOChannelSocket* tdx_vtpm_setup_communication(const char *local_addr);
-int tdx_vtpm_init_base(TdxVtpm *base, TdxGuest *tdx,
-                       const char* local_addr,
-                       IOHandler *read, void *read_opaque);
-int tdx_vtpm_init_base2(TdxVtpm *base, QIOChannelSocket *ioc, TdxGuest *tdx);
+void tdx_vtpm_init_base(TdxVtpm *base, QIOChannelSocket *ioc, TdxGuest *tdx);
 
 struct TdxVtpmServerPendingRequest;
 struct TdxVtpmServerPendingManageRequest;
