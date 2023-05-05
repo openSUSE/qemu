@@ -1303,7 +1303,7 @@ Version:        %{qemuver}
 Release:        0
 BuildArch:      noarch
 Requires(post): update-alternatives
-Requires(postun):update-alternatives
+Requires(postrun):update-alternatives
 
 %description skiboot
 Provides OPAL (OpenPower Abstraction Layer) firmware, aka skiboot, as
