@@ -196,6 +196,7 @@ BuildRequires:  perl-Text-Markdown
 BuildRequires:  python3-base >= 3.6
 BuildRequires:  python3-setuptools
 BuildRequires:  coreutils
+BuildRequires:  procps
 %if %{kvm_available}
 %ifarch %ix86 x86_64
 Requires:       qemu-x86
@@ -1827,6 +1828,8 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 
 echo "=== Content of config-host.mak: ==="
 cat config-host.mak
+echo "=== Memory: ==="
+free -h
 echo "=== Space on the disk: ==="
 df -h
 echo "=== ==="
