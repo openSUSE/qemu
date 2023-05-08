@@ -1622,14 +1622,16 @@ static int find_dirty_block(RAMState *rs, PageSearchStatus *pss)
         pss->page = 0;
         pss->block = QLIST_NEXT_RCU(pss->block, next);
         if (!pss->block) {
-            if (!migrate_multifd_flush_after_each_section()) {
-                QEMUFile *f = rs->pss[RAM_CHANNEL_PRECOPY].pss_channel;
-                int ret = multifd_send_sync_main(f);
-                if (ret < 0) {
-                    return ret;
+            if (!migrate_fixed_ram()) {
+                if (!migrate_multifd_flush_after_each_section()) {
+                    QEMUFile *f = rs->pss[RAM_CHANNEL_PRECOPY].pss_channel;
+                    int ret = multifd_send_sync_main(f);
+                    if (ret < 0) {
+                        return ret;
+                    }
+                    qemu_put_be64(f, RAM_SAVE_FLAG_MULTIFD_FLUSH);
+                    qemu_fflush(f);
                 }
-                qemu_put_be64(f, RAM_SAVE_FLAG_MULTIFD_FLUSH);
-                qemu_fflush(f);
             }
             /*
              * If memory migration starts over, we will meet a dirtied page
@@ -3511,11 +3513,9 @@ out:
                 return ret;
             }
         }
-//        if (!migrate_fixed_ram()) {
-            qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
-            qemu_fflush(f);
-            ram_transferred_add(8);
-//        }
+        qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
+        qemu_fflush(f);
+        ram_transferred_add(8);
         ret = qemu_file_get_error(f);
     }
     if (ret < 0) {
@@ -3588,16 +3588,8 @@ static int ram_save_complete(QEMUFile *f, void *opaque)
     if (!migrate_multifd_flush_after_each_section()) {
         qemu_put_be64(f, RAM_SAVE_FLAG_MULTIFD_FLUSH);
     }
-/*
-  Can we simply leave these alone? it seems like a better option
-  because each flag that is added above^ will need to be skipped
-  because we don't have an EOS after it.
 
-    if (!migrate_fixed_ram()) {
-*/
-        qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
-/*    } */
-
+    qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
     qemu_fflush(f);
 
     return 0;
