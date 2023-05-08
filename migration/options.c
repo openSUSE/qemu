@@ -186,6 +186,7 @@ Property migration_properties[] = {
             MIGRATION_CAPABILITY_ZERO_COPY_SEND),
 #endif
     DEFINE_PROP_MIG_CAP("x-suspend", MIGRATION_CAPABILITY_SUSPEND),
+    DEFINE_PROP_MIG_CAP("x-fixed-ram", MIGRATION_CAPABILITY_FIXED_RAM),
 
     DEFINE_PROP_END_OF_LIST(),
 };
@@ -237,6 +238,16 @@ bool migrate_events(void)
     MigrationState *s = migrate_get_current();
 
     return s->capabilities[MIGRATION_CAPABILITY_EVENTS];
+}
+
+bool migrate_fixed_ram(void)
+{
+/*
+    MigrationState *s = migrate_get_current();
+
+    return s->capabilities[MIGRATION_CAPABILITY_FIXED_RAM];
+*/
+    return false;
 }
 
 bool migrate_ignore_shared(void)
@@ -427,7 +438,8 @@ INITIALIZE_MIGRATE_CAPS_SET(check_caps_background_snapshot,
     MIGRATION_CAPABILITY_X_COLO,
     MIGRATION_CAPABILITY_VALIDATE_UUID,
     MIGRATION_CAPABILITY_ZERO_COPY_SEND,
-    MIGRATION_CAPABILITY_SUSPEND);
+    MIGRATION_CAPABILITY_SUSPEND,
+    MIGRATION_CAPABILITY_FIXED_RAM);
 
 /**
  * @migration_caps_check - check capability compatibility
@@ -557,6 +569,32 @@ bool migrate_caps_check(bool *old_caps, bool *new_caps, Error **errp)
     if (new_caps[MIGRATION_CAPABILITY_MULTIFD]) {
         if (new_caps[MIGRATION_CAPABILITY_COMPRESS]) {
             error_setg(errp, "Multifd is not compatible with compress");
+            return false;
+        }
+    }
+
+    if (new_caps[MIGRATION_CAPABILITY_FIXED_RAM]) {
+        if (new_caps[MIGRATION_CAPABILITY_MULTIFD]) {
+            error_setg(errp,
+                       "Fixed-ram migration is incompatible with multifd");
+            return false;
+        }
+
+        if (new_caps[MIGRATION_CAPABILITY_XBZRLE]) {
+            error_setg(errp,
+                       "Fixed-ram migration is incompatible with xbzrle");
+            return false;
+        }
+
+        if (new_caps[MIGRATION_CAPABILITY_COMPRESS]) {
+            error_setg(errp,
+                       "Fixed-ram migration is incompatible with compression");
+            return false;
+        }
+
+        if (new_caps[MIGRATION_CAPABILITY_POSTCOPY_RAM]) {
+            error_setg(errp,
+                       "Fixed-ram migration is incompatible with postcopy ram");
             return false;
         }
     }
