@@ -1369,14 +1369,16 @@ static int find_dirty_block(RAMState *rs, PageSearchStatus *pss)
         pss->page = 0;
         pss->block = QLIST_NEXT_RCU(pss->block, next);
         if (!pss->block) {
-            if (!migrate_multifd_flush_after_each_section()) {
-                QEMUFile *f = rs->pss[RAM_CHANNEL_PRECOPY].pss_channel;
-                int ret = multifd_send_sync_main(f);
-                if (ret < 0) {
-                    return ret;
+            if (!migrate_fixed_ram()) {
+                if (!migrate_multifd_flush_after_each_section()) {
+                    QEMUFile *f = rs->pss[RAM_CHANNEL_PRECOPY].pss_channel;
+                    int ret = multifd_send_sync_main(f);
+                    if (ret < 0) {
+                        return ret;
+                    }
+                    qemu_put_be64(f, RAM_SAVE_FLAG_MULTIFD_FLUSH);
+                    qemu_fflush(f);
                 }
-                qemu_put_be64(f, RAM_SAVE_FLAG_MULTIFD_FLUSH);
-                qemu_fflush(f);
             }
             /*
              * If memory migration starts over, we will meet a dirtied page
