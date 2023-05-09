@@ -2553,13 +2553,6 @@ static int ram_save_cgs_start_epoch(RAMState *rs)
     long res;
     QEMUFile *f = rs->f;
 
-    if (migrate_use_multifd() && !migration_in_postcopy()) {
-            res = multifd_send_sync_main(f);
-            if (res < 0) {
-                return res;
-	    }
-    }
-
     res = cgs_ram_save_start_epoch(f);
     if (res < 0) {
         return (int)res;

@@ -98,6 +98,13 @@ long cgs_ram_save_start_epoch(QEMUFile *f)
         return 0;
     }
 
+    if (migrate_use_multifd() && !migration_in_postcopy()) {
+        ret = multifd_send_sync_main(f);
+        if (ret < 0) {
+            return ret;
+        }
+    }
+
     ram_save_cgs_epoch_header(f);
     ret = cgs_mig.savevm_state_ram_start_epoch(f);
     cgs_check_error(f, ret);
