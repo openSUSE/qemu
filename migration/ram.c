@@ -3325,7 +3325,6 @@ static int ram_save_complete(QEMUFile *f, void *opaque)
     if (!migrate_multifd_flush_after_each_section()) {
         qemu_put_be64(f, RAM_SAVE_FLAG_MULTIFD_FLUSH);
     }
-
     qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
 
     qemu_fflush(f);
@@ -4198,7 +4197,6 @@ static int ram_load_precopy(QEMUFile *f)
             if (migrate_multifd_flush_after_each_section()) {
                 multifd_recv_sync_main();
             }
-
             break;
         case RAM_SAVE_FLAG_HOOK:
             ram_control_load_hook(f, RAM_CONTROL_HOOK, NULL);
