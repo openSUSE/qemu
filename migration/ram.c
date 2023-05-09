@@ -3502,11 +3502,11 @@ out:
                 return ret;
             }
         }
-        if (!migrate_fixed_ram()) {
+//        if (!migrate_fixed_ram()) {
             qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
             qemu_fflush(f);
             ram_transferred_add(8);
-        }
+//        }
         ret = qemu_file_get_error(f);
     }
     if (ret < 0) {
@@ -3579,10 +3579,15 @@ static int ram_save_complete(QEMUFile *f, void *opaque)
     if (!migrate_multifd_flush_after_each_section()) {
         qemu_put_be64(f, RAM_SAVE_FLAG_MULTIFD_FLUSH);
     }
+/*
+  Can we simply leave these alone? it seems like a better option
+  because each flag that is added above^ will need to be skipped
+  because we don't have an EOS after it.
 
     if (!migrate_fixed_ram()) {
+*/
         qemu_put_be64(f, RAM_SAVE_FLAG_EOS);
-    }
+/*    } */
 
     qemu_fflush(f);
 
@@ -4522,7 +4527,7 @@ static int ram_load_precopy(QEMUFile *f)
         invalid_flags |= RAM_SAVE_FLAG_COMPRESS_PAGE;
     }
 
-    while (!ret && !(flags & RAM_SAVE_FLAG_EOS) && !mis->ram_migrated) {
+    while (!ret && !(flags & RAM_SAVE_FLAG_EOS)) {
         ram_addr_t addr;
         void *host = NULL, *host_bak = NULL;
         uint8_t ch;
@@ -4632,12 +4637,6 @@ static int ram_load_precopy(QEMUFile *f)
             if (migrate_multifd_flush_after_each_section()) {
                 multifd_recv_sync_main();
             }
-
-            if (migrate_fixed_ram()) {
-                mis->ram_migrated = true;
-                ret = 1;
-            }
-
             break;
         case RAM_SAVE_FLAG_HOOK:
             ram_control_load_hook(f, RAM_CONTROL_HOOK, NULL);
