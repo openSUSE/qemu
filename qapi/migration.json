@@ -481,6 +481,9 @@
 # @fixed-ram: Migrate using fixed offsets for each RAM page. Requires
 #             a seekable transport such as a file.  (since 8.1)
 #
+# @suspend: If enabled, a non-live migration will be performed,
+#           i.e. the VM will be stopped before migration. (since 8.1)
+#
 # Features:
 # @unstable: Members @x-colo and @x-ignore-shared are experimental.
 #
@@ -495,7 +498,8 @@
            'dirty-bitmaps', 'postcopy-blocktime', 'late-block-activate',
            { 'name': 'x-ignore-shared', 'features': [ 'unstable' ] },
            'validate-uuid', 'background-snapshot',
-           'zero-copy-send', 'postcopy-preempt', 'fixed-ram'] }
+           'zero-copy-send', 'postcopy-preempt', 'fixed-ram',
+           'suspend'] }
 
 ##
 # @MigrationCapabilityStatus:
