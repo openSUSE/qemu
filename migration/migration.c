@@ -494,6 +494,10 @@ static void process_incoming_migration_bh(void *opaque)
     } else if (migration_incoming_colo_enabled()) {
         migration_incoming_disable_colo();
         vm_start();
+    } else if (global_state_received() &&
+               global_state_get_runstate() == RUN_STATE_PAUSED &&
+               (autostart || migrate_suspend())) {
+        vm_start();
     } else {
         runstate_set(global_state_get_runstate());
     }

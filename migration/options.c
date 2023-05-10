@@ -185,6 +185,7 @@ Property migration_properties[] = {
     DEFINE_PROP_MIG_CAP("x-zero-copy-send",
             MIGRATION_CAPABILITY_ZERO_COPY_SEND),
 #endif
+    DEFINE_PROP_MIG_CAP("x-suspend", MIGRATION_CAPABILITY_SUSPEND),
 
     DEFINE_PROP_END_OF_LIST(),
 };
@@ -308,6 +309,13 @@ bool migrate_return_path(void)
     return s->capabilities[MIGRATION_CAPABILITY_RETURN_PATH];
 }
 
+bool migrate_suspend(void)
+{
+    MigrationState *s = migrate_get_current();
+
+    return s->capabilities[MIGRATION_CAPABILITY_SUSPEND];
+}
+
 bool migrate_validate_uuid(void)
 {
     MigrationState *s = migrate_get_current();
@@ -343,6 +351,11 @@ bool migrate_multifd_flush_after_each_section(void)
     MigrationState *s = migrate_get_current();
 
     return s->multifd_flush_after_each_section;
+}
+
+bool migrate_live(void)
+{
+    return !migrate_suspend();
 }
 
 bool migrate_postcopy(void)
@@ -413,7 +426,8 @@ INITIALIZE_MIGRATE_CAPS_SET(check_caps_background_snapshot,
     MIGRATION_CAPABILITY_XBZRLE,
     MIGRATION_CAPABILITY_X_COLO,
     MIGRATION_CAPABILITY_VALIDATE_UUID,
-    MIGRATION_CAPABILITY_ZERO_COPY_SEND);
+    MIGRATION_CAPABILITY_ZERO_COPY_SEND,
+    MIGRATION_CAPABILITY_SUSPEND);
 
 /**
  * @migration_caps_check - check capability compatibility
