@@ -1,5 +1,5 @@
 #
-# spec file
+# spec file for package qemu
 #
 # Copyright (c) 2023 SUSE LLC
 #
@@ -14,6 +14,7 @@
 
 # Please submit bugfixes or comments via https://bugs.opensuse.org/
 #
+
 
 %include %{_sourcedir}/common.inc
 
@@ -81,11 +82,10 @@ URL:            https://www.qemu.org/
 Summary:        Machine emulator and virtualizer
 License:        BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
 Group:          System/Emulators/PC
-Version:        7.1.0
+Version:        8.0.0
 Release:        0
 Source0:        qemu-%{version}.tar.xz
 Source1:        common.inc
-Source200:      qemu-rpmlintrc
 Source303:      README.PACKAGING
 Source1000:     qemu-rpmlintrc
 BuildRoot:      %{_tmppath}/%{name}-%{version}-build
@@ -269,6 +269,7 @@ Suggests:       qemu-lang
 Suggests:       qemu-microvm
 Suggests:       qemu-skiboot
 Suggests:       qemu-vhost-user-gpu
+Obsoletes:      qemu-sgabios <= 8
 Obsoletes:      qemu-audio-oss < %{version}
 Obsoletes:      qemu-audio-sdl < %{version}
 Obsoletes:      qemu-ui-sdl < %{version}
@@ -312,10 +313,8 @@ This package acts as an umbrella package to the other QEMU sub-packages.
 %_datadir/%name/qemu-ifup
 %_datadir/%name/qemu-nsis.bmp
 %_datadir/%name/trace-events-all
-%_datadir/%name/vhost-user/50-qemu-virtiofsd.json
 %_mandir/man1/%name.1.gz
 %_mandir/man1/qemu-storage-daemon.1.gz
-%_mandir/man1/virtiofsd.1.gz
 %_mandir/man7/qemu-block-drivers.7.gz
 %_mandir/man7/qemu-cpu-models.7.gz
 %_mandir/man7/qemu-qmp-ref.7.gz
@@ -382,7 +381,7 @@ Conflicts:      qemu-tools > %{version}-%{release}
 multiboot_dma.bin kvmvapic.bin pvh.bin}
 %define x86_extra_firmware {bios.bin bios-256k.bin bios-microvm.bin qboot.rom \
 pxe-e1000.rom pxe-eepro100.rom pxe-ne2k_pci.rom pxe-pcnet.rom pxe-rtl8139.rom \
-pxe-virtio.rom sgabios.bin vgabios-ati.bin vgabios-bochs-display.bin \
+pxe-virtio.rom vgabios-ati.bin vgabios-bochs-display.bin \
 vgabios.bin vgabios-cirrus.bin vgabios-qxl.bin vgabios-ramfb.bin \
 vgabios-stdvga.bin vgabios-virtio.bin vgabios-vmware.bin \
 efi-e1000.rom efi-e1000e.rom efi-eepro100.rom efi-ne2k_pci.rom efi-pcnet.rom \
@@ -607,7 +606,6 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--disable-vhost-vdpa \
 	--disable-virglrenderer \
 	--disable-virtfs \
-	--disable-virtiofsd \
 	--disable-vnc \
 	--disable-vnc-jpeg \
 	--disable-vnc-sasl \
@@ -702,8 +700,8 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-replication \
 	--enable-seccomp \
 	--enable-selinux \
+	--enable-slirp \
 	--enable-slirp-smbd \
-	--enable-slirp=system \
 	--enable-smartcard \
 	--enable-snappy \
 	--enable-spice \
@@ -723,7 +721,6 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-vhost-vdpa \
 	--enable-virglrenderer \
 	--enable-virtfs \
-	--enable-virtiofsd \
 	--enable-vnc \
 	--enable-vnc-jpeg \
 	--enable-vnc-sasl \
@@ -803,16 +800,8 @@ popd
 
 %make_build -C %srcdir/roms pxerom
 
-%make_build -C %srcdir/roms efirom \
-  EDK2_BASETOOLS_OPTFLAGS='-fPIE'
-
-# We're currently not building firmware on ix86, but let's make sure this works
-# fine if one enables it, e.g., locally (for debugging or something).
-# FIXME: check if we can get rid or upstream: roms-sgabios-Fix-csum8-to-be-built-by-ho.patch
-make -C %srcdir/roms sgabios HOSTCC=cc \
-%ifnarch %ix86 x86_64
-    CC=x86_64-suse-linux-gcc LD=x86_64-suse-linux-ld \
-%endif
+%make_build -C %srcdir/roms edk2-basetools EXTRA_OPTFLAGS='-fPIE'
+%make_build -C %srcdir/roms efirom
 
 %if %{force_fit_virtio_pxe_rom}
 pushd %srcdir
@@ -1021,7 +1010,6 @@ Requires:       %name = %{version}
 Requires:       qemu-accel-tcg-x86
 Requires:       qemu-ipxe
 Requires:       qemu-seabios
-Requires:       qemu-sgabios
 Requires:       qemu-vgabios
 %ifarch x86_64
 Requires:       qemu-ovmf-x86_64
@@ -1621,7 +1609,6 @@ a virtfs helper, ivshmem, disk utilities and scripts for various purposes.
 %_bindir/vmxcap
 %verify(not mode) %attr(4750,root,kvm) %_libexecdir/qemu-bridge-helper
 %_libexecdir/virtfs-proxy-helper
-%_libexecdir/virtiofsd
 %_mandir/man1/qemu-img.1.gz
 %_mandir/man1/virtfs-proxy-helper.1.gz
 %_mandir/man8/qemu-nbd.8.gz
@@ -1942,24 +1929,6 @@ video card. For use with QEMU.
 %_datadir/%name/vgabios-virtio.bin
 %_datadir/%name/vgabios-vmware.bin
 %license roms/seabios/COPYING
-
-%package sgabios
-Summary:        Serial Graphics Adapter BIOS for QEMU
-Group:          System/Emulators/PC
-Version:        8
-Release:        0
-BuildArch:      noarch
-Conflicts:      %name < 1.6.0
-
-%description sgabios
-The Google Serial Graphics Adapter BIOS or SGABIOS provides a means for legacy
-x86 software to communicate with an attached serial console as if a video card
-were attached. For use with QEMU.
-
-%files sgabios
-%defattr(-, root, root)
-%dir %_datadir/%name
-%_datadir/%name/sgabios.bin
 
 %package ipxe
 Summary:        PXE ROMs for QEMU NICs
