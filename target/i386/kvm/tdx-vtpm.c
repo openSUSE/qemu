@@ -218,7 +218,7 @@ int socket_recv_buffer_next(SocketRecvBuffer *srb,
         srb->update_buf = false;
     }
 
-    if (srb->used_size <= sizeof(*head))
+    if (srb->used_size < sizeof(*head))
         return 1;
 
     if (head->length > srb->size) {
