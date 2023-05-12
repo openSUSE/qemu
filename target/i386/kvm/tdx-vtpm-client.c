@@ -373,6 +373,31 @@ static void tdx_vtpm_vmcall_service_client_handler(TdxVmcallServiceItem *vsi, vo
     qemu_mutex_unlock(&vtpm_client->lock);
 }
 
+static void tdx_vtpm_client_check_pending_request(TdxVtpmClient *client)
+{
+    TdxVtpmClientPendingRequest *request;
+    TdxVtpmClientDataEntry *data;
+    int ret;
+
+    if (QLIST_EMPTY(&client->request_list)) {
+        return;
+    }
+
+    if (QSIMPLEQ_EMPTY(&client->data_queue)) {
+        return;
+    }
+
+    data = tdx_vtpm_client_data_queue_get(client);
+    request = tdx_vtpm_client_request_queue_get(client);
+    ret = tdx_vtpm_client_do_receive_message(request->vsi,
+                                             data->state,
+                                             data->buf, data->buf_size);
+    tdx_vtpm_client_request_queue_remove(client, request);
+    if (!ret) {
+        tdx_vtpm_client_data_queue_remove(client);
+    }
+}
+
 static void tdx_vtpm_client_handle_trans_protocol_data(TdxVtpmClient *client,
                                                        void *buf, int size)
 {
@@ -381,20 +406,7 @@ static void tdx_vtpm_client_handle_trans_protocol_data(TdxVtpmClient *client,
     TdxVtpmClientDataEntry data_entry;
     int ret;
 
-    if (!QLIST_EMPTY(&client->request_list)) {
-        TdxVtpmClientPendingRequest *request;
-
-        request = tdx_vtpm_client_request_queue_get(client);
-        ret = tdx_vtpm_client_do_receive_message(request->vsi,
-                                                 data->state,
-                                                 data->data, payload_size);
-        tdx_vtpm_client_request_queue_remove(client, request);
-        if (!ret) {
-            return;
-        }
-    }
-
-    VMCALL_DEBUG("No pending receive request, saving received data, size:%d\n", payload_size);
+    VMCALL_DEBUG("Saving received data, size:%d\n", payload_size);
     VMCALL_DUMP_DATA(data->data, payload_size);
 
     data_entry.buf = data->data;
@@ -406,6 +418,7 @@ static void tdx_vtpm_client_handle_trans_protocol_data(TdxVtpmClient *client,
         return;
     }
 
+    tdx_vtpm_client_check_pending_request(client);
 }
 
 static void tdx_vtpm_client_handle_trans_protocol(TdxVtpmClient *client,
