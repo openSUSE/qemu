@@ -269,6 +269,7 @@ Suggests:       qemu-lang
 Suggests:       qemu-microvm
 Suggests:       qemu-skiboot
 Suggests:       qemu-vhost-user-gpu
+Suggests:       qemu-doc
 Obsoletes:      qemu-sgabios <= 8
 Obsoletes:      qemu-audio-oss < %{version}
 Obsoletes:      qemu-audio-sdl < %{version}
@@ -291,7 +292,6 @@ This package acts as an umbrella package to the other QEMU sub-packages.
 %dir %_sysconfdir/%name/firmware
 %dir /usr/lib/supportconfig
 %dir /usr/lib/supportconfig/plugins
-%doc %_docdir/%name
 %if %{kvm_available}
 %ifarch s390x
 %{_prefix}/lib/modules-load.d/kvm.conf
@@ -1002,6 +1002,8 @@ Requires:       qemu-chardev-spice
 
 This meta-package brings in, as dependencies, the minimum set of packages
 currently necessary for having a functional (headless) QEMU/KVM stack.
+
+%files headless
 
 %package x86
 Summary:        Machine emulator and virtualizer for x86 architectures
@@ -1961,5 +1963,20 @@ network adapters available with QEMU.
 %_datadir/%name/pxe-virtio.rom
 # End of "if build_x86_firmware"
 %endif
+
+%package doc
+Summary:        Documentation for QEMU
+Group:          System/Emulators/PC
+BuildArch:      noarch
+Suggests:       qemu
+
+%files doc
+%defattr(-, root, root)
+%doc %_docdir/%name
+
+%description doc
+%{generic_qemu_description}
+
+This package contains user and developer documentation for QEMU.
 
 %changelog
