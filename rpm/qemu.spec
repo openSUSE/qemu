@@ -246,7 +246,6 @@ Recommends:     qemu-hw-display-virtio-vga
 Recommends:     qemu-hw-usb-host
 Recommends:     qemu-hw-usb-redirect
 Recommends:     qemu-hw-usb-smartcard
-Recommends:     qemu-ui-gtk
 Recommends:     qemu-ui-spice-app
 # End of "ifarch s390x"
 %endif
@@ -269,6 +268,7 @@ Suggests:       qemu-lang
 Suggests:       qemu-microvm
 Suggests:       qemu-skiboot
 Suggests:       qemu-vhost-user-gpu
+Suggests:       qemu-ui-gtk
 Suggests:       qemu-doc
 Obsoletes:      qemu-sgabios <= 8
 Obsoletes:      qemu-audio-oss < %{version}
@@ -1510,6 +1510,7 @@ This package contains a module for doing curses based UI for QEMU.
 Summary:        GTK based UI support for QEMU
 Group:          System/Emulators/PC
 Requires:       qemu-ui-opengl
+Supplements:    (qemu and libgtk-3-0)
 %{qemu_module_conflicts}
 
 %description ui-gtk
