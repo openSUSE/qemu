@@ -58,6 +58,7 @@ ERST
         .help       = "show info of one block device or all block devices "
                       "(-n: show named nodes; -v: show details)",
         .cmd        = hmp_info_block,
+        .coroutine  = true,
     },
 
 SRST
