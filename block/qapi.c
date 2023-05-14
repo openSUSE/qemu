@@ -418,8 +418,8 @@ fail:
 }
 
 /* @p_info will be set only on success. */
-static void GRAPH_RDLOCK
-bdrv_query_info(BlockBackend *blk, BlockInfo **p_info, Error **errp)
+static void GRAPH_RDLOCK coroutine_fn
+bdrv_co_query_info(BlockBackend *blk, BlockInfo **p_info, Error **errp)
 {
     BlockInfo *info = g_malloc0(sizeof(*info));
     BlockDriverState *bs = blk_bs(blk);
@@ -451,7 +451,7 @@ bdrv_query_info(BlockBackend *blk, BlockInfo **p_info, Error **errp)
     }
 
     if (bs && bs->drv) {
-        info->inserted = bdrv_block_device_info(blk, bs, false, errp);
+        info->inserted = bdrv_co_block_device_info(blk, bs, false, errp);
         if (info->inserted == NULL) {
             goto err;
         }
@@ -661,13 +661,13 @@ bdrv_query_bds_stats(BlockDriverState *bs, bool blk_level)
     return s;
 }
 
-BlockInfoList *qmp_query_block(Error **errp)
+BlockInfoList *coroutine_fn qmp_query_block(Error **errp)
 {
     BlockInfoList *head = NULL, **p_next = &head;
     BlockBackend *blk;
     Error *local_err = NULL;
 
-    GRAPH_RDLOCK_GUARD_MAINLOOP();
+    GRAPH_RDLOCK_GUARD();
 
     for (blk = blk_all_next(NULL); blk; blk = blk_all_next(blk)) {
         BlockInfoList *info;
@@ -677,7 +677,7 @@ BlockInfoList *qmp_query_block(Error **errp)
         }
 
         info = g_malloc0(sizeof(*info));
-        bdrv_query_info(blk, &info->value, &local_err);
+        bdrv_co_query_info(blk, &info->value, &local_err);
         if (local_err) {
             error_propagate(errp, local_err);
             g_free(info);
