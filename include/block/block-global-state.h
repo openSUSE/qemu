@@ -196,7 +196,8 @@ void bdrv_aio_cancel(BlockAIOCB *acb);
 int bdrv_has_zero_init_1(BlockDriverState *bs);
 int coroutine_mixed_fn GRAPH_RDLOCK bdrv_has_zero_init(BlockDriverState *bs);
 BlockDriverState *bdrv_find_node(const char *node_name);
-BlockDeviceInfoList *bdrv_named_nodes_list(bool flat, Error **errp);
+BlockDeviceInfoList *coroutine_fn bdrv_co_named_nodes_list(bool flat,
+                                                           Error **errp);
 XDbgBlockGraph * GRAPH_RDLOCK bdrv_get_xdbg_block_graph(Error **errp);
 BlockDriverState *bdrv_lookup_bs(const char *device,
                                  const char *node_name,

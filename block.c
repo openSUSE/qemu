@@ -6228,18 +6228,18 @@ BlockDriverState *bdrv_find_node(const char *node_name)
 }
 
 /* Put this QMP function here so it can access the static graph_bdrv_states. */
-BlockDeviceInfoList *bdrv_named_nodes_list(bool flat,
-                                           Error **errp)
+BlockDeviceInfoList *coroutine_fn bdrv_co_named_nodes_list(bool flat,
+                                                           Error **errp)
 {
     BlockDeviceInfoList *list;
     BlockDriverState *bs;
 
     GLOBAL_STATE_CODE();
-    GRAPH_RDLOCK_GUARD_MAINLOOP();
+    GRAPH_RDLOCK_GUARD();
 
     list = NULL;
     QTAILQ_FOREACH(bs, &graph_bdrv_states, node_list) {
-        BlockDeviceInfo *info = bdrv_block_device_info(NULL, bs, flat, errp);
+        BlockDeviceInfo *info = bdrv_co_block_device_info(NULL, bs, flat, errp);
         if (!info) {
             qapi_free_BlockDeviceInfoList(list);
             return NULL;
