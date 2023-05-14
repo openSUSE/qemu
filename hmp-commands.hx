@@ -1432,6 +1432,7 @@ ERST
         .params     = "nbd_server_start [-a] [-w] host:port",
         .help       = "serve block devices on the given host and port",
         .cmd        = hmp_nbd_server_start,
+        .coroutine  = true,
         .flags      = "p",
     },
 SRST

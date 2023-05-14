@@ -74,7 +74,7 @@
             '*tls-creds': 'str',
             '*tls-authz': 'str',
             '*max-connections': 'uint32' },
-  'allow-preconfig': true }
+  'allow-preconfig': true, 'coroutine': true }
 
 ##
 # @BlockExportOptionsNbdBase:

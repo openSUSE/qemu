@@ -388,7 +388,7 @@ void hmp_snapshot_delete_blkdev_internal(Monitor *mon, const QDict *qdict)
     hmp_handle_error(mon, err);
 }
 
-void hmp_nbd_server_start(Monitor *mon, const QDict *qdict)
+void coroutine_fn hmp_nbd_server_start(Monitor *mon, const QDict *qdict)
 {
     const char *uri = qdict_get_str(qdict, "uri");
     bool writable = qdict_get_try_bool(qdict, "writable", false);
@@ -738,7 +738,7 @@ static void print_block_info(Monitor *mon, BlockInfo *info,
     }
 }
 
-void hmp_info_block(Monitor *mon, const QDict *qdict)
+void coroutine_fn hmp_info_block(Monitor *mon, const QDict *qdict)
 {
     BlockInfoList *block_list, *info;
     BlockDeviceInfoList *blockdev_list, *blockdev;
