@@ -155,6 +155,7 @@ static void tdx_vtpm_handle_send_message(TdxVtpmClient *vtpm_client,
 }
 
 static int tdx_vtpm_client_do_receive_message(TdxVmcallServiceItem *vsi,
+                                              int state,
                                               uint8_t recved_state,
                                               void *buf, int size)
 {
@@ -162,7 +163,6 @@ static int tdx_vtpm_client_do_receive_message(TdxVmcallServiceItem *vsi,
     int rsp_size;
     TdxVtpmRspReceiveMessage *rsp;
     int total_size;
-    int state;
 
     rsp = tdx_vmcall_service_rsp_buf(vsi);
     rsp_size = tdx_vmcall_service_rsp_size(vsi);
@@ -178,9 +178,9 @@ static int tdx_vtpm_client_do_receive_message(TdxVmcallServiceItem *vsi,
         rsp->head = tdx_vtpm_init_comm_head(TDX_VTPM_RECEIVE_MESSAGE);
         rsp->status = recved_state;
         rsp->reserved = 0;
-        memcpy(rsp->data, buf, size);
-
-        state = TDG_VP_VMCALL_SERVICE_SUCCESS;
+        if (buf) {
+            memcpy(rsp->data, buf, size);
+        }
         ret = 0;
 
         VMCALL_DEBUG("Copied :%d size\n", size);
@@ -302,6 +302,7 @@ static void tdx_vtpm_handle_receive_message(TdxVtpmClient *vtpm_client,
 
         entry = tdx_vtpm_client_data_queue_get(vtpm_client);
         ret = tdx_vtpm_client_do_receive_message(vsi,
+                                                 TDG_VP_VMCALL_SERVICE_SUCCESS,
                                                  entry->state,
                                                  entry->buf, entry->buf_size);
         if (!ret) {
@@ -390,11 +391,26 @@ static void tdx_vtpm_client_check_pending_request(TdxVtpmClient *client)
     data = tdx_vtpm_client_data_queue_get(client);
     request = tdx_vtpm_client_request_queue_get(client);
     ret = tdx_vtpm_client_do_receive_message(request->vsi,
+                                             TDG_VP_VMCALL_SERVICE_SUCCESS,
                                              data->state,
                                              data->buf, data->buf_size);
     tdx_vtpm_client_request_queue_remove(client, request);
     if (!ret) {
         tdx_vtpm_client_data_queue_remove(client);
+    }
+}
+
+static void tdx_vtpm_client_finish_all_request(TdxVtpmClient *client, int state)
+{
+    TdxVtpmClientPendingRequest *request;
+
+    tdx_vtpm_client_check_pending_request(client);
+
+    while(!QLIST_EMPTY(&client->request_list)) {
+        request = tdx_vtpm_client_request_queue_get(client);
+        tdx_vtpm_client_do_receive_message(request->vsi, state,
+                                           0, NULL, 0);
+        tdx_vtpm_client_request_queue_remove(client, request);
     }
 }
 
@@ -449,6 +465,8 @@ static void tdx_vtpm_client_disconnected(TdxVtpmClient *client)
     }
 
     client->state = TDX_VTPM_CLIENT_STATE_DISCONNECTED;
+    tdx_vtpm_client_finish_all_request(client,
+                                       TDG_VP_VMCALL_SERVICE_DEVICE_ERROR);
 }
 
 static void tdx_vtpm_client_handle_recv_data(TdxVtpmClient *client)
