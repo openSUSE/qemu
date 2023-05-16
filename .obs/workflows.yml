@@ -6,6 +6,9 @@ pr_workflow:
         target_project: Virtualization:Staging:PRs
   filters:
     event: pull_request
+    branches:
+      only:
+        - factory
 rebuild_workflow:
   steps:
     # Will automatically rebuild the package
@@ -14,3 +17,6 @@ rebuild_workflow:
         package: qemu
   filters:
     event: push
+    branches:
+      only:
+        - factory
