@@ -216,9 +216,12 @@ static void tdx_vtpm_server_destroy_client_session_data_node(TdxVtpmServer *serv
 }
 
 static void tdx_vtpm_server_destroy_client_session(TdxVtpmServer *server,
-                                                   TdxVtpmServerClientSession *session)
+                                                   TdxVtpmServerClientSession *session,
+                                                   bool lock)
 {
-    qemu_mutex_lock(&server->lock);
+    if (lock) {
+        qemu_mutex_lock(&server->lock);
+    }
 
     if (session->state == VTPM_SERVER_CLIENT_SESSION_READY) {
         tdx_vtpm_server_destroy_client_session_data_node(server, session);
@@ -234,7 +237,9 @@ static void tdx_vtpm_server_destroy_client_session(TdxVtpmServer *server,
     /*Delete the client session */
     tdx_vtpm_server_client_session_unref(session);
 
-    qemu_mutex_unlock(&server->lock);
+    if (lock)  {
+        qemu_mutex_unlock(&server->lock);
+    }
 }
 
 static int tdx_vtpm_client_session_data_queue_add(TdxVtpmServer *server,
@@ -444,10 +449,10 @@ static void tdx_vtpm_server_handle_trans_protocol_data(TdxVtpmServerClientSessio
     return;
 }
 
-static void tdx_vtpm_server_client_disconnect(TdxVtpmServerClientSession *session);
+static void tdx_vtpm_server_client_disconnect(TdxVtpmServerClientSession *session, bool lock);
 
 /* server->lock must be hold */
-static void tdx_vtpm_server_client_session_ready(TdxVtpmServer *server,
+static int tdx_vtpm_server_client_session_ready(TdxVtpmServer *server,
                                                  TdxVtpmServerClientSession *session,
                                                  const uint8_t *user_id)
 {
@@ -460,11 +465,12 @@ static void tdx_vtpm_server_client_session_ready(TdxVtpmServer *server,
                               session);
     if (ret) {
         session->state = VTPM_SERVER_CLIENT_SESSION_READY;
-    } else {
-        error_report("Failed to insert client session, disconnected");
-        tdx_vtpm_server_client_session_unref(session);
-        tdx_vtpm_server_client_disconnect(session);
+        return 0;
     }
+
+    error_report("Failed to insert client session");
+    tdx_vtpm_server_client_session_unref(session);
+    return 1;
 }
 
 /* server->lock must be hold */
@@ -489,10 +495,11 @@ static void tdx_vtpm_server_handle_trans_protocol_sync(TdxVtpmServerClientSessio
     TdxVtpmTransProtocolSync *sync = buf;
     TdxVtpmServerClientSession *exist;
     TdxVtpmServer *server = session->server;
+    int ret;
 
     if (sync->client_type != TDX_VTPM_CLIENT_TYPE_USER) {
         warn_report("Unknow vtpm client type:%d, disconnected", sync->client_type);
-        tdx_vtpm_server_client_disconnect(session);
+        tdx_vtpm_server_client_disconnect(session, true);
         return;
     }
 
@@ -502,7 +509,12 @@ static void tdx_vtpm_server_handle_trans_protocol_sync(TdxVtpmServerClientSessio
     if (exist) {
         tdx_vtpm_server_client_session_kick_down(server, exist);
     }
-    tdx_vtpm_server_client_session_ready(server, session, sync->user_id);
+
+    ret = tdx_vtpm_server_client_session_ready(server, session, sync->user_id);
+    if (ret) {
+        warn_report("Failed to make client READY, disconnected");
+        tdx_vtpm_server_client_disconnect(session, false);
+    }
 
     qemu_mutex_unlock(&server->lock);
     return;
@@ -535,7 +547,7 @@ static void tdx_vtpm_server_handle_recv_data(TdxVtpmServerClientSession *session
     int read_size;
 
     if (session->state == VTPM_SERVER_CLIENT_SESSION_ZOMBIE) {
-        tdx_vtpm_server_client_disconnect(session);
+        tdx_vtpm_server_client_disconnect(session, true);
         return;
     }
 
@@ -544,7 +556,7 @@ static void tdx_vtpm_server_handle_recv_data(TdxVtpmServerClientSession *session
                                  socket_recv_buffer_get_free_size(&session->recv_buf),
                                  NULL);
     if (read_size <= 0) {
-        tdx_vtpm_server_client_disconnect(session);
+        tdx_vtpm_server_client_disconnect(session, true);
         return;
     }
 
@@ -798,7 +810,8 @@ static void tdx_vtpm_server_prepare_rsp_report_status(TdxVmcallServiceItem *vsi)
     memset(rsp->reserved, 0, sizeof(rsp->reserved));
 }
 
-static void tdx_vtpm_server_client_disconnect(TdxVtpmServerClientSession *session)
+static void tdx_vtpm_server_client_disconnect(TdxVtpmServerClientSession *session,
+                                              bool lock)
 {
 
     TdxVtpmServer *server = session->server;
@@ -807,7 +820,7 @@ static void tdx_vtpm_server_client_disconnect(TdxVtpmServerClientSession *sessio
     qemu_set_fd_handler(session->ioc->fd, NULL, NULL, NULL);
     object_unref(OBJECT(session->ioc));
 
-    tdx_vtpm_server_destroy_client_session(server, session);
+    tdx_vtpm_server_destroy_client_session(server, session, lock);
 }
 
 static void tdx_vtpm_server_manage_instance_complete(TdxVtpmServer *server,
@@ -844,7 +857,7 @@ static void tdx_vtpm_server_handle_report_status(TdxVtpmServer *server, TdxVmcal
                                               cmd->status,
                                               cmd->data,
                                               tdx_vtpm_cmd_report_status_payload_size(size))) {
-            tdx_vtpm_server_client_disconnect(session);
+            tdx_vtpm_server_client_disconnect(session, false);
             ret = TDG_VP_VMCALL_SERVICE_DEVICE_ERROR;
         }
     }
