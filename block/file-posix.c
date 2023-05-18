@@ -216,6 +216,9 @@ typedef struct RawPosixAIOData {
             PreallocMode prealloc;
             Error **errp;
         } truncate;
+        struct {
+            struct stat *st;
+        } fstat;
     };
 } RawPosixAIOData;
 
@@ -2228,6 +2231,34 @@ static void raw_close(BlockDriverState *bs)
     }
 }
 
+static int handle_aiocb_fstat(void *opaque)
+{
+    RawPosixAIOData *aiocb = opaque;
+
+    if (fstat(aiocb->aio_fildes, aiocb->fstat.st) < 0) {
+        return -errno;
+    }
+
+    return 0;
+}
+
+static int coroutine_fn raw_co_fstat(BlockDriverState *bs, struct stat *st)
+{
+    BDRVRawState *s = bs->opaque;
+    RawPosixAIOData acb;
+
+    acb = (RawPosixAIOData) {
+        .bs             = bs,
+        .aio_fildes     = s->fd,
+        .aio_type       = QEMU_AIO_FSTAT,
+        .fstat          = {
+            .st = st,
+        },
+    };
+
+    return raw_thread_pool_submit(bs, handle_aiocb_fstat, &acb);
+}
+
 /**
  * Truncates the given regular file @fd to @offset and, when growing, fills the
  * new space according to @prealloc.
@@ -2467,11 +2498,14 @@ static int64_t coroutine_fn raw_co_getlength(BlockDriverState *bs)
 static int64_t coroutine_fn raw_co_get_allocated_file_size(BlockDriverState *bs)
 {
     struct stat st;
-    BDRVRawState *s = bs->opaque;
+    int ret;
 
-    if (fstat(s->fd, &st) < 0) {
-        return -errno;
+    ret = raw_co_fstat(bs, &st);
+
+    if (ret) {
+        return ret;
     }
+
     return (int64_t)st.st_blocks * 512;
 }
 
