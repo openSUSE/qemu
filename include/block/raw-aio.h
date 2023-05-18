@@ -32,6 +32,7 @@
 #define QEMU_AIO_ZONE_REPORT  0x0100
 #define QEMU_AIO_ZONE_MGMT    0x0200
 #define QEMU_AIO_ZONE_APPEND  0x0400
+#define QEMU_AIO_FSTAT        0x0800
 #define QEMU_AIO_TYPE_MASK \
         (QEMU_AIO_READ | \
          QEMU_AIO_WRITE | \
@@ -43,7 +44,8 @@
          QEMU_AIO_TRUNCATE | \
          QEMU_AIO_ZONE_REPORT | \
          QEMU_AIO_ZONE_MGMT | \
-         QEMU_AIO_ZONE_APPEND)
+         QEMU_AIO_ZONE_APPEND | \
+         QEMU_AIO_FSTAT)
 
 /* AIO flags */
 #define QEMU_AIO_MISALIGNED   0x1000
