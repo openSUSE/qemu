@@ -1588,6 +1588,7 @@ Summary:        Tools for QEMU
 Group:          System/Emulators/PC
 Requires(pre):  permissions
 Requires:       group(kvm)
+Requires:       virtiofsd
 Recommends:     multipath-tools
 Recommends:     qemu-block-curl
 %if 0%{?with_rbd}
