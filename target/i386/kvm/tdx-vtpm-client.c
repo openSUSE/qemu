@@ -585,7 +585,7 @@ int tdx_vtpm_init_client(TdxVtpm *base, TdxVmcallService *vms,
     if (!qemu_uuid_parse(vms->vtpm_userid, &uuid)) {
         is_uuid = true;
     } else if (strlen(vms->vtpm_userid) <= sizeof(client->user_id)) {
-        memcpy(client->user_id, vms->vtpm_userid, sizeof(client->user_id));
+        memcpy(client->user_id, vms->vtpm_userid, strlen(vms->vtpm_userid));
     } else {
         error_report("Invalid vtpm user id, should be UUID or text length < 17");
         goto fail;
