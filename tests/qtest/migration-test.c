@@ -2222,6 +2222,30 @@ static void test_multifd_file_fixed_ram(void)
     test_file_common(&args, true);
 }
 
+#ifdef O_DIRECT
+static void *migrate_multifd_fixed_ram_dio_start(QTestState *from, QTestState *to)
+{
+    migrate_multifd_fixed_ram_start(from, to);
+
+    migrate_set_parameter_bool(from, "direct-io", true);
+    migrate_set_parameter_bool(to, "direct-io", true);
+
+    return NULL;
+}
+
+static void test_multifd_file_fixed_ram_dio(void)
+{
+    g_autofree char *uri = g_strdup_printf("file:%s/%s", tmpfs,
+                                           FILE_TEST_FILENAME);
+    MigrateCommon args = {
+        .connect_uri = uri,
+        .listen_uri = "defer",
+        .start_hook = migrate_multifd_fixed_ram_dio_start,
+    };
+
+    test_file_common(&args, true);
+}
+#endif
 
 static void test_precopy_tcp_plain(void)
 {
@@ -3315,7 +3339,10 @@ int main(int argc, char **argv)
                    test_multifd_file_fixed_ram);
     qtest_add_func("/migration/multifd/file/fixed-ram/live",
                    test_multifd_file_fixed_ram_live);
-
+#ifdef O_DIRECT
+    qtest_add_func("/migration/multifd/file/fixed-ram/dio",
+                   test_multifd_file_fixed_ram_dio);
+#endif
 #ifdef CONFIG_GNUTLS
     qtest_add_func("/migration/precopy/unix/tls/psk",
                    test_precopy_unix_tls_psk);
