@@ -1727,6 +1727,22 @@ static void *migrate_multifd_fixed_ram_start_nonlive(QTestState *from, QTestStat
     return NULL;
 }
 
+static void *migrate_multifd_fixed_ram_dio_start_nonlive(QTestState *from, QTestState *to)
+{
+    migrate_fixed_ram_start_nonlive(from, to);
+
+    migrate_set_parameter_int(from, "multifd-channels", 4);
+    migrate_set_parameter_int(to, "multifd-channels", 4);
+
+    migrate_set_capability(from, "multifd", true);
+    migrate_set_capability(to, "multifd", true);
+
+    migrate_set_parameter_bool(from, "direct-io", true);
+    migrate_set_parameter_bool(to, "direct-io", true);
+
+    return NULL;
+}
+
 static void test_multifd_file_fixed_ram_live(void)
 {
     g_autofree char *uri = g_strdup_printf("file:%s/migfile", tmpfs);
@@ -1751,6 +1767,17 @@ static void test_multifd_file_fixed_ram_nonlive(void)
     test_precopy_common(&args);
 }
 
+static void test_multifd_file_fixed_ram_dio_nonlive(void)
+{
+    g_autofree char *uri = g_strdup_printf("file:%s/migfile", tmpfs);
+    MigrateCommon args = {
+        .connect_uri = uri,
+        .listen_uri = "defer",
+        .start_hook = migrate_multifd_fixed_ram_dio_start_nonlive,
+    };
+
+    test_precopy_common(&args);
+}
 
 static void test_precopy_tcp_plain(void)
 {
@@ -2794,6 +2821,9 @@ int main(int argc, char **argv)
                    test_multifd_file_fixed_ram_nonlive);
     qtest_add_func("/migration/multifd/file/fixed-ram/live",
                    test_multifd_file_fixed_ram_live);
+
+    qtest_add_func("/migration/multifd/file/fixed-ram/dio/nonlive",
+                   test_multifd_file_fixed_ram_dio_nonlive);
 
 #ifdef CONFIG_GNUTLS
     qtest_add_func("/migration/precopy/unix/tls/psk",
