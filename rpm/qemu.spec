@@ -281,7 +281,6 @@ Obsoletes:      qemu-ui-sdl < %{version}
 This package acts as an umbrella package to the other QEMU sub-packages.
 
 %files
-%defattr(-, root, root)
 %dir %_datadir/icons/hicolor
 %dir %_datadir/icons/hicolor/*/
 %dir %_datadir/icons/hicolor/*/apps
@@ -1028,7 +1027,6 @@ Recommends:     qemu-microvm
 This package provides i386 and x86_64 emulation.
 
 %files x86
-%defattr(-, root, root)
 %_bindir/qemu-system-i386
 %_bindir/qemu-system-x86_64
 %_datadir/%name/kvmvapic.bin
@@ -1053,7 +1051,6 @@ Recommends:     qemu-vgabios
 This package provides ppc and ppc64 emulation.
 
 %files ppc
-%defattr(-, root, root)
 %_bindir/qemu-system-ppc
 %_bindir/qemu-system-ppc64
 %_datadir/%name/bamboo.dtb
@@ -1078,7 +1075,6 @@ Obsoletes:      qemu-s390 < %{version}
 This package provides s390x emulation.
 
 %files s390x
-%defattr(-, root, root)
 %_bindir/qemu-system-s390x
 %_datadir/%name/s390-ccw.img
 %_datadir/%name/s390-netboot.img
@@ -1099,7 +1095,6 @@ Recommends:     qemu-vgabios
 This package provides arm emulation.
 
 %files arm
-%defattr(-, root, root)
 %_bindir/qemu-system-arm
 %_bindir/qemu-system-aarch64
 %_datadir/%name/npcm7xx_bootrom.bin
@@ -1121,7 +1116,6 @@ mips, sparc, and xtensa. (The term "extra" is juxtapositioned against more
 popular QEMU packages which are dedicated to a single architecture.)
 
 %files extra
-%defattr(-, root, root)
 %_bindir/qemu-system-alpha
 %_bindir/qemu-system-avr
 %_bindir/qemu-system-cris
@@ -1167,7 +1161,6 @@ graphical user interface components that come with QEMU. The bulk of strings
 in QEMU are not localized.
 
 %files lang -f %blddir/%name.lang
-%defattr(-, root, root)
 
 %package audio-alsa
 Summary:        ALSA based audio support for QEMU
@@ -1178,7 +1171,6 @@ Group:          System/Emulators/PC
 This package contains a module for ALSA based audio support for QEMU.
 
 %files audio-alsa
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/audio-alsa.so
 
@@ -1191,7 +1183,6 @@ Group:          System/Emulators/PC
 This package provides a module for D-Bus based audio support for QEMU.
 
 %files audio-dbus
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/audio-dbus.so
 
@@ -1204,7 +1195,6 @@ Group:          System/Emulators/PC
 This package contains a module for Pulse Audio based audio support for QEMU.
 
 %files audio-pa
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/audio-pa.so
 
@@ -1217,7 +1207,6 @@ Group:          System/Emulators/PC
 This package contains a module for JACK based audio support for QEMU.
 
 %files audio-jack
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/audio-jack.so
 
@@ -1231,7 +1220,6 @@ Requires:       qemu-ui-spice-core
 This package contains a module for Spice based audio support for QEMU.
 
 %files audio-spice
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/audio-spice.so
 
@@ -1244,7 +1232,6 @@ Group:          System/Emulators/PC
 This package contains a module for OSS based audio support for QEMU.
 
 %files audio-oss
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/audio-oss.so
 
@@ -1258,7 +1245,6 @@ This package contains a module for accessing network-based image files over
 a network connection from qemu-img tool and QEMU system emulation.
 
 %files block-curl
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/block-curl.so
 
@@ -1272,7 +1258,6 @@ This package contains a module for accessing Mac OS X image files from
 qemu-img tool and QEMU system emulation.
 
 %files block-dmg
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/block-dmg-bz2.so
 %_libdir/%name/block-dmg-lzfse.so
@@ -1287,7 +1272,6 @@ This package contains a module for accessing network-based image files over a
 GlusterFS network connection from qemu-img tool and QEMU system emulation.
 
 %files block-gluster
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/block-gluster.so
 
@@ -1301,7 +1285,6 @@ This package contains a module for accessing network-based image files over an
 iSCSI network connection from qemu-img tool and QEMU system emulation.
 
 %files block-iscsi
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/block-iscsi.so
 
@@ -1315,7 +1298,6 @@ This package contains a module for directly accessing nfs based image files
 for QEMU.
 
 %files block-nfs
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/block-nfs.so
 
@@ -1329,7 +1311,6 @@ This package contains a module for accessing network-based image files over an
 SSH network connection from qemu-img tool and QEMU system emulation.
 
 %files block-ssh
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/block-ssh.so
 
@@ -1342,7 +1323,6 @@ Group:          System/Emulators/PC
 This package contains a module for baum braille chardev support for QEMU.
 
 %files chardev-baum
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/chardev-baum.so
@@ -1357,7 +1337,6 @@ Requires:       qemu-ui-spice-core
 This package contains a module for Spice chardev support for QEMU.
 
 %files chardev-spice
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/chardev-spice.so
@@ -1372,7 +1351,6 @@ Requires:       qemu-ui-spice-core
 This package contains a module for QXL display support for QEMU.
 
 %files hw-display-qxl
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/hw-display-qxl.so
@@ -1386,7 +1364,6 @@ Group:          System/Emulators/PC
 This package contains a module for Virtio GPU display support for QEMU.
 
 %files hw-display-virtio-gpu
-%defattr(-, root, root)
 %dir %_datadir/%name
 %_libdir/%name/hw-display-virtio-gpu.so
 %_libdir/%name/hw-display-virtio-gpu-gl.so
@@ -1401,7 +1378,6 @@ Requires:       qemu-hw-display-virtio-gpu
 This package contains a module providing the virtio gpu pci device for QEMU.
 
 %files hw-display-virtio-gpu-pci
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/hw-display-virtio-gpu-pci.so
@@ -1416,7 +1392,6 @@ Group:          System/Emulators/PC
 This package contains a module providing the virtio vga device for QEMU.
 
 %files hw-display-virtio-vga
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/hw-display-virtio-vga.so
@@ -1433,7 +1408,6 @@ This package contains a module providing the s390x virtio gpu ccw device for
 QEMU.
 
 %files hw-s390x-virtio-gpu-ccw
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/hw-s390x-virtio-gpu-ccw.so
@@ -1447,7 +1421,6 @@ Group:          System/Emulators/PC
 This package contains a module for USB redirection support for QEMU.
 
 %files hw-usb-redirect
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/hw-usb-redirect.so
@@ -1461,7 +1434,6 @@ Group:          System/Emulators/PC
 This package contains a modules for USB smartcard support for QEMU.
 
 %files hw-usb-smartcard
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/hw-usb-smartcard.so
@@ -1475,7 +1447,6 @@ Group:          System/Emulators/PC
 This package contains a modules for USB passthrough driver for QEMU.
 
 %files hw-usb-host
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/hw-usb-host.so
@@ -1489,7 +1460,6 @@ Group:          System/Emulators/PC
 This package contains a module for doing D-Bus based UI for QEMU.
 
 %files ui-dbus
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/ui-dbus.so
 
@@ -1502,7 +1472,6 @@ Group:          System/Emulators/PC
 This package contains a module for doing curses based UI for QEMU.
 
 %files ui-curses
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/ui-curses.so
 
@@ -1517,7 +1486,6 @@ Supplements:    (qemu and libgtk-3-0)
 This package contains a module for doing GTK based UI for QEMU.
 
 %files ui-gtk
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/ui-gtk.so
 
@@ -1530,7 +1498,6 @@ Group:          System/Emulators/PC
 This package contains a module for doing OpenGL based UI for QEMU.
 
 %files ui-opengl
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/ui-egl-headless.so
@@ -1547,7 +1514,6 @@ Requires:       qemu-ui-spice-core
 This package contains a module for doing Spice based UI for QEMU.
 
 %files ui-spice-app
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/ui-spice-app.so
 
@@ -1563,7 +1529,6 @@ Requires:       qemu-audio-spice
 This package contains a module with core Spice support for QEMU.
 
 %files ui-spice-core
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/ui-spice-core.so
@@ -1578,7 +1543,6 @@ This package contains a vhost user mode virtio-gpu 2D/3D rendering backend for
 QEMU.
 
 %files vhost-user-gpu
-%defattr(-, root, root)
 %dir %_datadir/%name/vhost-user
 %_datadir/%name/vhost-user/50-qemu-gpu.json
 %_libexecdir/vhost-user-gpu
@@ -1588,7 +1552,10 @@ Summary:        Tools for QEMU
 Group:          System/Emulators/PC
 Requires(pre):  permissions
 Requires:       group(kvm)
+# Upstream virtiofsd does not even build on 32 bit systems...
+%ifnarch %ix86 %arm
 Requires:       virtiofsd
+%endif
 Recommends:     multipath-tools
 Recommends:     qemu-block-curl
 %if 0%{?with_rbd}
@@ -1600,7 +1567,6 @@ This package contains various QEMU related tools, including a bridge helper,
 a virtfs helper, ivshmem, disk utilities and scripts for various purposes.
 
 %files tools
-%defattr(-, root, root)
 %_bindir/analyze-migration.py
 %_bindir/qemu-edid
 %_bindir/qemu-img
@@ -1637,7 +1603,6 @@ protocol specification documented in docs/specs/ivshmem-spec.txt in QEMU source
 code.
 
 %files ivshmem-tools
-%defattr(-, root, root)
 %dir %_datadir/%name
 %_bindir/ivshmem-client
 %_bindir/ivshmem-server
@@ -1657,7 +1622,6 @@ This package contains the QEMU guest agent. It is installed in the linux guest
 to provide information and control at the guest OS level.
 
 %files guest-agent
-%defattr(-, root, root)
 %attr(0755,root,kvm) %_bindir/qemu-ga
 %_mandir/man8/qemu-ga.8.gz
 %{_unitdir}/qemu-guest-agent.service
@@ -1698,7 +1662,6 @@ merges anonymous (private) pages (not pagecache ones).
 This package provides a service file for starting and stopping KSM.
 
 %files ksm
-%defattr(-, root, root)
 %{_unitdir}/ksm.service
 
 %pre ksm
@@ -1725,7 +1688,6 @@ host instruction set.
 This package provides the TCG accelerator for QEMU.
 
 %files accel-tcg-x86
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/accel-tcg-i386.so
@@ -1743,7 +1705,6 @@ models.
 This package provides QTest accelerator for testing QEMU.
 
 %files accel-qtest
-%defattr(-, root, root)
 %dir %_datadir/%name
 %dir %_libdir/%name
 %_libdir/%name/accel-qtest-aarch64.so
@@ -1789,7 +1750,6 @@ This package contains a module for accessing ceph (rbd,rados) image files
 for QEMU.
 
 %files block-rbd
-%defattr(-, root, root)
 %dir %_libdir/%name
 %_libdir/%name/block-rbd.so
 # End of "if with_rbd"
@@ -1817,7 +1777,6 @@ to enable the KVM accelerator, due to the name reference ending with 'kvm'.
 This package is an artifact of the early origins of QEMU, and is deprecated.
 
 %files kvm
-%defattr(-,root,root)
 %_bindir/qemu-kvm
 %doc %_docdir/qemu-kvm
 %_mandir/man1/qemu-kvm.1.gz
@@ -1835,7 +1794,6 @@ Slimline Open Firmware (SLOF) is an implementation of the IEEE 1275 standard.
 It can be used as partition firmware for pSeries machines running on QEMU or KVM.
 
 %files SLOF
-%defattr(-, root, root)
 %dir %_datadir/%name
 %_datadir/%name/slof.bin
 
@@ -1851,7 +1809,6 @@ Provides OPAL (OpenPower Abstraction Layer) firmware, aka skiboot, as
 traditionally packaged with QEMU.
 
 %files skiboot
-%defattr(-, root, root)
 %dir %_datadir/%name
 %_datadir/%name/skiboot.lid
 %_datadir/%name/skiboot.lid.qemu
@@ -1881,7 +1838,6 @@ bios-microvm, created from a minimal seabios configuration, provides slightly
 wider support than qboot, but still focuses on quick boot up.
 
 %files microvm
-%defattr(-, root, root)
 %dir %_datadir/%name
 %_datadir/%name/bios-microvm.bin
 %_datadir/%name/qboot.rom
@@ -1898,7 +1854,6 @@ SeaBIOS is an open source implementation of a 16bit x86 BIOS. SeaBIOS
 is the default and legacy BIOS for QEMU.
 
 %files seabios
-%defattr(-, root, root)
 %dir %_datadir/%name
 %_datadir/%name/bios.bin
 %_datadir/%name/bios-256k.bin
@@ -1921,7 +1876,6 @@ emulated devices: Std VGA, QXL, Cirrus CLGD 5446 and VMware emulated
 video card. For use with QEMU.
 
 %files vgabios
-%defattr(-, root, root)
 %dir %_datadir/%name
 %_datadir/%name/vgabios.bin
 %_datadir/%name/vgabios-ati.bin
@@ -1947,7 +1901,6 @@ Provides Preboot Execution Environment (PXE) ROM support for various emulated
 network adapters available with QEMU.
 
 %files ipxe
-%defattr(-, root, root)
 %dir %_datadir/%name
 %_datadir/%name/efi-e1000.rom
 %_datadir/%name/efi-e1000e.rom
@@ -1973,7 +1926,6 @@ BuildArch:      noarch
 Suggests:       qemu
 
 %files doc
-%defattr(-, root, root)
 %doc %_docdir/%name
 
 %description doc
