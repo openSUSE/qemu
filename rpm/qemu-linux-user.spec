@@ -62,7 +62,6 @@ architecture. The syscall interface is intercepted and execution below the
 syscall layer occurs on the native hardware and operating system.
 
 %files
-%defattr(-, root, root)
 %doc README.rst VERSION
 %license COPYING COPYING.LIB LICENSE
 %_bindir/qemu-aarch64
