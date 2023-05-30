@@ -135,4 +135,39 @@ COMPARISONS = [
         Scenario("compr-multifd-channels-64",
                  multifd=True, multifd_channels=64),
     ]),
+
+    # Looking at the effect of fixed-ram + multifd with varying
+    # numbers of channels
+    Comparison("fixed-ram", scenarios = [
+        Scenario("multifd-channels-4",
+                 multifd=True, multifd_channels=4,
+                 fixed_ram=True, bandwidth=0, suspend=True),
+        Scenario("multifd-channels-8",
+                 multifd=True, multifd_channels=8,
+                 fixed_ram=True, bandwidth=0, suspend=True),
+        Scenario("multifd-channels-32",
+                 multifd=True, multifd_channels=32,
+                 fixed_ram=True, bandwidth=0, suspend=True),
+        Scenario("multifd-channels-64",
+                 multifd=True, multifd_channels=64,
+                 fixed_ram=True, bandwidth=0, suspend=True),
+
+        # with O_DIRECT
+        Scenario("dio-multifd-channels-4",
+                 multifd=True, multifd_channels=4,
+                 fixed_ram=True, bandwidth=0, suspend=True,
+                 direct_io=True),
+        Scenario("dio-multifd-channels-8",
+                 multifd=True, multifd_channels=8,
+                 fixed_ram=True, bandwidth=0, suspend=True,
+                 direct_io=True),
+        Scenario("dio-multifd-channels-32",
+                 multifd=True, multifd_channels=32,
+                 fixed_ram=True, bandwidth=0, suspend=True,
+                 direct_io=True),
+        Scenario("dio-multifd-channels-64",
+                 multifd=True, multifd_channels=64,
+                 fixed_ram=True, bandwidth=0, suspend=True,
+                 direct_io=True),
+    ]),
 ]
