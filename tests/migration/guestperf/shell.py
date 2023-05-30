@@ -205,6 +205,7 @@ class BatchShell(BaseShell):
 
         parser.add_argument("--filter", dest="filter", default="*")
         parser.add_argument("--output", dest="output", default=os.getcwd())
+        parser.add_argument("--iters", dest="iters", default=1, type=int)
 
     def run(self, argv):
         args = self._parser.parse_args(argv)
@@ -220,21 +221,23 @@ class BatchShell(BaseShell):
             for comparison in COMPARISONS:
                 compdir = os.path.join(args.output, comparison._name)
                 for scenario in comparison._scenarios:
-                    name = os.path.join(comparison._name, scenario._name)
-                    if not fnmatch.fnmatch(name, args.filter):
+                    for n in range(args.iters):
+                        name = os.path.join(comparison._name, scenario._name)
+                        if not fnmatch.fnmatch(name, args.filter):
+                            if args.verbose:
+                                print("Skipping %s" % name)
+                            continue
+
                         if args.verbose:
-                            print("Skipping %s" % name)
-                        continue
+                            print("Running %s i=%d" % (name,n))
 
-                    print("Running %s" % name)
-
-                    dirname = os.path.join(args.output, comparison._name)
-                    filename = os.path.join(dirname, scenario._name + ".json")
-                    if not os.path.exists(dirname):
-                        os.makedirs(dirname)
-                    report = engine.run(hardware, scenario)
-                    with open(filename, "w") as fh:
-                        print(report.to_json(), file=fh)
+                        dirname = os.path.join(args.output, comparison._name)
+                        filename = os.path.join(dirname, scenario._name + ".json")
+                        if not os.path.exists(dirname):
+                            os.makedirs(dirname)
+                        report = engine.run(hardware, scenario)
+                        with open(filename, "w") as fh:
+                            print(report.to_json(), file=fh)
         except Exception as e:
             print("Error: %s" % str(e), file=sys.stderr)
             if args.debug:
