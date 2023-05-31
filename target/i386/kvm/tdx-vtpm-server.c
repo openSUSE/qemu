@@ -1087,7 +1087,7 @@ static int tdx_vtpm_server_parse_user_id(const char *user_id, char *to_user_id)
         return 0;
     } else if (strlen(user_id) <= sizeof(TdUserId)) {
         memset(to_user_id, 0, sizeof(TdUserId));
-        strcpy(to_user_id, user_id);
+        memcpy(to_user_id, user_id, strlen(user_id));
         return 0;
     }
 
