@@ -70,7 +70,9 @@ int coroutine_fn bdrv_co_truncate(BdrvChild *child, int64_t offset, bool exact,
 
 int64_t bdrv_nb_sectors(BlockDriverState *bs);
 int64_t bdrv_getlength(BlockDriverState *bs);
-int64_t bdrv_get_allocated_file_size(BlockDriverState *bs);
+int64_t coroutine_fn bdrv_co_get_allocated_file_size(BlockDriverState *bs);
+int64_t generated_co_wrapper bdrv_get_allocated_file_size(BlockDriverState *bs);
+
 BlockMeasureInfo *bdrv_measure(BlockDriver *drv, QemuOpts *opts,
                                BlockDriverState *in_bs, Error **errp);
 void bdrv_get_geometry(BlockDriverState *bs, uint64_t *nb_sectors_ptr);
