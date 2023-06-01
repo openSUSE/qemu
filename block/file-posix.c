@@ -216,6 +216,9 @@ typedef struct RawPosixAIOData {
             PreallocMode prealloc;
             Error **errp;
         } truncate;
+        struct {
+            struct stat *st;
+        } fstat;
     };
 } RawPosixAIOData;
 
@@ -2053,6 +2056,19 @@ out:
     return result;
 }
 
+static int handle_aiocb_fstat(void *opaque)
+{
+    RawPosixAIOData *aiocb = opaque;
+    int ret;
+
+    ret = fstat(aiocb->aio_fildes, aiocb->fstat.st);
+    if (ret == -1) {
+        return -errno;
+    }
+
+    return 0;
+}
+
 static int coroutine_fn raw_thread_pool_submit(BlockDriverState *bs,
                                                ThreadPoolFunc func, void *arg)
 {
@@ -2220,6 +2236,23 @@ static void raw_close(BlockDriverState *bs)
     }
 }
 
+static int coroutine_fn raw_co_fstat(BlockDriverState *bs, struct stat *st)
+{
+    BDRVRawState *s = bs->opaque;
+    RawPosixAIOData acb;
+
+    acb = (RawPosixAIOData) {
+        .bs             = bs,
+        .aio_fildes     = s->fd,
+        .aio_type       = QEMU_AIO_FSTAT,
+        .fstat          = {
+            st
+        },
+    };
+
+    return raw_thread_pool_submit(bs, handle_aiocb_fstat, &acb);
+}
+
 /**
  * Truncates the given regular file @fd to @offset and, when growing, fills the
  * new space according to @prealloc.
@@ -2252,10 +2285,9 @@ static int coroutine_fn raw_co_truncate(BlockDriverState *bs, int64_t offset,
 {
     BDRVRawState *s = bs->opaque;
     struct stat st;
-    int ret;
+    int ret = raw_co_fstat(bs, &st);
 
-    if (fstat(s->fd, &st)) {
-        ret = -errno;
+    if (ret) {
         error_setg_errno(errp, -ret, "Failed to fstat() the file");
         return ret;
     }
@@ -2459,10 +2491,10 @@ static int64_t raw_getlength(BlockDriverState *bs)
 static int64_t coroutine_fn raw_co_get_allocated_file_size(BlockDriverState *bs)
 {
     struct stat st;
-    BDRVRawState *s = bs->opaque;
+    int ret = raw_co_fstat(bs, &st);
 
-    if (fstat(s->fd, &st) < 0) {
-        return -errno;
+    if (ret) {
+        return ret;
     }
     return (int64_t)st.st_blocks * 512;
 }
