@@ -738,7 +738,7 @@
 #
 ##
 { 'command': 'query-block', 'returns': ['BlockInfo'],
-  'allow-preconfig': true }
+  'coroutine': true, 'allow-preconfig': true }
 
 ##
 # @BlockDeviceTimedStats:
