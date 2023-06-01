@@ -1824,6 +1824,7 @@
 { 'command': 'query-named-block-nodes',
   'returns': [ 'BlockDeviceInfo' ],
   'data': { '*flat': 'bool' },
+  'coroutine': true,
   'allow-preconfig': true }
 
 ##
