@@ -742,7 +742,7 @@
 #    }
 #
 ##
-{ 'command': 'query-block', 'returns': ['BlockInfo'] }
+{ 'command': 'query-block', 'returns': ['BlockInfo'], 'coroutine': true }
 
 
 ##
