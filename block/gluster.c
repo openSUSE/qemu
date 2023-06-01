@@ -1334,7 +1334,8 @@ static int64_t qemu_gluster_getlength(BlockDriverState *bs)
     }
 }
 
-static int64_t qemu_gluster_allocated_file_size(BlockDriverState *bs)
+static int64_t coroutine_fn
+qemu_gluster_co_get_allocated_file_size(BlockDriverState *bs)
 {
     BDRVGlusterState *s = bs->opaque;
     struct stat st;
@@ -1564,7 +1565,7 @@ static BlockDriver bdrv_gluster = {
     .bdrv_co_create               = qemu_gluster_co_create,
     .bdrv_co_create_opts          = qemu_gluster_co_create_opts,
     .bdrv_getlength               = qemu_gluster_getlength,
-    .bdrv_get_allocated_file_size = qemu_gluster_allocated_file_size,
+    .bdrv_co_get_allocated_file_size = qemu_gluster_co_get_allocated_file_size,
     .bdrv_co_truncate             = qemu_gluster_co_truncate,
     .bdrv_co_readv                = qemu_gluster_co_readv,
     .bdrv_co_writev               = qemu_gluster_co_writev,
@@ -1594,7 +1595,7 @@ static BlockDriver bdrv_gluster_tcp = {
     .bdrv_co_create               = qemu_gluster_co_create,
     .bdrv_co_create_opts          = qemu_gluster_co_create_opts,
     .bdrv_getlength               = qemu_gluster_getlength,
-    .bdrv_get_allocated_file_size = qemu_gluster_allocated_file_size,
+    .bdrv_co_get_allocated_file_size = qemu_gluster_co_get_allocated_file_size,
     .bdrv_co_truncate             = qemu_gluster_co_truncate,
     .bdrv_co_readv                = qemu_gluster_co_readv,
     .bdrv_co_writev               = qemu_gluster_co_writev,
@@ -1624,7 +1625,7 @@ static BlockDriver bdrv_gluster_unix = {
     .bdrv_co_create               = qemu_gluster_co_create,
     .bdrv_co_create_opts          = qemu_gluster_co_create_opts,
     .bdrv_getlength               = qemu_gluster_getlength,
-    .bdrv_get_allocated_file_size = qemu_gluster_allocated_file_size,
+    .bdrv_co_get_allocated_file_size = qemu_gluster_co_get_allocated_file_size,
     .bdrv_co_truncate             = qemu_gluster_co_truncate,
     .bdrv_co_readv                = qemu_gluster_co_readv,
     .bdrv_co_writev               = qemu_gluster_co_writev,
@@ -1660,7 +1661,7 @@ static BlockDriver bdrv_gluster_rdma = {
     .bdrv_co_create               = qemu_gluster_co_create,
     .bdrv_co_create_opts          = qemu_gluster_co_create_opts,
     .bdrv_getlength               = qemu_gluster_getlength,
-    .bdrv_get_allocated_file_size = qemu_gluster_allocated_file_size,
+    .bdrv_co_get_allocated_file_size = qemu_gluster_co_get_allocated_file_size,
     .bdrv_co_truncate             = qemu_gluster_co_truncate,
     .bdrv_co_readv                = qemu_gluster_co_readv,
     .bdrv_co_writev               = qemu_gluster_co_writev,
