@@ -3169,7 +3169,8 @@ sd_co_block_status(BlockDriverState *bs, bool want_zero, int64_t offset,
     return ret;
 }
 
-static int64_t sd_get_allocated_file_size(BlockDriverState *bs)
+static int64_t coroutine_fn
+sd_co_get_allocated_file_size(BlockDriverState *bs)
 {
     BDRVSheepdogState *s = bs->opaque;
     SheepdogInode *inode = &s->inode;
@@ -3247,7 +3248,7 @@ static BlockDriver bdrv_sheepdog = {
     .bdrv_co_create_opts          = sd_co_create_opts,
     .bdrv_has_zero_init           = bdrv_has_zero_init_1,
     .bdrv_getlength               = sd_getlength,
-    .bdrv_get_allocated_file_size = sd_get_allocated_file_size,
+    .bdrv_co_get_allocated_file_size = sd_co_get_allocated_file_size,
     .bdrv_co_truncate             = sd_co_truncate,
 
     .bdrv_co_readv                = sd_co_readv,
@@ -3285,7 +3286,7 @@ static BlockDriver bdrv_sheepdog_tcp = {
     .bdrv_co_create_opts          = sd_co_create_opts,
     .bdrv_has_zero_init           = bdrv_has_zero_init_1,
     .bdrv_getlength               = sd_getlength,
-    .bdrv_get_allocated_file_size = sd_get_allocated_file_size,
+    .bdrv_co_get_allocated_file_size = sd_co_get_allocated_file_size,
     .bdrv_co_truncate             = sd_co_truncate,
 
     .bdrv_co_readv                = sd_co_readv,
@@ -3323,7 +3324,7 @@ static BlockDriver bdrv_sheepdog_unix = {
     .bdrv_co_create_opts          = sd_co_create_opts,
     .bdrv_has_zero_init           = bdrv_has_zero_init_1,
     .bdrv_getlength               = sd_getlength,
-    .bdrv_get_allocated_file_size = sd_get_allocated_file_size,
+    .bdrv_co_get_allocated_file_size = sd_co_get_allocated_file_size,
     .bdrv_co_truncate             = sd_co_truncate,
 
     .bdrv_co_readv                = sd_co_readv,
