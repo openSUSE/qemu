@@ -240,6 +240,26 @@ int bdrv_query_snapshot_info_list(BlockDriverState *bs,
     return 0;
 }
 
+static int64_t bdrv_get_actual_size(BlockDriverState *bs)
+{
+    int64_t size;
+    AioContext *old_ctx = NULL;
+
+    if (qemu_in_coroutine()) {
+        aio_context_release(bdrv_get_aio_context(bs));
+        old_ctx = bdrv_co_enter(bs);
+    }
+
+    size = bdrv_get_allocated_file_size(bs);
+
+    if (qemu_in_coroutine() && old_ctx) {
+        bdrv_co_leave(bs, old_ctx);
+        aio_context_acquire(bdrv_get_aio_context(bs));
+    }
+
+    return size;
+}
+
 /**
  * bdrv_query_image_info:
  * @bs: block device to examine
@@ -281,7 +301,7 @@ void bdrv_query_image_info(BlockDriverState *bs,
     info->filename        = g_strdup(bs->filename);
     info->format          = g_strdup(bdrv_get_format_name(bs));
     info->virtual_size    = size;
-    info->actual_size     = bdrv_get_allocated_file_size(bs);
+    info->actual_size     = bdrv_get_actual_size(bs);
     info->has_actual_size = info->actual_size >= 0;
     if (bs->encrypted) {
         info->encrypted = true;
