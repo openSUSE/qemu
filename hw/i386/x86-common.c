@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2003-2004 Fabrice Bellard
- * Copyright (c) 2019 Red Hat, Inc.
+ * Copyright (c) 2019, 2024 Red Hat, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -22,41 +22,29 @@
  */
 #include "qemu/osdep.h"
 #include "qemu/error-report.h"
-#include "qemu/option.h"
 #include "qemu/cutils.h"
 #include "qemu/units.h"
 #include "qemu/datadir.h"
 #include "qapi/error.h"
-#include "qapi/qapi-visit-common.h"
-#include "qapi/clone-visitor.h"
-#include "qapi/qapi-visit-machine.h"
-#include "qapi/visitor.h"
-#include "sysemu/qtest.h"
-#include "sysemu/whpx.h"
-#include "sysemu/numa.h"
-#include "sysemu/replay.h"
-#include "sysemu/sysemu.h"
-#include "sysemu/cpu-timers.h"
-#include "sysemu/xen.h"
+#include "system/numa.h"
+#include "system/system.h"
+#include "system/xen.h"
 #include "trace.h"
 
 #include "hw/i386/x86.h"
 #include "target/i386/cpu.h"
-#include "hw/i386/topology.h"
-#include "hw/i386/fw_cfg.h"
-#include "hw/intc/i8259.h"
 #include "hw/rtc/mc146818rtc.h"
 #include "target/i386/sev.h"
 
 #include "hw/acpi/cpu_hotplug.h"
 #include "hw/irq.h"
-#include "hw/nmi.h"
 #include "hw/loader.h"
 #include "multiboot.h"
 #include "elf.h"
 #include "standard-headers/asm-x86/bootparam.h"
 #include CONFIG_DEVICES
 #include "kvm/kvm_i386.h"
+#include "kvm/tdx.h"
 
 #ifdef CONFIG_XEN_EMU
 #include "hw/xen/xen.h"
@@ -66,43 +54,7 @@
 /* Physical Address of PVH entry point read from kernel ELF NOTE */
 static size_t pvh_start_addr;
 
-static void init_topo_info(X86CPUTopoInfo *topo_info,
-                           const X86MachineState *x86ms)
-{
-    MachineState *ms = MACHINE(x86ms);
-
-    topo_info->dies_per_pkg = ms->smp.dies;
-    /*
-     * Though smp.modules means the number of modules in one cluster,
-     * i386 doesn't support cluster level so that the smp.clusters
-     * always defaults to 1, therefore using smp.modules directly is
-     * fine here.
-     */
-    topo_info->modules_per_die = ms->smp.modules;
-    topo_info->cores_per_module = ms->smp.cores;
-    topo_info->threads_per_core = ms->smp.threads;
-}
-
-/*
- * Calculates initial APIC ID for a specific CPU index
- *
- * Currently we need to be able to calculate the APIC ID from the CPU index
- * alone (without requiring a CPU object), as the QEMU<->Seabios interfaces have
- * no concept of "CPU index", and the NUMA tables on fw_cfg need the APIC ID of
- * all CPUs up to max_cpus.
- */
-uint32_t x86_cpu_apic_id_from_index(X86MachineState *x86ms,
-                                    unsigned int cpu_index)
-{
-    X86CPUTopoInfo topo_info;
-
-    init_topo_info(&topo_info, x86ms);
-
-    return x86_apicid_from_cpu_idx(&topo_info, cpu_index);
-}
-
-
-void x86_cpu_new(X86MachineState *x86ms, int64_t apic_id, Error **errp)
+static void x86_cpu_new(X86MachineState *x86ms, int64_t apic_id, Error **errp)
 {
     Object *cpu = object_new(MACHINE(x86ms)->cpu_type);
 
@@ -144,7 +96,7 @@ void x86_cpus_init(X86MachineState *x86ms, int default_cpu_version)
      * a literal `0` in configurations where kvm_* aren't defined)
      */
     if (kvm_enabled() && x86ms->apic_id_limit > 255 &&
-        (!kvm_irqchip_in_kernel() || !kvm_enable_x2apic())) {
+        kvm_irqchip_in_kernel() && !kvm_enable_x2apic()) {
         error_report("current -smp configuration requires kernel "
                      "irqchip and X2APIC API support.");
         exit(EXIT_FAILURE);
@@ -152,6 +104,10 @@ void x86_cpus_init(X86MachineState *x86ms, int default_cpu_version)
 
     if (kvm_enabled()) {
         kvm_set_max_apic_id(x86ms->apic_id_limit);
+    }
+
+    if (!kvm_irqchip_in_kernel()) {
+        apic_set_max_apic_id(x86ms->apic_id_limit);
     }
 
     possible_cpus = mc->possible_cpu_arch_ids(ms);
@@ -189,7 +145,7 @@ static int x86_apic_cmp(const void *a, const void *b)
  * in ms->possible_cpus->cpus, if ms->possible_cpus->cpus has no
  * entry corresponding to CPU's apic_id returns NULL.
  */
-CPUArchId *x86_find_cpu_slot(MachineState *ms, uint32_t id, int *idx)
+static CPUArchId *x86_find_cpu_slot(MachineState *ms, uint32_t id, int *idx)
 {
     CPUArchId apic_id, *found_cpu;
 
@@ -228,7 +184,7 @@ void x86_cpu_plug(HotplugHandler *hotplug_dev,
     }
 
     found_cpu = x86_find_cpu_slot(MACHINE(x86ms), cpu->apic_id, NULL);
-    found_cpu->cpu = OBJECT(dev);
+    found_cpu->cpu = CPU(dev);
 out:
     error_propagate(errp, local_err);
 }
@@ -293,9 +249,7 @@ void x86_cpu_pre_plug(HotplugHandler *hotplug_dev,
     CPUX86State *env = &cpu->env;
     MachineState *ms = MACHINE(hotplug_dev);
     X86MachineState *x86ms = X86_MACHINE(hotplug_dev);
-    unsigned int smp_cores = ms->smp.cores;
-    unsigned int smp_threads = ms->smp.threads;
-    X86CPUTopoInfo topo_info;
+    X86CPUTopoInfo *topo_info = &env->topo_info;
 
     if (!object_dynamic_cast(OBJECT(cpu), ms->cpu_type)) {
         error_setg(errp, "Invalid CPU type, expected cpu type: '%s'",
@@ -314,16 +268,14 @@ void x86_cpu_pre_plug(HotplugHandler *hotplug_dev,
         }
     }
 
-    init_topo_info(&topo_info, x86ms);
+    init_topo_info(topo_info, x86ms);
 
     if (ms->smp.modules > 1) {
-        env->nr_modules = ms->smp.modules;
-	set_bit(CPU_TOPO_LEVEL_MODULE, env->avail_cpu_topo);
+        set_bit(CPU_TOPOLOGY_LEVEL_MODULE, env->avail_cpu_topo);
     }
 
     if (ms->smp.dies > 1) {
-        env->nr_dies = ms->smp.dies;
-	set_bit(CPU_TOPO_LEVEL_DIE, env->avail_cpu_topo);
+        set_bit(CPU_TOPOLOGY_LEVEL_DIE, env->avail_cpu_topo);
     }
 
     /*
@@ -345,7 +297,7 @@ void x86_cpu_pre_plug(HotplugHandler *hotplug_dev,
          */
         if (cpu->module_id < 0 && ms->smp.modules == 1) {
             cpu->module_id = 0;
-	}
+        }
 
         if (cpu->socket_id < 0) {
             error_setg(errp, "CPU socket-id is not set");
@@ -358,33 +310,33 @@ void x86_cpu_pre_plug(HotplugHandler *hotplug_dev,
         if (cpu->die_id < 0) {
             error_setg(errp, "CPU die-id is not set");
             return;
-	} else if (cpu->socket_id > ms->smp.sockets - 1) {
+        } else if (cpu->die_id > ms->smp.dies - 1) {
             error_setg(errp, "Invalid CPU die-id: %u must be in range 0:%u",
-                       cpu->socket_id, ms->smp.sockets - 1);
+                       cpu->die_id, ms->smp.dies - 1);
             return;
         }
         if (cpu->module_id < 0) {
             error_setg(errp, "CPU module-id is not set");
-	    return;
+            return;
         } else if (cpu->module_id > ms->smp.modules - 1) {
             error_setg(errp, "Invalid CPU module-id: %u must be in range 0:%u",
                        cpu->module_id, ms->smp.modules - 1);
             return;
-	}
+        }
         if (cpu->core_id < 0) {
             error_setg(errp, "CPU core-id is not set");
             return;
-        } else if (cpu->core_id > (smp_cores - 1)) {
+        } else if (cpu->core_id > (ms->smp.cores - 1)) {
             error_setg(errp, "Invalid CPU core-id: %u must be in range 0:%u",
-                       cpu->core_id, smp_cores - 1);
+                       cpu->core_id, ms->smp.cores - 1);
             return;
         }
         if (cpu->thread_id < 0) {
             error_setg(errp, "CPU thread-id is not set");
             return;
-        } else if (cpu->thread_id > (smp_threads - 1)) {
+        } else if (cpu->thread_id > (ms->smp.threads - 1)) {
             error_setg(errp, "Invalid CPU thread-id: %u must be in range 0:%u",
-                       cpu->thread_id, smp_threads - 1);
+                       cpu->thread_id, ms->smp.threads - 1);
             return;
         }
 
@@ -393,20 +345,19 @@ void x86_cpu_pre_plug(HotplugHandler *hotplug_dev,
         topo_ids.module_id = cpu->module_id;
         topo_ids.core_id = cpu->core_id;
         topo_ids.smt_id = cpu->thread_id;
-
-        cpu->apic_id = x86_apicid_from_topo_ids(&topo_info, &topo_ids);
+        cpu->apic_id = x86_apicid_from_topo_ids(topo_info, &topo_ids);
     }
 
     cpu_slot = x86_find_cpu_slot(MACHINE(x86ms), cpu->apic_id, &idx);
     if (!cpu_slot) {
-        x86_topo_ids_from_apicid(cpu->apic_id, &topo_info, &topo_ids);
+        x86_topo_ids_from_apicid(cpu->apic_id, topo_info, &topo_ids);
 
         error_setg(errp,
             "Invalid CPU [socket: %u, die: %u, module: %u, core: %u, thread: %u]"
-	    " with APIC ID %" PRIu32 ", valid index range 0:%d",
-	    topo_ids.pkg_id, topo_ids.die_id, topo_ids.module_id,
-	    topo_ids.core_id, topo_ids.smt_id, cpu->apic_id,
-	    ms->possible_cpus->len - 1);
+            " with APIC ID %" PRIu32 ", valid index range 0:%d",
+            topo_ids.pkg_id, topo_ids.die_id, topo_ids.module_id,
+            topo_ids.core_id, topo_ids.smt_id, cpu->apic_id,
+            ms->possible_cpus->len - 1);
         return;
     }
 
@@ -422,7 +373,7 @@ void x86_cpu_pre_plug(HotplugHandler *hotplug_dev,
     /* TODO: move socket_id/core_id/thread_id checks into x86_cpu_realizefn()
      * once -smp refactoring is complete and there will be CPU private
      * CPUState::nr_cores and CPUState::nr_threads fields instead of globals */
-    x86_topo_ids_from_apicid(cpu->apic_id, &topo_info, &topo_ids);
+    x86_topo_ids_from_apicid(cpu->apic_id, topo_info, &topo_ids);
     if (cpu->socket_id != -1 && cpu->socket_id != topo_ids.pkg_id) {
         error_setg(errp, "property socket-id: %u doesn't match set apic-id:"
             " 0x%x (socket-id: %u)", cpu->socket_id, cpu->apic_id,
@@ -441,7 +392,7 @@ void x86_cpu_pre_plug(HotplugHandler *hotplug_dev,
     if (cpu->module_id != -1 && cpu->module_id != topo_ids.module_id) {
         error_setg(errp, "property module-id: %u doesn't match set apic-id:"
             " 0x%x (module-id: %u)", cpu->module_id, cpu->apic_id,
-	    topo_ids.module_id);
+            topo_ids.module_id);
         return;
     }
     cpu->module_id = topo_ids.module_id;
@@ -479,95 +430,6 @@ void x86_cpu_pre_plug(HotplugHandler *hotplug_dev,
     numa_cpu_pre_plug(cpu_slot, dev, errp);
 }
 
-CpuInstanceProperties
-x86_cpu_index_to_props(MachineState *ms, unsigned cpu_index)
-{
-    MachineClass *mc = MACHINE_GET_CLASS(ms);
-    const CPUArchIdList *possible_cpus = mc->possible_cpu_arch_ids(ms);
-
-    assert(cpu_index < possible_cpus->len);
-    return possible_cpus->cpus[cpu_index].props;
-}
-
-int64_t x86_get_default_cpu_node_id(const MachineState *ms, int idx)
-{
-   X86CPUTopoIDs topo_ids;
-   X86MachineState *x86ms = X86_MACHINE(ms);
-   X86CPUTopoInfo topo_info;
-
-   init_topo_info(&topo_info, x86ms);
-
-   assert(idx < ms->possible_cpus->len);
-   x86_topo_ids_from_apicid(ms->possible_cpus->cpus[idx].arch_id,
-                            &topo_info, &topo_ids);
-   return topo_ids.pkg_id % ms->numa_state->num_nodes;
-}
-
-const CPUArchIdList *x86_possible_cpu_arch_ids(MachineState *ms)
-{
-    X86MachineState *x86ms = X86_MACHINE(ms);
-    unsigned int max_cpus = ms->smp.max_cpus;
-    X86CPUTopoInfo topo_info;
-    int i;
-
-    if (ms->possible_cpus) {
-        /*
-         * make sure that max_cpus hasn't changed since the first use, i.e.
-         * -smp hasn't been parsed after it
-         */
-        assert(ms->possible_cpus->len == max_cpus);
-        return ms->possible_cpus;
-    }
-
-    ms->possible_cpus = g_malloc0(sizeof(CPUArchIdList) +
-                                  sizeof(CPUArchId) * max_cpus);
-    ms->possible_cpus->len = max_cpus;
-
-    init_topo_info(&topo_info, x86ms);
-
-    for (i = 0; i < ms->possible_cpus->len; i++) {
-        X86CPUTopoIDs topo_ids;
-
-        ms->possible_cpus->cpus[i].type = ms->cpu_type;
-        ms->possible_cpus->cpus[i].vcpus_count = 1;
-        ms->possible_cpus->cpus[i].arch_id =
-            x86_cpu_apic_id_from_index(x86ms, i);
-        x86_topo_ids_from_apicid(ms->possible_cpus->cpus[i].arch_id,
-                                 &topo_info, &topo_ids);
-        ms->possible_cpus->cpus[i].props.has_socket_id = true;
-        ms->possible_cpus->cpus[i].props.socket_id = topo_ids.pkg_id;
-        if (ms->smp.dies > 1) {
-            ms->possible_cpus->cpus[i].props.has_die_id = true;
-            ms->possible_cpus->cpus[i].props.die_id = topo_ids.die_id;
-        }
-        if (ms->smp.modules > 1) {
-            ms->possible_cpus->cpus[i].props.has_module_id = true;
-            ms->possible_cpus->cpus[i].props.module_id = topo_ids.module_id;
-        }
-        ms->possible_cpus->cpus[i].props.has_core_id = true;
-        ms->possible_cpus->cpus[i].props.core_id = topo_ids.core_id;
-        ms->possible_cpus->cpus[i].props.has_thread_id = true;
-        ms->possible_cpus->cpus[i].props.thread_id = topo_ids.smt_id;
-    }
-    return ms->possible_cpus;
-}
-
-static void x86_nmi(NMIState *n, int cpu_index, Error **errp)
-{
-    /* cpu index isn't used */
-    CPUState *cs;
-
-    CPU_FOREACH(cs) {
-        X86CPU *cpu = X86_CPU(cs);
-
-        if (!cpu->apic_state) {
-            cpu_interrupt(cs, CPU_INTERRUPT_NMI);
-        } else {
-            apic_deliver_nmi(cpu->apic_state);
-        }
-    }
-}
-
 static long get_file_size(FILE *f)
 {
     long where, size;
@@ -582,76 +444,30 @@ static long get_file_size(FILE *f)
     return size;
 }
 
-/* TSC handling */
-uint64_t cpu_get_tsc(CPUX86State *env)
-{
-    return cpus_get_elapsed_ticks();
-}
-
-/* IRQ handling */
-static void pic_irq_request(void *opaque, int irq, int level)
-{
-    CPUState *cs = first_cpu;
-    X86CPU *cpu = X86_CPU(cs);
-
-    trace_x86_pic_interrupt(irq, level);
-    if (cpu->apic_state && !kvm_irqchip_in_kernel() &&
-        !whpx_apic_in_platform()) {
-        CPU_FOREACH(cs) {
-            cpu = X86_CPU(cs);
-            if (apic_accept_pic_intr(cpu->apic_state)) {
-                apic_deliver_pic_intr(cpu->apic_state, level);
-            }
-        }
-    } else {
-        if (level) {
-            cpu_interrupt(cs, CPU_INTERRUPT_HARD);
-        } else {
-            cpu_reset_interrupt(cs, CPU_INTERRUPT_HARD);
-        }
-    }
-}
-
-qemu_irq x86_allocate_cpu_irq(void)
-{
-    return qemu_allocate_irq(pic_irq_request, NULL, 0);
-}
-
-int cpu_get_pic_interrupt(CPUX86State *env)
-{
-    X86CPU *cpu = env_archcpu(env);
-    int intno;
-
-    if (!kvm_irqchip_in_kernel() && !whpx_apic_in_platform()) {
-        intno = apic_get_interrupt(cpu->apic_state);
-        if (intno >= 0) {
-            return intno;
-        }
-        /* read the irq from the PIC */
-        if (!apic_accept_pic_intr(cpu->apic_state)) {
-            return -1;
-        }
-    }
-
-    intno = pic_read_irq(isa_pic);
-    return intno;
-}
-
-DeviceState *cpu_get_current_apic(void)
-{
-    if (current_cpu) {
-        X86CPU *cpu = X86_CPU(current_cpu);
-        return cpu->apic_state;
-    } else {
-        return NULL;
-    }
-}
-
 void gsi_handler(void *opaque, int n, int level)
 {
     GSIState *s = opaque;
+    bool bypass_ioapic = false;
 
     trace_x86_gsi_interrupt(n, level);
+
+#ifdef CONFIG_XEN_EMU
+    /*
+     * Xen delivers the GSI to the Legacy PIC (not that Legacy PIC
+     * routing actually works properly under Xen). And then to
+     * *either* the PIRQ handling or the I/OAPIC depending on whether
+     * the former wants it.
+     *
+     * Additionally, this hook allows the Xen event channel GSI to
+     * work around QEMU's lack of support for shared level interrupts,
+     * by keeping track of the externally driven state of the pin and
+     * implementing a logical OR with the state of the evtchn GSI.
+     */
+    if (xen_mode == XEN_EMULATE) {
+        bypass_ioapic = xen_evtchn_set_gsi(n, &level);
+    }
+#endif
+
     switch (n) {
     case 0 ... ISA_NUM_IRQS - 1:
         if (s->i8259_irq[n]) {
@@ -660,18 +476,9 @@ void gsi_handler(void *opaque, int n, int level)
         }
         /* fall through */
     case ISA_NUM_IRQS ... IOAPIC_NUM_PINS - 1:
-#ifdef CONFIG_XEN_EMU
-        /*
-         * Xen delivers the GSI to the Legacy PIC (not that Legacy PIC
-         * routing actually works properly under Xen). And then to
-         * *either* the PIRQ handling or the I/OAPIC depending on
-         * whether the former wants it.
-         */
-        if (xen_mode == XEN_EMULATE && xen_evtchn_set_gsi(n, level)) {
-            break;
+        if (!bypass_ioapic) {
+            qemu_set_irq(s->ioapic_irq[n], level);
         }
-#endif
-        qemu_set_irq(s->ioapic_irq[n], level);
         break;
     case IO_APIC_SECONDARY_IRQBASE
         ... IO_APIC_SECONDARY_IRQBASE + IOAPIC_NUM_PINS - 1:
@@ -680,20 +487,19 @@ void gsi_handler(void *opaque, int n, int level)
     }
 }
 
-void ioapic_init_gsi(GSIState *gsi_state, const char *parent_name)
+void ioapic_init_gsi(GSIState *gsi_state, Object *parent)
 {
     DeviceState *dev;
     SysBusDevice *d;
     unsigned int i;
 
-    assert(parent_name);
+    assert(parent);
     if (kvm_ioapic_in_kernel()) {
         dev = qdev_new(TYPE_KVM_IOAPIC);
     } else {
         dev = qdev_new(TYPE_IOAPIC);
     }
-    object_property_add_child(object_resolve_path(parent_name, NULL),
-                              "ioapic", OBJECT(dev));
+    object_property_add_child(parent, "ioapic", OBJECT(dev));
     d = SYS_BUS_DEVICE(dev);
     sysbus_realize_and_unref(d, &error_fatal);
     sysbus_mmio_map(d, 0, IO_APIC_DEFAULT_ADDRESS);
@@ -787,7 +593,7 @@ static bool load_elfboot(const char *kernel_filename,
     uint64_t elf_low, elf_high;
     int kernel_size;
 
-    if (ldl_p(header) != 0x464c457f) {
+    if (ldl_le_p(header) != 0x464c457f) {
         return false; /* no elfboot */
     }
 
@@ -866,9 +672,12 @@ void x86_load_linux(X86MachineState *x86ms,
         exit(1);
     }
 
-    /* kernel protocol version */
-    if (ldl_p(header + 0x202) == 0x53726448) {
-        protocol = lduw_p(header + 0x206);
+    /*
+     * kernel protocol version.
+     * Please see https://www.kernel.org/doc/Documentation/x86/boot.txt
+     */
+    if (ldl_le_p(header + 0x202) == 0x53726448) /* Magic signature "HdrS" */ {
+        protocol = lduw_le_p(header + 0x206);
     } else {
         /*
          * This could be a multiboot kernel. If it is, let's stop treating it
@@ -895,9 +704,11 @@ void x86_load_linux(X86MachineState *x86ms,
                 strlen(kernel_cmdline) + 1);
             fw_cfg_add_string(fw_cfg, FW_CFG_CMDLINE_DATA, kernel_cmdline);
 
+            setup = g_memdup2(header, sizeof(header));
+
             fw_cfg_add_i32(fw_cfg, FW_CFG_SETUP_SIZE, sizeof(header));
             fw_cfg_add_bytes(fw_cfg, FW_CFG_SETUP_DATA,
-                             header, sizeof(header));
+                             setup, sizeof(header));
 
             /* load initrd */
             if (initrd_filename) {
@@ -960,7 +771,7 @@ void x86_load_linux(X86MachineState *x86ms,
 
     /* highest address for loading the initrd */
     if (protocol >= 0x20c &&
-        lduw_p(header + 0x236) & XLF_CAN_BE_LOADED_ABOVE_4G) {
+        lduw_le_p(header + 0x236) & XLF_CAN_BE_LOADED_ABOVE_4G) {
         /*
          * Linux has supported initrd up to 4 GB for a very long time (2007,
          * long before XLF_CAN_BE_LOADED_ABOVE_4G which was added in 2013),
@@ -979,7 +790,7 @@ void x86_load_linux(X86MachineState *x86ms,
          */
         initrd_max = UINT32_MAX;
     } else if (protocol >= 0x203) {
-        initrd_max = ldl_p(header + 0x22c);
+        initrd_max = ldl_le_p(header + 0x22c);
     } else {
         initrd_max = 0x37ffffff;
     }
@@ -995,10 +806,10 @@ void x86_load_linux(X86MachineState *x86ms,
     sev_load_ctx.cmdline_size = strlen(kernel_cmdline) + 1;
 
     if (protocol >= 0x202) {
-        stl_p(header + 0x228, cmdline_addr);
+        stl_le_p(header + 0x228, cmdline_addr);
     } else {
-        stw_p(header + 0x20, 0xA33F);
-        stw_p(header + 0x22, cmdline_addr - real_addr);
+        stw_le_p(header + 0x20, 0xA33F);
+        stw_le_p(header + 0x22, cmdline_addr - real_addr);
     }
 
     /* handle vga= parameter */
@@ -1022,7 +833,7 @@ void x86_load_linux(X86MachineState *x86ms,
                 exit(1);
             }
         }
-        stw_p(header + 0x1fa, video_mode);
+        stw_le_p(header + 0x1fa, video_mode);
     }
 
     /* loader type */
@@ -1037,7 +848,7 @@ void x86_load_linux(X86MachineState *x86ms,
     /* heap */
     if (protocol >= 0x201) {
         header[0x211] |= 0x80; /* CAN_USE_HEAP */
-        stw_p(header + 0x224, cmdline_addr - real_addr - 0x200);
+        stw_le_p(header + 0x224, cmdline_addr - real_addr - 0x200);
     }
 
     /* load initrd */
@@ -1077,8 +888,8 @@ void x86_load_linux(X86MachineState *x86ms,
         sev_load_ctx.initrd_data = initrd_data;
         sev_load_ctx.initrd_size = initrd_size;
 
-        stl_p(header + 0x218, initrd_addr);
-        stl_p(header + 0x21c, initrd_size);
+        stl_le_p(header + 0x218, initrd_addr);
+        stl_le_p(header + 0x21c, initrd_size);
     }
 
     /* load kernel and setup */
@@ -1091,7 +902,6 @@ void x86_load_linux(X86MachineState *x86ms,
         fprintf(stderr, "qemu: invalid kernel header\n");
         exit(1);
     }
-    kernel_size -= setup_size;
 
     setup  = g_malloc(setup_size);
     kernel = g_malloc(kernel_size);
@@ -1100,6 +910,7 @@ void x86_load_linux(X86MachineState *x86ms,
         fprintf(stderr, "fread() failed\n");
         exit(1);
     }
+    fseek(f, 0, SEEK_SET);
     if (fread(kernel, 1, kernel_size, f) != kernel_size) {
         fprintf(stderr, "fread() failed\n");
         exit(1);
@@ -1124,7 +935,7 @@ void x86_load_linux(X86MachineState *x86ms,
         kernel_size = setup_data_offset + sizeof(struct setup_data) + dtb_size;
         kernel = g_realloc(kernel, kernel_size);
 
-        stq_p(header + 0x250, prot_addr + setup_data_offset);
+        stq_le_p(header + 0x250, prot_addr + setup_data_offset);
 
         setup_data = (struct setup_data *)(kernel + setup_data_offset);
         setup_data->next = 0;
@@ -1146,16 +957,36 @@ void x86_load_linux(X86MachineState *x86ms,
     }
 
     fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_ADDR, prot_addr);
-    fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_SIZE, kernel_size);
-    fw_cfg_add_bytes(fw_cfg, FW_CFG_KERNEL_DATA, kernel, kernel_size);
-    sev_load_ctx.kernel_data = (char *)kernel;
-    sev_load_ctx.kernel_size = kernel_size;
+    fw_cfg_add_i32(fw_cfg, FW_CFG_KERNEL_SIZE, kernel_size - setup_size);
+    fw_cfg_add_bytes(fw_cfg, FW_CFG_KERNEL_DATA,
+                     kernel + setup_size, kernel_size - setup_size);
+    sev_load_ctx.kernel_data = (char *)kernel + setup_size;
+    sev_load_ctx.kernel_size = kernel_size - setup_size;
 
     fw_cfg_add_i32(fw_cfg, FW_CFG_SETUP_ADDR, real_addr);
     fw_cfg_add_i32(fw_cfg, FW_CFG_SETUP_SIZE, setup_size);
     fw_cfg_add_bytes(fw_cfg, FW_CFG_SETUP_DATA, setup, setup_size);
     sev_load_ctx.setup_data = (char *)setup;
     sev_load_ctx.setup_size = setup_size;
+
+    /* kernel without setup header patches */
+    fw_cfg_add_file(fw_cfg, "etc/boot/kernel", kernel, kernel_size);
+
+    if (machine->shim_filename) {
+        GMappedFile *mapped_file;
+        GError *gerr = NULL;
+
+        mapped_file = g_mapped_file_new(machine->shim_filename, false, &gerr);
+        if (!mapped_file) {
+            fprintf(stderr, "qemu: error reading shim %s: %s\n",
+                    machine->shim_filename, gerr->message);
+            exit(1);
+        }
+
+        fw_cfg_add_file(fw_cfg, "etc/boot/shim",
+                        g_mapped_file_get_contents(mapped_file),
+                        g_mapped_file_get_length(mapped_file));
+    }
 
     if (sev_enabled()) {
         sev_add_kernel_loader_hashes(&sev_load_ctx, &error_fatal);
@@ -1169,7 +1000,7 @@ void x86_load_linux(X86MachineState *x86ms,
     nb_option_roms++;
 }
 
-static void x86_isa_bios_init(MemoryRegion *isa_bios, MemoryRegion *isa_memory,
+void x86_isa_bios_init(MemoryRegion *isa_bios, MemoryRegion *isa_memory,
                        MemoryRegion *bios, bool read_only)
 {
     uint64_t bios_size = memory_region_size(bios);
@@ -1187,7 +1018,6 @@ void x86_bios_rom_init(X86MachineState *x86ms, const char *default_firmware,
 {
     const char *bios_name;
     char *filename;
-    MemoryRegion *bios, *isa_bios;
     int bios_size;
     ssize_t ret;
 
@@ -1203,14 +1033,15 @@ void x86_bios_rom_init(X86MachineState *x86ms, const char *default_firmware,
         (bios_size % 65536) != 0) {
         goto bios_error;
     }
-    bios = g_malloc(sizeof(*bios));
     if (machine_require_guest_memfd(MACHINE(x86ms))) {
-        memory_region_init_ram_guest_memfd(bios, NULL, "pc.bios", bios_size, &error_fatal);
-	if (is_tdx_vm()) {
-            tdx_set_tdvf_region(bios);
-	}
+        memory_region_init_ram_guest_memfd(&x86ms->bios, NULL, "pc.bios",
+                                           bios_size, &error_fatal);
+        if (is_tdx_vm()) {
+            tdx_set_tdvf_region(&x86ms->bios);
+        }
     } else {
-        memory_region_init_ram(bios, NULL, "pc.bios", bios_size, &error_fatal);
+        memory_region_init_ram(&x86ms->bios, NULL, "pc.bios",
+                               bios_size, &error_fatal);
     }
     if (sev_enabled() || is_tdx_vm()) {
         /*
@@ -1220,13 +1051,11 @@ void x86_bios_rom_init(X86MachineState *x86ms, const char *default_firmware,
          * the firmware as rom to properly re-initialize on reset.
          * Just go for a straight file load instead.
          */
-        void *ptr = memory_region_get_ram_ptr(bios);
+        void *ptr = memory_region_get_ram_ptr(&x86ms->bios);
         load_image_size(filename, ptr, bios_size);
         x86_firmware_configure(0x100000000ULL - bios_size, ptr, bios_size);
     } else {
-        if (!isapc_ram_fw) {
-            memory_region_set_readonly(bios, true);
-        }
+        memory_region_set_readonly(&x86ms->bios, !isapc_ram_fw);
         ret = rom_add_file_fixed(bios_name, (uint32_t)(-bios_size), -1);
         if (ret != 0) {
             goto bios_error;
@@ -1236,318 +1065,17 @@ void x86_bios_rom_init(X86MachineState *x86ms, const char *default_firmware,
 
     if (!machine_require_guest_memfd(MACHINE(x86ms))) {
         /* map the last 128KB of the BIOS in ISA space */
-        isa_bios = g_malloc(sizeof(*isa_bios));
-        x86_isa_bios_init(isa_bios, rom_memory, bios,
+        x86_isa_bios_init(&x86ms->isa_bios, rom_memory, &x86ms->bios,
                           !isapc_ram_fw);
     }
 
     /* map all the bios at the top of memory */
     memory_region_add_subregion(rom_memory,
                                 (uint32_t)(-bios_size),
-                                bios);
+                                &x86ms->bios);
     return;
 
 bios_error:
     fprintf(stderr, "qemu: could not load PC BIOS '%s'\n", bios_name);
     exit(1);
 }
-
-bool x86_machine_is_smm_enabled(const X86MachineState *x86ms)
-{
-    bool smm_available = false;
-
-    if (x86ms->smm == ON_OFF_AUTO_OFF) {
-        return false;
-    }
-
-    if (tcg_enabled() || qtest_enabled()) {
-        smm_available = true;
-    } else if (kvm_enabled()) {
-        smm_available = kvm_has_smm();
-    }
-
-    if (smm_available) {
-        return true;
-    }
-
-    if (x86ms->smm == ON_OFF_AUTO_ON) {
-        error_report("System Management Mode not supported by this hypervisor.");
-        exit(1);
-    }
-    return false;
-}
-
-static void x86_machine_get_smm(Object *obj, Visitor *v, const char *name,
-                               void *opaque, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-    OnOffAuto smm = x86ms->smm;
-
-    visit_type_OnOffAuto(v, name, &smm, errp);
-}
-
-static void x86_machine_set_smm(Object *obj, Visitor *v, const char *name,
-                               void *opaque, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-
-    visit_type_OnOffAuto(v, name, &x86ms->smm, errp);
-}
-
-bool x86_machine_is_acpi_enabled(const X86MachineState *x86ms)
-{
-    if (x86ms->acpi == ON_OFF_AUTO_OFF) {
-        return false;
-    }
-    return true;
-}
-
-static void x86_machine_get_acpi(Object *obj, Visitor *v, const char *name,
-                                 void *opaque, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-    OnOffAuto acpi = x86ms->acpi;
-
-    visit_type_OnOffAuto(v, name, &acpi, errp);
-}
-
-static void x86_machine_set_acpi(Object *obj, Visitor *v, const char *name,
-                                 void *opaque, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-
-    visit_type_OnOffAuto(v, name, &x86ms->acpi, errp);
-}
-
-static void x86_machine_get_pit(Object *obj, Visitor *v, const char *name,
-                                    void *opaque, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-    OnOffAuto pit = x86ms->pit;
-
-    visit_type_OnOffAuto(v, name, &pit, errp);
-}
-
-static void x86_machine_set_pit(Object *obj, Visitor *v, const char *name,
-                                    void *opaque, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);;
-
-    visit_type_OnOffAuto(v, name, &x86ms->pit, errp);
-}
-
-static void x86_machine_get_pic(Object *obj, Visitor *v, const char *name,
-                                void *opaque, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-    OnOffAuto pic = x86ms->pic;
-
-    visit_type_OnOffAuto(v, name, &pic, errp);
-}
-
-static void x86_machine_set_pic(Object *obj, Visitor *v, const char *name,
-                                void *opaque, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-
-    visit_type_OnOffAuto(v, name, &x86ms->pic, errp);
-}
-
-static char *x86_machine_get_oem_id(Object *obj, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-
-    return g_strdup(x86ms->oem_id);
-}
-
-static void x86_machine_set_oem_id(Object *obj, const char *value, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-    size_t len = strlen(value);
-
-    if (len > 6) {
-        error_setg(errp,
-                   "User specified "X86_MACHINE_OEM_ID" value is bigger than "
-                   "6 bytes in size");
-        return;
-    }
-
-    strncpy(x86ms->oem_id, value, 6);
-}
-
-static char *x86_machine_get_oem_table_id(Object *obj, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-
-    return g_strdup(x86ms->oem_table_id);
-}
-
-static void x86_machine_set_oem_table_id(Object *obj, const char *value,
-                                         Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-    size_t len = strlen(value);
-
-    if (len > 8) {
-        error_setg(errp,
-                   "User specified "X86_MACHINE_OEM_TABLE_ID
-                   " value is bigger than "
-                   "8 bytes in size");
-        return;
-    }
-    strncpy(x86ms->oem_table_id, value, 8);
-}
-
-static void x86_machine_get_bus_lock_ratelimit(Object *obj, Visitor *v,
-                                const char *name, void *opaque, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-    uint64_t bus_lock_ratelimit = x86ms->bus_lock_ratelimit;
-
-    visit_type_uint64(v, name, &bus_lock_ratelimit, errp);
-}
-
-static void x86_machine_set_bus_lock_ratelimit(Object *obj, Visitor *v,
-                               const char *name, void *opaque, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-
-    visit_type_uint64(v, name, &x86ms->bus_lock_ratelimit, errp);
-}
-
-static void machine_get_sgx_epc(Object *obj, Visitor *v, const char *name,
-                                void *opaque, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-    SgxEPCList *list = x86ms->sgx_epc_list;
-
-    visit_type_SgxEPCList(v, name, &list, errp);
-}
-
-static void machine_set_sgx_epc(Object *obj, Visitor *v, const char *name,
-                                void *opaque, Error **errp)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-    SgxEPCList *list;
-
-    list = x86ms->sgx_epc_list;
-    visit_type_SgxEPCList(v, name, &x86ms->sgx_epc_list, errp);
-
-    qapi_free_SgxEPCList(list);
-}
-
-static int x86_kvm_type(MachineState *ms, const char *vm_type)
-{
-    /*
-     * No x86 machine has a kvm-type property.  If one is added that has
-     * it, it should call kvm_get_vm_type() directly or not use it at all.
-     */
-    assert(vm_type == NULL);
-    return kvm_enabled() ? kvm_get_vm_type(ms) : 0;
-}
-
-static void x86_machine_initfn(Object *obj)
-{
-    X86MachineState *x86ms = X86_MACHINE(obj);
-
-    x86ms->smm = ON_OFF_AUTO_AUTO;
-    x86ms->acpi = ON_OFF_AUTO_AUTO;
-    x86ms->pit = ON_OFF_AUTO_AUTO;
-    x86ms->pic = ON_OFF_AUTO_AUTO;
-    x86ms->pci_irq_mask = ACPI_BUILD_PCI_IRQS;
-    x86ms->oem_id = g_strndup(ACPI_BUILD_APPNAME6, 6);
-    x86ms->oem_table_id = g_strndup(ACPI_BUILD_APPNAME8, 8);
-    x86ms->bus_lock_ratelimit = 0;
-    x86ms->above_4g_mem_start = 4 * GiB;
-}
-
-static void x86_machine_class_init(ObjectClass *oc, void *data)
-{
-    MachineClass *mc = MACHINE_CLASS(oc);
-    X86MachineClass *x86mc = X86_MACHINE_CLASS(oc);
-    NMIClass *nc = NMI_CLASS(oc);
-
-    mc->cpu_index_to_instance_props = x86_cpu_index_to_props;
-    mc->get_default_cpu_node_id = x86_get_default_cpu_node_id;
-    mc->possible_cpu_arch_ids = x86_possible_cpu_arch_ids;
-    mc->kvm_type = x86_kvm_type;
-    x86mc->save_tsc_khz = true;
-    x86mc->fwcfg_dma_enabled = true;
-    nc->nmi_monitor_handler = x86_nmi;
-
-    object_class_property_add(oc, X86_MACHINE_SMM, "OnOffAuto",
-        x86_machine_get_smm, x86_machine_set_smm,
-        NULL, NULL);
-    object_class_property_set_description(oc, X86_MACHINE_SMM,
-        "Enable SMM");
-
-    object_class_property_add(oc, X86_MACHINE_ACPI, "OnOffAuto",
-        x86_machine_get_acpi, x86_machine_set_acpi,
-        NULL, NULL);
-    object_class_property_set_description(oc, X86_MACHINE_ACPI,
-        "Enable ACPI");
-
-    object_class_property_add(oc, X86_MACHINE_PIT, "OnOffAuto",
-                              x86_machine_get_pit,
-                              x86_machine_set_pit,
-                              NULL, NULL);
-    object_class_property_set_description(oc, X86_MACHINE_PIT,
-        "Enable i8254 PIT");
-
-    object_class_property_add(oc, X86_MACHINE_PIC, "OnOffAuto",
-                              x86_machine_get_pic,
-                              x86_machine_set_pic,
-                              NULL, NULL);
-    object_class_property_set_description(oc, X86_MACHINE_PIC,
-        "Enable i8259 PIC");
-
-    object_class_property_add_str(oc, X86_MACHINE_OEM_ID,
-                                  x86_machine_get_oem_id,
-                                  x86_machine_set_oem_id);
-    object_class_property_set_description(oc, X86_MACHINE_OEM_ID,
-                                          "Override the default value of field OEMID "
-                                          "in ACPI table header."
-                                          "The string may be up to 6 bytes in size");
-
-
-    object_class_property_add_str(oc, X86_MACHINE_OEM_TABLE_ID,
-                                  x86_machine_get_oem_table_id,
-                                  x86_machine_set_oem_table_id);
-    object_class_property_set_description(oc, X86_MACHINE_OEM_TABLE_ID,
-                                          "Override the default value of field OEM Table ID "
-                                          "in ACPI table header."
-                                          "The string may be up to 8 bytes in size");
-
-    object_class_property_add(oc, X86_MACHINE_BUS_LOCK_RATELIMIT, "uint64_t",
-                                x86_machine_get_bus_lock_ratelimit,
-                                x86_machine_set_bus_lock_ratelimit, NULL, NULL);
-    object_class_property_set_description(oc, X86_MACHINE_BUS_LOCK_RATELIMIT,
-            "Set the ratelimit for the bus locks acquired in VMs");
-
-    object_class_property_add(oc, "sgx-epc", "SgxEPC",
-        machine_get_sgx_epc, machine_set_sgx_epc,
-        NULL, NULL);
-    object_class_property_set_description(oc, "sgx-epc",
-        "SGX EPC device");
-}
-
-static const TypeInfo x86_machine_info = {
-    .name = TYPE_X86_MACHINE,
-    .parent = TYPE_MACHINE,
-    .abstract = true,
-    .instance_size = sizeof(X86MachineState),
-    .instance_init = x86_machine_initfn,
-    .class_size = sizeof(X86MachineClass),
-    .class_init = x86_machine_class_init,
-    .interfaces = (InterfaceInfo[]) {
-         { TYPE_NMI },
-         { }
-    },
-};
-
-static void x86_machine_register_types(void)
-{
-    type_register_static(&x86_machine_info);
-}
-
-type_init(x86_machine_register_types)
