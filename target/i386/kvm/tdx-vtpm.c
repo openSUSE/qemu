@@ -222,13 +222,15 @@ int socket_recv_buffer_next(SocketRecvBuffer *srb,
         return 1;
 
     if (head->length > srb->size) {
-        srb->buf = g_realloc(srb->buf,
-                             head->length);
+        int size;
+
+        size = head->length;
+        srb->buf = g_realloc(srb->buf, size);
         if (!srb->buf) {
             error_report("No enough memory, data dropped");
             return -1;
         }
-        srb->size = head->length;
+        srb->size = size;
         return 1;
     }
 
