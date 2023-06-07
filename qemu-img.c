@@ -242,7 +242,7 @@ void help(void)
  * an odd number of ',' (or else a separating ',' following it gets
  * escaped), or be empty (or else a separating ',' preceding it can
  * escape a separating ',' following it).
- * 
+ *
  */
 static bool is_valid_option_list(const char *optarg)
 {

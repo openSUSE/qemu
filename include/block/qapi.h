@@ -25,6 +25,8 @@
 #ifndef BLOCK_QAPI_H
 #define BLOCK_QAPI_H
 
+#include "block/block-common.h"
+#include "block/graph-lock.h"
 #include "block/snapshot.h"
 #include "qapi/qapi-types-block-core.h"
 
@@ -40,9 +42,12 @@ void bdrv_query_image_info(BlockDriverState *bs,
                            bool flat,
                            bool skip_implicit_filters,
                            Error **errp);
-void bdrv_query_block_graph_info(BlockDriverState *bs,
-                                 BlockGraphInfo **p_info,
-                                 Error **errp);
+void coroutine_fn GRAPH_RDLOCK
+bdrv_co_query_block_graph_info(BlockDriverState *bs, BlockGraphInfo **p_info,
+                               Error **errp);
+void co_wrapper_bdrv_rdlock
+bdrv_query_block_graph_info(BlockDriverState *bs, BlockGraphInfo **p_info,
+                            Error **errp);
 
 void bdrv_snapshot_dump(QEMUSnapshotInfo *sn);
 void bdrv_image_info_specific_dump(ImageInfoSpecific *info_spec,
