@@ -410,6 +410,11 @@ static void pc_q35_7_0_machine_options(MachineClass *m)
     pcmc->enforce_amd_1tb_hole = false;
     compat_props_add(m->compat_props, hw_compat_7_0, hw_compat_7_0_len);
     compat_props_add(m->compat_props, pc_compat_7_0, pc_compat_7_0_len);
+    /* For pc-q35-7.0 and older, use SMBIOS 2.8 by default */
+    /* NOTE: Upstream is doing this for > 8.0, while we're doing it
+     * since 7.1 (included), because we already had downstream patches
+     * for that. */
+    pcmc->default_smbios_ep_type = SMBIOS_ENTRY_POINT_TYPE_32;
 }
 
 DEFINE_Q35_MACHINE(v7_0, "pc-q35-7.0", NULL,
