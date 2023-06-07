@@ -41,10 +41,10 @@
 #include "qemu/qemu-print.h"
 #include "sysemu/block-backend.h"
 
-BlockDeviceInfo *bdrv_block_device_info(BlockBackend *blk,
-                                        BlockDriverState *bs,
-                                        bool flat,
-                                        Error **errp)
+BlockDeviceInfo *coroutine_fn bdrv_co_block_device_info(BlockBackend *blk,
+                                                        BlockDriverState *bs,
+                                                        bool flat,
+                                                        Error **errp)
 {
     ERRP_GUARD();
     ImageInfo **p_image_info;
@@ -152,7 +152,7 @@ BlockDeviceInfo *bdrv_block_device_info(BlockBackend *blk,
      * Skip automatically inserted nodes that the user isn't aware of for
      * query-block (blk != NULL), but not for query-named-block-nodes
      */
-    bdrv_query_image_info(bs, p_image_info, flat, blk != NULL, errp);
+    bdrv_co_query_image_info(bs, p_image_info, flat, blk != NULL, errp);
     if (*errp) {
         qapi_free_BlockDeviceInfo(info);
         return NULL;
