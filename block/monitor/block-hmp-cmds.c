@@ -387,9 +387,11 @@ void hmp_nbd_server_start(Monitor *mon, const QDict *qdict)
     bool writable = qdict_get_try_bool(qdict, "writable", false);
     bool all = qdict_get_try_bool(qdict, "all", false);
     Error *local_err = NULL;
-    BlockInfoList *block_list, *info;
+    BlockBackend *blk;
     SocketAddress *addr;
     NbdServerAddOptions export;
+
+    GRAPH_RDLOCK_GUARD_MAINLOOP();
 
     if (writable && !all) {
         error_setg(&local_err, "-w only valid together with -a");
@@ -416,28 +418,42 @@ void hmp_nbd_server_start(Monitor *mon, const QDict *qdict)
     /* Then try adding all block devices.  If one fails, close all and
      * exit.
      */
-    block_list = qmp_query_block(NULL);
+    for (blk = blk_all_next(NULL); blk; blk = blk_all_next(blk)) {
+        BlockDriverState *bs = blk_bs(blk);
 
-    for (info = block_list; info; info = info->next) {
-        if (!info->value->inserted) {
+        if (!*blk_name(blk)) {
+            continue;
+        }
+
+        /*
+         * Note: historically we used to call qmp_query_block() to get
+         * the list of block devices. The two 'continue' cases below
+         * are the same as used by that function and are here to
+         * preserve behavior.
+         */
+
+        if (!blk_get_attached_dev(blk)) {
+            continue;
+        }
+
+        bs = bdrv_skip_implicit_filters(bs);
+        if (!bs || !bs->drv) {
             continue;
         }
 
         export = (NbdServerAddOptions) {
-            .device         = info->value->device,
+            .device         = g_strdup(blk_name(blk)),
             .has_writable   = true,
             .writable       = writable,
         };
 
         qmp_nbd_server_add(&export, &local_err);
-
+        g_free(export.device);
         if (local_err != NULL) {
             qmp_nbd_server_stop(NULL);
             break;
         }
     }
-
-    qapi_free_BlockInfoList(block_list);
 
 exit:
     hmp_handle_error(mon, local_err);
