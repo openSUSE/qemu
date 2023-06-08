@@ -41,10 +41,10 @@
 #include "qemu/qemu-print.h"
 #include "sysemu/block-backend.h"
 
-BlockDeviceInfo *coroutine_fn bdrv_co_block_device_info(BlockBackend *blk,
-                                                        BlockDriverState *bs,
-                                                        bool flat,
-                                                        Error **errp)
+BlockDeviceInfo *coroutine_fn bdrv_block_device_info(BlockBackend *blk,
+                                                     BlockDriverState *bs,
+                                                     bool flat,
+                                                     Error **errp)
 {
     ImageInfo **p_image_info;
     ImageInfo *backing_info;
@@ -234,8 +234,6 @@ bdrv_do_query_node_info(BlockDriverState *bs, BlockNodeInfo *info, Error **errp)
     int ret;
     Error *err = NULL;
 
-    aio_context_acquire(bdrv_get_aio_context(bs));
-
     size = bdrv_getlength(bs);
     if (size < 0) {
         error_setg_errno(errp, -size, "Can't get image size '%s'",
@@ -248,7 +246,9 @@ bdrv_do_query_node_info(BlockDriverState *bs, BlockNodeInfo *info, Error **errp)
     info->filename        = g_strdup(bs->filename);
     info->format          = g_strdup(bdrv_get_format_name(bs));
     info->virtual_size    = size;
-    info->actual_size     = bdrv_get_allocated_file_size(bs);
+    bdrv_graph_co_rdlock();
+    info->actual_size     = bdrv_co_get_allocated_file_size(bs);
+    bdrv_graph_co_rdunlock();
     info->has_actual_size = info->actual_size >= 0;
     if (bs->encrypted) {
         info->encrypted = true;
@@ -304,7 +304,7 @@ bdrv_do_query_node_info(BlockDriverState *bs, BlockNodeInfo *info, Error **errp)
     }
 
 out:
-    aio_context_release(bdrv_get_aio_context(bs));
+    return;
 }
 
 /**
@@ -667,13 +667,13 @@ bdrv_query_bds_stats(BlockDriverState *bs, bool blk_level)
     return s;
 }
 
-BlockInfoList *qmp_query_block(Error **errp)
+BlockInfoList *coroutine_fn qmp_query_block(Error **errp)
 {
     BlockInfoList *head = NULL, **p_next = &head;
     BlockBackend *blk;
     Error *local_err = NULL;
 
-    GRAPH_RDLOCK_GUARD_MAINLOOP();
+    GRAPH_RDLOCK_GUARD();
 
     for (blk = blk_all_next(NULL); blk; blk = blk_all_next(blk)) {
         BlockInfoList *info;
