@@ -2406,7 +2406,6 @@ tdx_vmcall_service_init_service_item(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall,
      vsi->command.addr = vmcall->in_r12 & gpa_mask;
      vsi->response.addr = vmcall->in_r13 & gpa_mask;
      vsi->notify_vector = vmcall->in_r14;
-     vsi->apic_id = cpu->apic_id;
      vsi->timeout = vmcall->in_r15;
 
      tdx_vmcall_service_cache_data_head(vsi);
@@ -2484,6 +2483,7 @@ static void tdx_handle_vmcall_service(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall
                      handler->vsi_size);
         goto fail;
     }
+    vsi->apic_id = tdx->apic_id;
 
     if (tdx_vmcall_service_init_service_item(cpu, vmcall, vsi)) {
         response.head.u.status = TDG_VP_VMCALL_SERVICE_OUT_OF_RESOURCE;
@@ -2519,7 +2519,7 @@ static void tdx_handle_vmcall_service(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall
  fail:
     __tdx_vmcall_service_complete_request(&response,
                                           true, false,
-                                          cpu->apic_id,
+                                          tdx->apic_id,
                                           vmcall->in_r14);
 }
 
