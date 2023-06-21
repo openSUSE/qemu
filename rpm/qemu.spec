@@ -944,17 +944,6 @@ done
 %check
 cd %blddir
 
-# Patch 'increase x86_64 physical bits to 42' requires that the DSDT used for
-# acpi [q]tests is modified too. But it's binary, and that means we cannot
-# do that in the patch itself. Instead, we keep a copy of the binary in the
-# package sources, and put it in place now, before the tests themselves.
-# If that patch is removed, the following line needs to go as well.
-cp %{rpmfilesdir}/DSDT.pcie %{srcdir}/tests/data/acpi/microvm/
-
-# Patch 'tests/acpi: update tables for new core count test' requires some new
-# binaries to be introcuded too. Let's copy them in place as well
-cp %{rpmfilesdir}/APIC.core-count2 %{rpmfilesdir}/DSDT.core-count2 %{rpmfilesdir}/FACP.core-count2 %{srcdir}/tests/data/acpi/q35/
-
 %if 0%{?qemu_user_space_build}
 # Seccomp is not supported by linux-user emulation
 echo 'int main (void) { return 0; }' > %{srcdir}/tests/unit/test-seccomp.c
