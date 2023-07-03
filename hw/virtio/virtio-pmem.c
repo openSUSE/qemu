@@ -84,7 +84,7 @@ static void virtio_pmem_flush(VirtIODevice *vdev, VirtQueue *vq)
         g_free(req_data);
         return;
     }
-    req_data->fd   = memory_region_get_fd(&backend->mr);
+    req_data->fd   = memory_region_get_fd(backend->mr);
     req_data->pmem = pmem;
     req_data->vdev = vdev;
     thread_pool_submit_aio(pool, worker_cb, req_data, done_cb, req_data);
@@ -96,7 +96,7 @@ static void virtio_pmem_get_config(VirtIODevice *vdev, uint8_t *config)
     struct virtio_pmem_config *pmemcfg = (struct virtio_pmem_config *) config;
 
     virtio_stq_p(vdev, &pmemcfg->start, pmem->start);
-    virtio_stq_p(vdev, &pmemcfg->size, memory_region_size(&pmem->memdev->mr));
+    virtio_stq_p(vdev, &pmemcfg->size, memory_region_size(pmem->memdev->mr));
 }
 
 static uint64_t virtio_pmem_get_features(VirtIODevice *vdev, uint64_t features,
@@ -140,7 +140,7 @@ static void virtio_pmem_fill_device_info(const VirtIOPMEM *pmem,
                                          VirtioPMEMDeviceInfo *vi)
 {
     vi->memaddr = pmem->start;
-    vi->size    = memory_region_size(&pmem->memdev->mr);
+    vi->size    = memory_region_size(pmem->memdev->mr);
     vi->memdev  = object_get_canonical_path(OBJECT(pmem->memdev));
 }
 
@@ -152,7 +152,7 @@ static MemoryRegion *virtio_pmem_get_memory_region(VirtIOPMEM *pmem,
         return NULL;
     }
 
-    return &pmem->memdev->mr;
+    return pmem->memdev->mr;
 }
 
 static Property virtio_pmem_properties[] = {

@@ -71,7 +71,8 @@ struct HostMemoryBackend {
     DECLARE_BITMAP(host_nodes, MAX_NODES + 1);
     HostMemPolicy policy;
 
-    MemoryRegion mr;
+    MemoryRegion base_mr;
+    MemoryRegion *mr;
 };
 
 bool host_memory_backend_mr_inited(HostMemoryBackend *backend);

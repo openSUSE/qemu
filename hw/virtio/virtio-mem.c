@@ -448,7 +448,7 @@ static int virtio_mem_set_block_state(VirtIOMEM *vmem, uint64_t start_gpa,
                                       uint64_t size, bool plug)
 {
     const uint64_t offset = start_gpa - vmem->addr;
-    RAMBlock *rb = vmem->memdev->mr.ram_block;
+    RAMBlock *rb = vmem->memdev->mr->ram_block;
 
     if (virtio_mem_is_busy()) {
         return -EBUSY;
@@ -463,8 +463,8 @@ static int virtio_mem_set_block_state(VirtIOMEM *vmem, uint64_t start_gpa,
         int ret = 0;
 
         if (vmem->prealloc) {
-            void *area = memory_region_get_ram_ptr(&vmem->memdev->mr) + offset;
-            int fd = memory_region_get_fd(&vmem->memdev->mr);
+            void *area = memory_region_get_ram_ptr(vmem->memdev->mr) + offset;
+            int fd = memory_region_get_fd(vmem->memdev->mr);
             Error *local_err = NULL;
 
             qemu_prealloc_mem(fd, area, size, 1, NULL, &local_err);
@@ -490,7 +490,7 @@ static int virtio_mem_set_block_state(VirtIOMEM *vmem, uint64_t start_gpa,
 
         if (ret) {
             /* Could be preallocation or a notifier populated memory. */
-            ram_block_discard_range(vmem->memdev->mr.ram_block, offset, size);
+            ram_block_discard_range(vmem->memdev->mr->ram_block, offset, size);
             return -EBUSY;
         }
     }
@@ -558,7 +558,7 @@ static void virtio_mem_resize_usable_region(VirtIOMEM *vmem,
                                             uint64_t requested_size,
                                             bool can_shrink)
 {
-    uint64_t newsize = MIN(memory_region_size(&vmem->memdev->mr),
+    uint64_t newsize = MIN(memory_region_size(vmem->memdev->mr),
                            requested_size + VIRTIO_MEM_USABLE_EXTENT);
 
     /* The usable region size always has to be multiples of the block size. */
@@ -578,7 +578,7 @@ static void virtio_mem_resize_usable_region(VirtIOMEM *vmem,
 
 static int virtio_mem_unplug_all(VirtIOMEM *vmem)
 {
-    RAMBlock *rb = vmem->memdev->mr.ram_block;
+    RAMBlock *rb = vmem->memdev->mr->ram_block;
 
     if (virtio_mem_is_busy()) {
         return -EBUSY;
@@ -705,7 +705,7 @@ static void virtio_mem_get_config(VirtIODevice *vdev, uint8_t *config_data)
     config->requested_size = cpu_to_le64(vmem->requested_size);
     config->plugged_size = cpu_to_le64(vmem->size);
     config->addr = cpu_to_le64(vmem->addr);
-    config->region_size = cpu_to_le64(memory_region_size(&vmem->memdev->mr));
+    config->region_size = cpu_to_le64(memory_region_size(vmem->memdev->mr));
     config->usable_region_size = cpu_to_le64(vmem->usable_region_size);
 }
 
@@ -766,9 +766,9 @@ static void virtio_mem_device_realize(DeviceState *dev, Error **errp)
                    VIRTIO_MEM_MEMDEV_PROP,
                    object_get_canonical_path_component(OBJECT(vmem->memdev)));
         return;
-    } else if (!memory_region_is_ram(&vmem->memdev->mr) ||
-        memory_region_is_rom(&vmem->memdev->mr) ||
-        !vmem->memdev->mr.ram_block) {
+    } else if (!memory_region_is_ram(vmem->memdev->mr) ||
+        memory_region_is_rom(vmem->memdev->mr) ||
+        !vmem->memdev->mr->ram_block) {
         error_setg(errp, "'%s' property specifies an unsupported memdev",
                    VIRTIO_MEM_MEMDEV_PROP);
         return;
@@ -787,7 +787,7 @@ static void virtio_mem_device_realize(DeviceState *dev, Error **errp)
         return;
     }
 
-    rb = vmem->memdev->mr.ram_block;
+    rb = vmem->memdev->mr->ram_block;
     page_size = qemu_ram_pagesize(rb);
 
 #if defined(VIRTIO_MEM_HAS_LEGACY_GUESTS)
@@ -841,7 +841,7 @@ static void virtio_mem_device_realize(DeviceState *dev, Error **errp)
                    ")", VIRTIO_MEM_ADDR_PROP, VIRTIO_MEM_BLOCK_SIZE_PROP,
                    vmem->block_size);
         return;
-    } else if (!QEMU_IS_ALIGNED(memory_region_size(&vmem->memdev->mr),
+    } else if (!QEMU_IS_ALIGNED(memory_region_size(vmem->memdev->mr),
                                 vmem->block_size)) {
         error_setg(errp, "'%s' property memdev size has to be multiples of"
                    "'%s' (0x%" PRIx64 ")", VIRTIO_MEM_MEMDEV_PROP,
@@ -863,7 +863,7 @@ static void virtio_mem_device_realize(DeviceState *dev, Error **errp)
 
     virtio_mem_resize_usable_region(vmem, vmem->requested_size, true);
 
-    vmem->bitmap_size = memory_region_size(&vmem->memdev->mr) /
+    vmem->bitmap_size = memory_region_size(vmem->memdev->mr) /
                         vmem->block_size;
     vmem->bitmap = bitmap_new(vmem->bitmap_size);
 
@@ -871,14 +871,14 @@ static void virtio_mem_device_realize(DeviceState *dev, Error **errp)
     vmem->vq = virtio_add_queue(vdev, 128, virtio_mem_handle_request);
 
     host_memory_backend_set_mapped(vmem->memdev, true);
-    vmstate_register_ram(&vmem->memdev->mr, DEVICE(vmem));
+    vmstate_register_ram(vmem->memdev->mr, DEVICE(vmem));
     qemu_register_reset(virtio_mem_system_reset, vmem);
 
     /*
      * Set ourselves as RamDiscardManager before the plug handler maps the
      * memory region and exposes it via an address space.
      */
-    memory_region_set_ram_discard_manager(&vmem->memdev->mr,
+    memory_region_set_ram_discard_manager(vmem->memdev->mr,
                                           RAM_DISCARD_MANAGER(vmem));
 }
 
@@ -891,9 +891,9 @@ static void virtio_mem_device_unrealize(DeviceState *dev)
      * The unplug handler unmapped the memory region, it cannot be
      * found via an address space anymore. Unset ourselves.
      */
-    memory_region_set_ram_discard_manager(&vmem->memdev->mr, NULL);
+    memory_region_set_ram_discard_manager(vmem->memdev->mr, NULL);
     qemu_unregister_reset(virtio_mem_system_reset, vmem);
-    vmstate_unregister_ram(&vmem->memdev->mr, DEVICE(vmem));
+    vmstate_unregister_ram(vmem->memdev->mr, DEVICE(vmem));
     host_memory_backend_set_mapped(vmem->memdev, false);
     virtio_del_queue(vdev, 0);
     virtio_cleanup(vdev);
@@ -904,7 +904,7 @@ static void virtio_mem_device_unrealize(DeviceState *dev)
 static int virtio_mem_discard_range_cb(const VirtIOMEM *vmem, void *arg,
                                        uint64_t offset, uint64_t size)
 {
-    RAMBlock *rb = vmem->memdev->mr.ram_block;
+    RAMBlock *rb = vmem->memdev->mr->ram_block;
 
     return ram_block_discard_range(rb, offset, size) ? -EINVAL : 0;
 }
@@ -955,7 +955,7 @@ static int virtio_mem_mig_sanity_checks_pre_save(void *opaque)
     VirtIOMEM *vmem = tmp->parent;
 
     tmp->addr = vmem->addr;
-    tmp->region_size = memory_region_size(&vmem->memdev->mr);
+    tmp->region_size = memory_region_size(vmem->memdev->mr);
     tmp->block_size = vmem->block_size;
     tmp->node = vmem->node;
     return 0;
@@ -965,7 +965,7 @@ static int virtio_mem_mig_sanity_checks_post_load(void *opaque, int version_id)
 {
     VirtIOMEMMigSanityChecks *tmp = opaque;
     VirtIOMEM *vmem = tmp->parent;
-    const uint64_t new_region_size = memory_region_size(&vmem->memdev->mr);
+    const uint64_t new_region_size = memory_region_size(vmem->memdev->mr);
 
     if (tmp->addr != vmem->addr) {
         error_report("Property '%s' changed from 0x%" PRIx64 " to 0x%" PRIx64,
@@ -1043,7 +1043,7 @@ static void virtio_mem_fill_device_info(const VirtIOMEM *vmem,
     vi->node = vmem->node;
     vi->requested_size = vmem->requested_size;
     vi->size = vmem->size;
-    vi->max_size = memory_region_size(&vmem->memdev->mr);
+    vi->max_size = memory_region_size(vmem->memdev->mr);
     vi->block_size = vmem->block_size;
     vi->memdev = object_get_canonical_path(OBJECT(vmem->memdev));
 }
@@ -1055,7 +1055,7 @@ static MemoryRegion *virtio_mem_get_memory_region(VirtIOMEM *vmem, Error **errp)
         return NULL;
     }
 
-    return &vmem->memdev->mr;
+    return vmem->memdev->mr;
 }
 
 static void virtio_mem_add_size_change_notifier(VirtIOMEM *vmem,
@@ -1113,10 +1113,10 @@ static void virtio_mem_set_requested_size(Object *obj, Visitor *v,
                        ")", name, VIRTIO_MEM_BLOCK_SIZE_PROP,
                        vmem->block_size);
             return;
-        } else if (value > memory_region_size(&vmem->memdev->mr)) {
+        } else if (value > memory_region_size(vmem->memdev->mr)) {
             error_setg(errp, "'%s' cannot exceed the memory backend size"
                        "(0x%" PRIx64 ")", name,
-                       memory_region_size(&vmem->memdev->mr));
+                       memory_region_size(vmem->memdev->mr));
             return;
         }
 
@@ -1145,8 +1145,8 @@ static void virtio_mem_get_block_size(Object *obj, Visitor *v, const char *name,
      * default block size we would use with the current memory backend.
      */
     if (!value) {
-        if (vmem->memdev && memory_region_is_ram(&vmem->memdev->mr)) {
-            value = virtio_mem_default_block_size(vmem->memdev->mr.ram_block);
+        if (vmem->memdev && memory_region_is_ram(vmem->memdev->mr)) {
+            value = virtio_mem_default_block_size(vmem->memdev->mr->ram_block);
         } else {
             value = virtio_mem_thp_size();
         }
@@ -1219,7 +1219,7 @@ static uint64_t virtio_mem_rdm_get_min_granularity(const RamDiscardManager *rdm,
 {
     const VirtIOMEM *vmem = VIRTIO_MEM(rdm);
 
-    g_assert(mr == &vmem->memdev->mr);
+    g_assert(mr == vmem->memdev->mr);
     return vmem->block_size;
 }
 
@@ -1230,7 +1230,7 @@ static bool virtio_mem_rdm_is_populated(const RamDiscardManager *rdm,
     uint64_t start_gpa = vmem->addr + s->offset_within_region;
     uint64_t end_gpa = start_gpa + int128_get64(s->size);
 
-    g_assert(s->mr == &vmem->memdev->mr);
+    g_assert(s->mr == vmem->memdev->mr);
 
     start_gpa = QEMU_ALIGN_DOWN(start_gpa, vmem->block_size);
     end_gpa = QEMU_ALIGN_UP(end_gpa, vmem->block_size);
@@ -1265,7 +1265,7 @@ static int virtio_mem_rdm_replay_populated(const RamDiscardManager *rdm,
         .opaque = opaque,
     };
 
-    g_assert(s->mr == &vmem->memdev->mr);
+    g_assert(s->mr == vmem->memdev->mr);
     return virtio_mem_for_each_plugged_section(vmem, s, &data,
                                             virtio_mem_rdm_replay_populated_cb);
 }
@@ -1290,7 +1290,7 @@ static void virtio_mem_rdm_replay_discarded(const RamDiscardManager *rdm,
         .opaque = opaque,
     };
 
-    g_assert(s->mr == &vmem->memdev->mr);
+    g_assert(s->mr == vmem->memdev->mr);
     virtio_mem_for_each_unplugged_section(vmem, s, &data,
                                           virtio_mem_rdm_replay_discarded_cb);
 }
@@ -1302,7 +1302,7 @@ static void virtio_mem_rdm_register_listener(RamDiscardManager *rdm,
     VirtIOMEM *vmem = VIRTIO_MEM(rdm);
     int ret;
 
-    g_assert(s->mr == &vmem->memdev->mr);
+    g_assert(s->mr == vmem->memdev->mr);
     rdl->section = memory_region_section_new_copy(s);
 
     QLIST_INSERT_HEAD(&vmem->rdl_list, rdl, next);
@@ -1319,7 +1319,7 @@ static void virtio_mem_rdm_unregister_listener(RamDiscardManager *rdm,
 {
     VirtIOMEM *vmem = VIRTIO_MEM(rdm);
 
-    g_assert(rdl->section->mr == &vmem->memdev->mr);
+    g_assert(rdl->section->mr == vmem->memdev->mr);
     if (vmem->size) {
         if (rdl->double_discard_supported) {
             rdl->notify_discard(rdl, rdl->section);

@@ -75,12 +75,12 @@ priv_memfd_backend_memory_alloc(HostMemoryBackend *backend, Error **errp)
     name = host_memory_backend_get_name(backend);
     ram_flags = backend->share ? RAM_SHARED : 0;
     ram_flags |= backend->reserve ? 0 : RAM_NORESERVE;
-    memory_region_init_ram_from_fd(&backend->mr, OBJECT(backend), name,
+    memory_region_init_ram_from_fd(backend->mr, OBJECT(backend), name,
                                    backend->size, ram_flags, fd, 0, errp);
     g_free(name);
 
-    memory_region_set_restricted_fd(&backend->mr, priv_fd);
-    ram_block_alloc_cgs_bitmap(backend->mr.ram_block);
+    memory_region_set_restricted_fd(backend->mr, priv_fd);
+    ram_block_alloc_cgs_bitmap(backend->mr->ram_block);
 }
 
 static bool

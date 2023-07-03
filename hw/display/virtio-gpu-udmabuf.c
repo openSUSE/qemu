@@ -97,7 +97,7 @@ static int find_memory_backend_type(Object *obj, void *opaque)
 
     if (object_dynamic_cast(obj, TYPE_MEMORY_BACKEND)) {
         HostMemoryBackend *backend = MEMORY_BACKEND(obj);
-        RAMBlock *rb = backend->mr.ram_block;
+        RAMBlock *rb = backend->mr->ram_block;
 
         if (rb && rb->fd > 0) {
             ret = fcntl(rb->fd, F_GET_SEALS);

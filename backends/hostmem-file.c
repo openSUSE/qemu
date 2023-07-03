@@ -56,7 +56,7 @@ file_backend_memory_alloc(HostMemoryBackend *backend, Error **errp)
     ram_flags = backend->share ? RAM_SHARED : 0;
     ram_flags |= backend->reserve ? 0 : RAM_NORESERVE;
     ram_flags |= fb->is_pmem ? RAM_PMEM : 0;
-    memory_region_init_ram_from_file(&backend->mr, OBJECT(backend), name,
+    memory_region_init_ram_from_file(backend->mr, OBJECT(backend), name,
                                      backend->size, fb->align, ram_flags,
                                      fb->mem_path, fb->readonly, errp);
     g_free(name);
@@ -174,8 +174,8 @@ static void file_backend_unparent(Object *obj)
     HostMemoryBackendFile *fb = MEMORY_BACKEND_FILE(obj);
 
     if (host_memory_backend_mr_inited(backend) && fb->discard_data) {
-        void *ptr = memory_region_get_ram_ptr(&backend->mr);
-        uint64_t sz = memory_region_size(&backend->mr);
+        void *ptr = memory_region_get_ram_ptr(backend->mr);
+        uint64_t sz = memory_region_size(backend->mr);
 
         qemu_madvise(ptr, sz, QEMU_MADV_REMOVE);
     }
