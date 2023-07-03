@@ -26,6 +26,7 @@ OBJECT_DECLARE_SIMPLE_TYPE(HostMemoryBackendPrivateMemfd,
 
 struct HostMemoryBackendPrivateMemfd {
     HostMemoryBackend parent_obj;
+    HostMemoryBackend *shmem;
 
     bool hugetlb;
     uint64_t hugetlbsize;
@@ -47,10 +48,22 @@ priv_memfd_backend_memory_alloc(HostMemoryBackend *backend, Error **errp)
         return;
     }
 
-    fd = qemu_memfd_create("memory-backend-memfd-shared", backend->size,
-                           m->hugetlb, m->hugetlbsize, 0, errp);
-    if (fd == -1) {
-        return;
+    if (m->shmem) {
+        assert(m->shmem->mr);
+        backend->mr = m->shmem->mr;
+    } else {
+        fd = qemu_memfd_create("memory-backend-memfd-shared", backend->size,
+                               m->hugetlb, m->hugetlbsize, 0, errp);
+        if (fd == -1) {
+            return;
+        }
+
+        name = host_memory_backend_get_name(backend);
+        ram_flags = backend->share ? RAM_SHARED : 0;
+        ram_flags |= backend->reserve ? 0 : RAM_NORESERVE;
+        memory_region_init_ram_from_fd(backend->mr, OBJECT(backend), name,
+                                       backend->size, ram_flags, fd, 0, errp);
+        g_free(name);
     }
 
     flags = 0;
@@ -71,13 +84,6 @@ priv_memfd_backend_memory_alloc(HostMemoryBackend *backend, Error **errp)
     if (priv_fd == -1) {
         return;
     }
-
-    name = host_memory_backend_get_name(backend);
-    ram_flags = backend->share ? RAM_SHARED : 0;
-    ram_flags |= backend->reserve ? 0 : RAM_NORESERVE;
-    memory_region_init_ram_from_fd(backend->mr, OBJECT(backend), name,
-                                   backend->size, ram_flags, fd, 0, errp);
-    g_free(name);
 
     memory_region_set_restricted_fd(backend->mr, priv_fd);
     ram_block_alloc_cgs_bitmap(backend->mr->ram_block);
@@ -161,6 +167,16 @@ priv_memfd_backend_class_init(ObjectClass *oc, void *data)
                                   priv_memfd_backend_set_path);
     object_class_property_set_description(oc, "path",
                                           "path to mount point of shmfs");
+
+    object_class_property_add_link(oc,
+                                   "shmemdev",
+                                   TYPE_MEMORY_BACKEND,
+                                   offsetof(HostMemoryBackendPrivateMemfd, shmem),
+                                   object_property_allow_set_link,
+                                   OBJ_PROP_LINK_STRONG);
+    object_class_property_set_description(oc, "shmemdev",
+                                          "memory backend for shared memory");
+
     if (qemu_memfd_check(MFD_HUGETLB)) {
         object_class_property_add_bool(oc, "hugetlb",
                                        priv_memfd_backend_get_hugetlb,

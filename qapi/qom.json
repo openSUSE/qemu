@@ -705,7 +705,8 @@
   'data': { '*hugetlb': 'bool',
             '*hugetlbsize': 'size',
             '*seal': 'bool',
-            'path': 'str' } }
+            'path': 'str',
+            '*shmemdev': 'str' } }
 
 ##
 # @MemoryBackendEpcProperties:
