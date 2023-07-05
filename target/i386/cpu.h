@@ -909,6 +909,8 @@ uint64_t x86_cpu_get_supported_feature_word(FeatureWord w,
 /* Protection Keys for Supervisor-mode Pages */
 #define CPUID_7_0_ECX_PKS               (1U << 31)
 
+/* Attestation Services for Intel® SGX */
+#define CPUID_7_0_EDX_SGX_KEYS          (1U << 1)
 /* AVX512 Neural Network Instructions */
 #define CPUID_7_0_EDX_AVX512_4VNNIW     (1U << 2)
 /* AVX512 Multiply Accumulation Single Precision */
@@ -941,6 +943,8 @@ uint64_t x86_cpu_get_supported_feature_word(FeatureWord w,
 #define CPUID_7_0_EDX_SPEC_CTRL         (1U << 26)
 /* Single Thread Indirect Branch Predictors */
 #define CPUID_7_0_EDX_STIBP             (1U << 27)
+/* Writeback and invalidate the L1 data cache */
+#define CPUID_7_0_EDX_L1D_FLUSH         (1U << 28)
 /* Arch Capabilities */
 #define CPUID_7_0_EDX_ARCH_CAPABILITIES (1U << 29)
 /* Core Capability */

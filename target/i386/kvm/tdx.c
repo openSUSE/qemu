@@ -211,6 +211,7 @@ static KvmTdxCpuidLookup tdx_cpuid_lookup[FEATURE_WORDS] = {
             CPUID_EXT_VMX | CPUID_EXT_SMX |
             BIT(16),
         .tdx_fixed1 =
+            CPUID_EXT_DTES64 | CPUID_EXT_DSCPL |
             CPUID_EXT_CX16 | CPUID_EXT_PDCM | CPUID_EXT_X2APIC |
             CPUID_EXT_AES | CPUID_EXT_XSAVE | CPUID_EXT_RDRAND |
             CPUID_EXT_HYPERVISOR | CPUID_EXT_MONITOR,
@@ -243,8 +244,10 @@ static KvmTdxCpuidLookup tdx_cpuid_lookup[FEATURE_WORDS] = {
             CPUID_7_0_ECX_TME,
     },
     [FEAT_7_0_EDX] = {
+        .tdx_fixed0 = CPUID_7_0_EDX_SGX_KEYS,
         .tdx_fixed1 =
-            CPUID_7_0_EDX_SPEC_CTRL | CPUID_7_0_EDX_ARCH_CAPABILITIES |
+            CPUID_7_0_EDX_SPEC_CTRL |
+            CPUID_7_0_EDX_L1D_FLUSH | CPUID_7_0_EDX_ARCH_CAPABILITIES |
             CPUID_7_0_EDX_CORE_CAPABILITY | CPUID_7_0_EDX_SPEC_CTRL_SSBD,
         .vmm_fixup =
             CPUID_7_0_EDX_PCONFIG,
@@ -271,6 +274,15 @@ static KvmTdxCpuidLookup tdx_cpuid_lookup[FEATURE_WORDS] = {
     [FEAT_KVM] = {
         .inducing_ve = true,
         .supported_on_ve = TDX_SUPPORTED_KVM_FEATURES,
+    },
+    [FEAT_SGX_12_0_EAX] = {
+        .tdx_fixed0 = -1U,
+    },
+    [FEAT_SGX_12_0_EBX] = {
+        .tdx_fixed0 = -1U,
+    },
+    [FEAT_SGX_12_1_EAX] = {
+        .tdx_fixed0 = -1U,
     },
 };
 
