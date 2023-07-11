@@ -133,6 +133,10 @@ static bool migration_should_pause(const char *uri)
      * migration.
      */
 
+    if (strstart(uri, "file:", NULL)) {
+        return true;
+    }
+
     return false;
 }
 
