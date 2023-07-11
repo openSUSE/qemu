@@ -2105,7 +2105,7 @@ static int postcopy_start(MigrationState *ms)
     trace_postcopy_start_set_run();
 
     qemu_system_wakeup_request(QEMU_WAKEUP_REASON_OTHER, NULL);
-    global_state_store();
+    global_state_store_once();
     ret = vm_stop_force_state(RUN_STATE_FINISH_MIGRATE);
     if (ret < 0) {
         goto fail;
@@ -2312,7 +2312,7 @@ static void migration_completion(MigrationState *s)
         s->downtime_start = qemu_clock_get_ms(QEMU_CLOCK_REALTIME);
         qemu_system_wakeup_request(QEMU_WAKEUP_REASON_OTHER, NULL);
 
-        s->vm_old_state = global_state_store();
+        s->vm_old_state = global_state_store_once();
 
         ret = vm_stop_force_state(RUN_STATE_FINISH_MIGRATE);
         trace_migration_completion_vm_stop(ret);
@@ -3124,7 +3124,7 @@ static void *bg_migration_thread(void *opaque)
      * transition in vm_stop_force_state() we need to wakeup it up.
      */
     qemu_system_wakeup_request(QEMU_WAKEUP_REASON_OTHER, NULL);
-    s->vm_old_state = global_state_store();
+    s->vm_old_state = global_state_store_once();
 
     /* Forcibly stop VM before saving state of vCPUs and devices */
     if (vm_stop_force_state(RUN_STATE_PAUSED)) {
