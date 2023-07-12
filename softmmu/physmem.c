@@ -3751,7 +3751,7 @@ static int ram_block_discard_range_fd(RAMBlock *rb, uint64_t start,
 
     uint8_t *host_startaddr = rb->host + start;
 
-    if (!QEMU_PTR_IS_ALIGNED(host_startaddr, rb->page_size)) {
+    if (!QEMU_PTR_IS_ALIGNED(host_startaddr, TARGET_PAGE_SIZE)) {
         error_report("%s: Unaligned start address: %p",
                      __func__, host_startaddr);
         goto err;
@@ -3759,7 +3759,7 @@ static int ram_block_discard_range_fd(RAMBlock *rb, uint64_t start,
 
     if ((start + length) <= rb->max_length) {
         bool need_madvise, need_fallocate;
-        if (!QEMU_IS_ALIGNED(length, rb->page_size)) {
+        if (!QEMU_IS_ALIGNED(length, TARGET_PAGE_SIZE)) {
             error_report("%s: Unaligned length: %zx", __func__, length);
             goto err;
         }
@@ -4054,8 +4054,8 @@ int ram_block_convert_range(RAMBlock *rb, uint64_t start, size_t length,
         return -1;
     }
 
-    if (!QEMU_PTR_IS_ALIGNED(start, rb->page_size) ||
-        !QEMU_PTR_IS_ALIGNED(length, rb->page_size)) {
+    if (!QEMU_PTR_IS_ALIGNED(start, TARGET_PAGE_SIZE) ||
+        !QEMU_PTR_IS_ALIGNED(length, TARGET_PAGE_SIZE)) {
         return -1;
     }
 
@@ -4070,8 +4070,8 @@ int ram_block_convert_range(RAMBlock *rb, uint64_t start, size_t length,
     }
 
     if (!ret) {
-        uint64_t bit_start = start / rb->page_size;
-        uint64_t bit_length = length / rb->page_size;
+        uint64_t bit_start = start >> TARGET_PAGE_BITS;
+        uint64_t bit_length = length >> TARGET_PAGE_BITS;
 
         if (shared_to_private) {
             bitmap_set(rb->cgs_bmap, bit_start, bit_length);
