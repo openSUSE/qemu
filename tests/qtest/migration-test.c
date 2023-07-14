@@ -1621,9 +1621,7 @@ static void test_file_common(MigrateCommon *args, bool stop_src)
 
     if (stop_src) {
         qtest_qmp_assert_success(from, "{ 'execute' : 'stop'}");
-        if (!got_src_stop) {
-            qtest_qmp_eventwait(from, "STOP");
-        }
+        wait_for_stop(from);
     }
 
     if (args->result == MIG_TEST_QMP_ERROR) {
@@ -1645,9 +1643,7 @@ static void test_file_common(MigrateCommon *args, bool stop_src)
         qtest_qmp_assert_success(to, "{ 'execute' : 'cont'}");
     }
 
-    if (!got_dst_resume) {
-        qtest_qmp_eventwait(to, "RESUME");
-    }
+    wait_for_resume(to);
 
     wait_for_serial("dest_serial");
 
