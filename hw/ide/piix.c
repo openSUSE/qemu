@@ -121,7 +121,7 @@ static void piix_ide_reset(DeviceState *dev)
     /* TODO: use pci_set_word */
     pci_conf[PCI_STATUS] = PCI_STATUS_FAST_BACK;
     pci_conf[PCI_STATUS + 1] = PCI_STATUS_DEVSEL_MEDIUM >> 8;
-    pci_conf[0x20] = 0x01; /* BMIBA: 20-23h */
+    pci_set_long(pci_conf + 0x20, 0x1);  /* BMIBA: 20-23h */
 }
 
 static int pci_piix_init_ports(PCIIDEState *d)
