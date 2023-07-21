@@ -433,6 +433,13 @@ void tdx_get_supported_cpuid(uint32_t function, uint32_t index, int reg,
 
     if (function == 1 && reg == R_ECX && !enable_cpu_pm)
         *ret &= ~CPUID_EXT_MONITOR;
+
+    /*
+     * CPUID_HT is caculated in cpu_x86_cpuid() only relies on cpu toplogy,
+     * so clear the bit here.
+     */
+    if (function == 1 && reg == R_EDX)
+        *ret &= ~CPUID_HT;
 }
 
 void tdx_apply_xfam_dependencies(CPUState *cpu)
