@@ -1,0 +1,2122 @@
+#
+# spec file
+#
+# Copyright (c) 2023 SUSE LLC
+#
+# All modifications and additions to the file contributed by third parties
+# remain the property of their copyright owners, unless otherwise agreed
+# upon. The license for this file, and modifications and additions to the
+# file, is the same license as for the pristine package itself (unless the
+# license for the pristine package is not an Open Source License, in which
+# case the license is the MIT License). An "Open Source License" is a
+# license that conforms to the Open Source Definition (Version 1.9)
+# published by the Open Source Initiative.
+
+# Please submit bugfixes or comments via https://bugs.opensuse.org/
+#
+
+%include %{_sourcedir}/common.inc
+
+# So, we have openSUSE:Factory, and we have "ports". In openSUSE:Factory, we
+# have i586 and x86_64. In the :ARM port, we have aarch64, armv6l and armv7l.
+# In the :PowerPC port, we have ppc64, ppc and ppc64le. In the :zSystems port
+# we have s390x. And in the :RISCV we have riscv.
+#
+# Ideally, we'd want to build the firmwares at least once per port, and then
+# share the resulting packages among the arch-es within each port (check the
+# `ExportFilter` directives in the project config).
+#
+# Of course, we always build the "native fimrwares" (e.g., x86 firmwares on
+# x86_64, PPC firmwares on ppc64le, etc). But we also cross compile as much
+# firmwares as we can (e.g., both x86 and PPC firmwares on aarch64) so they'll
+# be available in as many ports as possible (as noarch packages).
+
+%ifarch x86_64 aarch64
+%define build_ppc_firmware 1
+# Currently, opensbi does not cross build cleanly on 15.3 and 15.4
+%if ! 0%{?sle_version}
+%define build_opensbi_firmware 1
+%endif
+%define build_x86_firmware 1
+%endif
+%ifarch ppc64 ppc64le
+%define build_ppc_firmware 1
+%if ! 0%{?sle_version}
+%define build_opensbi_firmware 1
+%endif
+# FIXME: Try to enable cross building of x86 firmwares here on PPC
+%endif
+%ifarch riscv64
+%define build_opensbi_firmware 1
+%endif
+
+%ifarch %ix86 x86_64 ppc ppc64 ppc64le s390x armv7hl aarch64
+%define kvm_available 1
+%define with_uring 1
+%define liburing_min_version 1.0
+%endif
+
+%ifarch %ix86 x86_64 s390x
+%define legacy_qemu_kvm 1
+%endif
+
+%ifarch x86_64 aarch64 ppc64le s390x
+%define with_rbd 1
+%endif
+
+%ifarch x86_64 ppc64le
+%define with_daxctl 1
+%endif
+
+# enforce pxe rom sizes for migration compatability from SLE 11 SP3 forward
+# the following need to be > 64K
+%define supported_nics_large {e1000 rtl8139}
+# the following need to be <= 64K
+%define supported_nics_small {virtio}
+# Though not required, make unsupported pxe roms migration compatable as well
+%define unsupported_nics {eepro100 ne2k_pci pcnet}
+
+Name:           qemu
+URL:            https://www.qemu.org/
+Summary:        Machine emulator and virtualizer
+License:        BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
+Group:          System/Emulators/PC
+Version:        %qemuver
+Release:        0
+Source:         %{srcname}-%{srcver}.tar.xz
+Source1:        common.inc
+Source303:      README.PACKAGING
+Source1000:     qemu-rpmlintrc
+BuildRoot:      %{_tmppath}/%{name}-%{version}-build
+%if %{build_x86_firmware}
+%ifnarch %ix86 x86_64
+# We must cross-compile on non-x86*
+BuildRequires:  cross-x86_64-binutils
+BuildRequires:  cross-x86_64-gcc%gcc_version
+%endif
+BuildRequires:  acpica
+BuildRequires:  binutils-devel
+BuildRequires:  dos2unix
+BuildRequires:  glibc-devel-32bit
+BuildRequires:  pkgconfig(liblzma)
+%endif
+%if %{build_opensbi_firmware}
+%ifnarch riscv64
+BuildRequires:  cross-riscv64-binutils
+BuildRequires:  cross-riscv64-gcc%gcc_version
+%endif
+%endif
+%if %{build_ppc_firmware}
+%ifnarch ppc64 ppc64le
+BuildRequires:  cross-ppc64-binutils
+BuildRequires:  cross-ppc64-gcc%gcc_version
+%endif
+%endif
+%ifarch x86_64
+BuildRequires:  xen-devel >= 4.2
+BuildRequires:  pkgconfig(libpmem)
+%endif
+%ifnarch %arm s390x
+BuildRequires:  libnuma-devel
+%endif
+%if 0%{?with_daxctl}
+BuildRequires:  pkgconfig(libndctl)
+%endif
+%if 0%{?with_rbd}
+BuildRequires:  librbd-devel
+%endif
+%if 0%{?with_uring}
+BuildRequires:  pkgconfig(liburing) >= %liburing_min_version
+%endif
+%if %{kvm_available}
+BuildRequires:  pkgconfig(udev)
+%endif
+BuildRequires:  Mesa-devel
+BuildRequires:  bison
+BuildRequires:  brlapi-devel
+BuildRequires:  fdupes
+BuildRequires:  flex
+BuildRequires:  gcc-c++
+BuildRequires:  libaio-devel
+BuildRequires:  libattr-devel
+BuildRequires:  libbz2-devel
+BuildRequires:  libfdt-devel >= 1.4.2
+BuildRequires:  libgcrypt-devel >= 1.8.0
+BuildRequires:  lzfse-devel
+BuildRequires:  meson
+BuildRequires:  multipath-tools-devel
+BuildRequires:  ninja >= 1.7
+BuildRequires:  pkgconfig
+BuildRequires:  pkgconfig(alsa)
+BuildRequires:  pkgconfig(epoxy)
+BuildRequires:  pkgconfig(gbm)
+BuildRequires:  pkgconfig(glib-2.0) >= 2.56
+BuildRequires:  pkgconfig(glusterfs-api) >= 3
+BuildRequires:  pkgconfig(gnutls) >= 3.5.18
+BuildRequires:  pkgconfig(gtk+-3.0) >= 3.22
+BuildRequires:  pkgconfig(jack)
+BuildRequires:  pkgconfig(libcacard) >= 2.5.1
+BuildRequires:  pkgconfig(libcap-ng)
+BuildRequires:  pkgconfig(libcurl) >= 7.29
+BuildRequires:  pkgconfig(libdrm)
+BuildRequires:  pkgconfig(libiscsi) >= 1.9.0
+BuildRequires:  pkgconfig(libjpeg)
+BuildRequires:  pkgconfig(libnfs) >= 1.9.3
+BuildRequires:  pkgconfig(libpng)
+BuildRequires:  pkgconfig(libpulse)
+BuildRequires:  pkgconfig(libsasl2)
+BuildRequires:  pkgconfig(libseccomp) >= 2.3.0
+BuildRequires:  pkgconfig(libssh) >= 0.8.7
+BuildRequires:  pkgconfig(libudev)
+BuildRequires:  pkgconfig(libusb-1.0) >= 1.0.13
+BuildRequires:  pkgconfig(libzstd)
+BuildRequires:  pkgconfig(lzo2)
+BuildRequires:  pkgconfig(ncurses)
+BuildRequires:  pkgconfig(pixman-1) >= 0.21.8
+BuildRequires:  pkgconfig(slirp) >= 4.2.0
+BuildRequires:  pkgconfig(spice-protocol) >= 0.12.3
+BuildRequires:  pkgconfig(spice-server) >= 0.12.5
+BuildRequires:  pkgconfig(systemd)
+BuildRequires:  pkgconfig(vdeplug)
+BuildRequires:  pkgconfig(virglrenderer) >= 0.4.1
+BuildRequires:  pkgconfig(vte-2.91)
+BuildRequires:  pkgconfig(xkbcommon)
+BuildRequires:  pkgconfig(zlib)
+BuildRequires:  python3-Sphinx
+BuildRequires:  python3-base >= 3.6
+BuildRequires:  python3-setuptools
+BuildRequires:  rdma-core-devel
+BuildRequires:  snappy-devel
+BuildRequires:  update-desktop-files
+BuildRequires:  usbredir-devel >= 0.6
+BuildRequires:  xfsprogs-devel
+
+%{?systemd_ordering}
+
+%if %{kvm_available}
+%ifarch s390x
+Requires(post): procps
+%endif
+%ifarch %ix86 x86_64
+Requires:       qemu-x86
+%else
+Suggests:       qemu-x86
+%endif
+%ifarch ppc ppc64 ppc64le
+Requires:       qemu-ppc
+%else
+Suggests:       qemu-ppc
+%endif
+%ifarch s390x
+Requires:       qemu-s390x
+%else
+Suggests:       qemu-s390x
+%endif
+%ifarch %arm aarch64
+Requires:       qemu-arm
+%else
+Suggests:       qemu-arm
+%endif
+Requires(post): acl
+Requires(post): udev
+# End of "if kvm_available"
+%endif
+Requires:       group(kvm)
+Requires:       group(qemu)
+Requires:       user(qemu)
+Requires(post): coreutils
+
+%if %{kvm_available}
+Recommends:     kvm_stat
+%endif
+%ifarch s390x
+Recommends:     qemu-hw-s390x-virtio-gpu-ccw
+%else
+Recommends:     qemu-hw-display-qxl
+Recommends:     qemu-hw-display-virtio-gpu
+Recommends:     qemu-hw-display-virtio-gpu-pci
+Recommends:     qemu-hw-display-virtio-vga
+Recommends:     qemu-hw-usb-host
+Recommends:     qemu-hw-usb-redirect
+Recommends:     qemu-hw-usb-smartcard
+Recommends:     qemu-ui-gtk
+Recommends:     qemu-ui-spice-app
+# End of "ifarch s390x"
+%endif
+Recommends:     qemu-block-curl
+Recommends:     qemu-ksm = %{qemuver}
+Recommends:     qemu-tools
+Recommends:     qemu-ui-curses
+
+%if 0%{?with_rbd}
+Suggests:       qemu-block-rbd
+%endif
+Suggests:       qemu-block-dmg
+Suggests:       qemu-block-gluster
+Suggests:       qemu-block-iscsi
+Suggests:       qemu-block-nfs
+Suggests:       qemu-block-ssh
+Suggests:       qemu-chardev-baum
+Suggests:       qemu-extra
+Suggests:       qemu-skiboot
+Suggests:       qemu-lang
+Suggests:       qemu-microvm
+Suggests:       qemu-vhost-user-gpu
+Suggests:       qemu-accel-qtest
+
+Obsoletes:      qemu-audio-oss < %{qemuver}
+Obsoletes:      qemu-audio-sdl < %{qemuver}
+Obsoletes:      qemu-ui-sdl < %{qemuver}
+
+%description
+%{generic_qemu_description}
+
+This package acts as an umbrella package to the other QEMU sub-packages.
+
+%files
+%defattr(-, root, root)
+%doc README.rst VERSION
+%license COPYING COPYING.LIB LICENSE
+%dir %_datadir/icons/hicolor
+%dir %_datadir/icons/hicolor/*/
+%dir %_datadir/icons/hicolor/*/apps
+%_datadir/applications/qemu.desktop
+%_datadir/icons/hicolor/16x16/apps/qemu.png
+%_datadir/icons/hicolor/24x24/apps/qemu.png
+%_datadir/icons/hicolor/32x32/apps/qemu.bmp
+%_datadir/icons/hicolor/32x32/apps/qemu.png
+%_datadir/icons/hicolor/48x48/apps/qemu.png
+%_datadir/icons/hicolor/64x64/apps/qemu.png
+%_datadir/icons/hicolor/128x128/apps/qemu.png
+%_datadir/icons/hicolor/256x256/apps/qemu.png
+%_datadir/icons/hicolor/512x512/apps/qemu.png
+%_datadir/icons/hicolor/scalable/apps/qemu.svg
+%dir %_datadir/%name
+%dir %_datadir/%name/firmware
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/17
+%_datadir/%name/forsplits/18
+%_datadir/%name/forsplits/19
+%_datadir/%name/forsplits/pkg-split.txt
+%_datadir/%name/keymaps
+%_datadir/%name/qemu-ifup
+%_datadir/%name/qemu-nsis.bmp
+%_datadir/%name/trace-events-all
+%dir %_datadir/%name/vhost-user
+%_datadir/%name/vhost-user/50-qemu-virtiofsd.json
+%doc %_docdir/%name/_static
+%dir %_docdir/%name/about
+%dir %_docdir/%name/devel
+%dir %_docdir/%name/interop
+%dir %_docdir/%name/specs
+%dir %_docdir/%name/system
+%dir %_docdir/%name/system/arm
+%dir %_docdir/%name/system/devices
+%dir %_docdir/%name/system/i386
+%dir %_docdir/%name/system/ppc
+%dir %_docdir/%name/system/riscv
+%dir %_docdir/%name/system/s390x
+%dir %_docdir/%name/tools
+%dir %_docdir/%name/user
+%_docdir/%name/.buildinfo
+%if %{legacy_qemu_kvm}
+%_docdir/%name/supported.html
+%endif
+%_docdir/%name/about/build-platforms.html
+%_docdir/%name/about/deprecated.html
+%_docdir/%name/about/index.html
+%_docdir/%name/about/license.html
+%_docdir/%name/about/removed-features.html
+%_docdir/%name/devel/atomics.html
+%_docdir/%name/devel/bitops.html
+%_docdir/%name/devel/block-coroutine-wrapper.html
+%_docdir/%name/devel/build-system.html
+%_docdir/%name/devel/ci.html
+%_docdir/%name/devel/clocks.html
+%_docdir/%name/devel/code-of-conduct.html
+%_docdir/%name/devel/conflict-resolution.html
+%_docdir/%name/devel/control-flow-integrity.html
+%_docdir/%name/devel/decodetree.html
+%_docdir/%name/devel/ebpf_rss.html
+%_docdir/%name/devel/fuzzing.html
+%_docdir/%name/devel/index.html
+%_docdir/%name/devel/kconfig.html
+%_docdir/%name/devel/loads-stores.html
+%_docdir/%name/devel/memory.html
+%_docdir/%name/devel/migration.html
+%_docdir/%name/devel/modules.html
+%_docdir/%name/devel/multi-process.html
+%_docdir/%name/devel/multi-thread-tcg.html
+%_docdir/%name/devel/qapi-code-gen.html
+%_docdir/%name/devel/qgraph.html
+%_docdir/%name/devel/qom.html
+%_docdir/%name/devel/qtest.html
+%_docdir/%name/devel/reset.html
+%_docdir/%name/devel/s390-dasd-ipl.html
+%_docdir/%name/devel/secure-coding-practices.html
+%_docdir/%name/devel/stable-process.html
+%_docdir/%name/devel/style.html
+%_docdir/%name/devel/submitting-a-patch.html
+%_docdir/%name/devel/submitting-a-patch.html
+%_docdir/%name/devel/submitting-a-pull-request.html
+%_docdir/%name/devel/submitting-a-pull-request.html
+%_docdir/%name/devel/tcg-icount.html
+%_docdir/%name/devel/tcg-plugins.html
+%_docdir/%name/devel/tcg.html
+%_docdir/%name/devel/testing.html
+%_docdir/%name/devel/tracing.html
+%_docdir/%name/devel/trivial-patches.html
+%_docdir/%name/devel/trivial-patches.html
+%_docdir/%name/devel/ui.html
+%_docdir/%name/devel/vfio-migration.html
+%_docdir/%name/devel/writing-monitor-commands.html
+%_docdir/%name/genindex.html
+%_docdir/%name/index.html
+%_docdir/%name/interop/barrier.html
+%_docdir/%name/interop/bitmaps.html
+%_docdir/%name/interop/dbus-vmstate.html
+%_docdir/%name/interop/dbus.html
+%_docdir/%name/interop/index.html
+%_docdir/%name/interop/live-block-operations.html
+%_docdir/%name/interop/pr-helper.html
+%_docdir/%name/interop/qemu-ga-ref.html
+%_docdir/%name/interop/qemu-qmp-ref.html
+%_docdir/%name/interop/qemu-storage-daemon-qmp-ref.html
+%_docdir/%name/interop/vhost-user-gpu.html
+%_docdir/%name/interop/vhost-user.html
+%_docdir/%name/interop/vhost-vdpa.html
+%_docdir/%name/objects.inv
+%_docdir/%name/search.html
+%_docdir/%name/searchindex.js
+%_docdir/%name/specs/acpi_cpu_hotplug.html
+%_docdir/%name/specs/acpi_hest_ghes.html
+%_docdir/%name/specs/acpi_hw_reduced_hotplug.html
+%_docdir/%name/specs/acpi_mem_hotplug.html
+%_docdir/%name/specs/acpi_nvdimm.html
+%_docdir/%name/specs/acpi_pci_hotplug.html
+%_docdir/%name/specs/index.html
+%_docdir/%name/specs/ppc-spapr-numa.html
+%_docdir/%name/specs/ppc-spapr-xive.html
+%_docdir/%name/specs/ppc-xive.html
+%_docdir/%name/specs/tpm.html
+%_docdir/%name/system/arm/aspeed.html
+%_docdir/%name/system/arm/collie.html
+%_docdir/%name/system/arm/cpu-features.html
+%_docdir/%name/system/arm/cubieboard.html
+%_docdir/%name/system/arm/digic.html
+%_docdir/%name/system/arm/emcraft-sf2.html
+%_docdir/%name/system/arm/emulation.html
+%_docdir/%name/system/arm/gumstix.html
+%_docdir/%name/system/arm/highbank.html
+%_docdir/%name/system/arm/imx25-pdk.html
+%_docdir/%name/system/arm/integratorcp.html
+%_docdir/%name/system/arm/kzm.html
+%_docdir/%name/system/arm/mainstone.html
+%_docdir/%name/system/arm/mps2.html
+%_docdir/%name/system/arm/musca.html
+%_docdir/%name/system/arm/musicpal.html
+%_docdir/%name/system/arm/nrf.html
+%_docdir/%name/system/arm/nseries.html
+%_docdir/%name/system/arm/nuvoton.html
+%_docdir/%name/system/arm/orangepi.html
+%_docdir/%name/system/arm/palm.html
+%_docdir/%name/system/arm/raspi.html
+%_docdir/%name/system/arm/realview.html
+%_docdir/%name/system/arm/sabrelite.html
+%_docdir/%name/system/arm/sbsa.html
+%_docdir/%name/system/arm/stellaris.html
+%_docdir/%name/system/arm/stm32.html
+%_docdir/%name/system/arm/sx1.html
+%_docdir/%name/system/arm/versatile.html
+%_docdir/%name/system/arm/vexpress.html
+%_docdir/%name/system/arm/virt.html
+%_docdir/%name/system/arm/xlnx-versal-virt.html
+%_docdir/%name/system/arm/xscale.html
+%_docdir/%name/system/authz.html
+%_docdir/%name/system/barrier.html
+%_docdir/%name/system/bootindex.html
+%_docdir/%name/system/cpu-hotplug.html
+%_docdir/%name/system/device-emulation.html
+%_docdir/%name/system/devices/ivshmem.html
+%_docdir/%name/system/devices/net.html
+%_docdir/%name/system/devices/nvme.html
+%_docdir/%name/system/devices/usb.html
+%_docdir/%name/system/devices/vhost-user-rng.html
+%_docdir/%name/system/devices/vhost-user.html
+%_docdir/%name/system/devices/virtio-pmem.html
+%_docdir/%name/system/gdb.html
+%_docdir/%name/system/generic-loader.html
+%_docdir/%name/system/guest-loader.html
+%_docdir/%name/system/i386/cpu.html
+%_docdir/%name/system/i386/kvm-pv.html
+%_docdir/%name/system/i386/microvm.html
+%_docdir/%name/system/i386/pc.html
+%_docdir/%name/system/i386/sgx.html
+%_docdir/%name/system/images.html
+%_docdir/%name/system/index.html
+%_docdir/%name/system/invocation.html
+%_docdir/%name/system/keys.html
+%_docdir/%name/system/linuxboot.html
+%_docdir/%name/system/managed-startup.html
+%_docdir/%name/system/monitor.html
+%_docdir/%name/system/multi-process.html
+%_docdir/%name/system/mux-chardev.html
+%_docdir/%name/system/ppc/embedded.html
+%_docdir/%name/system/ppc/powermac.html
+%_docdir/%name/system/ppc/powernv.html
+%_docdir/%name/system/ppc/ppce500.html
+%_docdir/%name/system/ppc/prep.html
+%_docdir/%name/system/ppc/pseries.html
+%_docdir/%name/system/pr-manager.html
+%_docdir/%name/system/qemu-block-drivers.html
+%_docdir/%name/system/qemu-cpu-models.html
+%_docdir/%name/system/qemu-manpage.html
+%_docdir/%name/system/quickstart.html
+%_docdir/%name/system/riscv/microchip-icicle-kit.html
+%_docdir/%name/system/riscv/shakti-c.html
+%_docdir/%name/system/riscv/sifive_u.html
+%_docdir/%name/system/riscv/virt.html
+%_docdir/%name/system/s390x/3270.html
+%_docdir/%name/system/s390x/bootdevices.html
+%_docdir/%name/system/s390x/css.html
+%_docdir/%name/system/s390x/protvirt.html
+%_docdir/%name/system/s390x/vfio-ap.html
+%_docdir/%name/system/s390x/vfio-ccw.html
+%_docdir/%name/system/secrets.html
+%_docdir/%name/system/security.html
+%_docdir/%name/system/target-arm.html
+%_docdir/%name/system/target-avr.html
+%_docdir/%name/system/target-i386.html
+%_docdir/%name/system/target-m68k.html
+%_docdir/%name/system/target-mips.html
+%_docdir/%name/system/target-ppc.html
+%_docdir/%name/system/target-riscv.html
+%_docdir/%name/system/target-rx.html
+%_docdir/%name/system/target-s390x.html
+%_docdir/%name/system/target-sparc.html
+%_docdir/%name/system/target-sparc64.html
+%_docdir/%name/system/target-xtensa.html
+%_docdir/%name/system/targets.html
+%_docdir/%name/system/tls.html
+%_docdir/%name/system/virtio-net-failover.html
+%_docdir/%name/system/vnc-security.html
+%_docdir/%name/tools/index.html
+%_docdir/%name/tools/qemu-img.html
+%_docdir/%name/tools/qemu-nbd.html
+%_docdir/%name/tools/qemu-pr-helper.html
+%_docdir/%name/tools/qemu-storage-daemon.html
+%_docdir/%name/tools/qemu-trace-stap.html
+%_docdir/%name/tools/virtfs-proxy-helper.html
+%_docdir/%name/tools/virtiofsd.html
+%_docdir/%name/user/index.html
+%_docdir/%name/user/main.html
+%_mandir/man1/%name.1.gz
+%_mandir/man1/qemu-storage-daemon.1.gz
+%_mandir/man1/virtiofsd.1.gz
+%_mandir/man7/qemu-block-drivers.7.gz
+%_mandir/man7/qemu-cpu-models.7.gz
+%_mandir/man7/qemu-qmp-ref.7.gz
+%_mandir/man7/qemu-ga-ref.7.gz
+%_mandir/man7/qemu-storage-daemon-qmp-ref.7.gz
+%dir %_sysconfdir/%name
+%dir %_sysconfdir/%name/firmware
+%dir /usr/lib/supportconfig
+%dir /usr/lib/supportconfig/plugins
+/usr/lib/supportconfig/plugins/%name
+%if %{kvm_available}
+%ifarch s390x
+%{_prefix}/lib/modules-load.d/kvm.conf
+%endif
+/usr/lib/udev/rules.d/80-kvm.rules
+%endif
+
+%if %{kvm_available}
+%post
+# Do not execute operations affecting host devices while running in a chroot
+if [ $(stat -L -c "%i" /proc/1/root/) = $(stat -L -c "%i" /) ]; then
+  setfacl --remove-all /dev/kvm &> /dev/null || :
+%ifarch s390x
+  if [ -c /dev/kvm ]; then
+    %_bindir/chmod 0666 /dev/kvm
+    %_bindir/chgrp kvm /dev/kvm
+  fi
+%endif
+  %udev_rules_update
+  %_bindir/udevadm trigger -y kvm || :
+%ifarch s390x
+  sysctl vm.allocate_pgste=1 || :
+%endif
+fi
+# End of "if kvm_available"
+%endif
+
+# Modules need to match {qemu-system-*,qemu-img} version.
+# We cannot have qemu and qemu-tools require them in the right version,
+# as that would drag in the dependencies the modules are supposed to avoid.
+# Nor can we have modules require the right version of qemu and qemu-tools
+# as Xen reuses our qemu-tools but does not want our qemu and qemu-x86.
+%define qemu_module_conflicts \
+Conflicts:      %name < %{qemuver}-%{release} \
+Conflicts:      %name > %{qemuver}-%{release} \
+Conflicts:      qemu-tools < %{qemuver}-%{release} \
+Conflicts:      qemu-tools > %{qemuver}-%{release}
+
+%package x86
+Summary:        Machine emulator and virtualizer for x86 architectures
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Requires:       %name = %{qemuver}
+Requires:       qemu-accel-tcg-x86
+Requires:       qemu-ipxe
+Requires:       qemu-seabios
+Requires:       qemu-sgabios
+Requires:       qemu-vgabios
+Recommends:     ovmf
+Recommends:     qemu-microvm
+Recommends:     qemu-ovmf-x86_64
+
+%description x86
+%{generic_qemu_description}
+
+This package provides i386 and x86_64 emulation.
+
+%files x86
+%defattr(-, root, root)
+%_bindir/qemu-system-i386
+%_bindir/qemu-system-x86_64
+%_datadir/%name/kvmvapic.bin
+%_datadir/%name/linuxboot.bin
+%_datadir/%name/linuxboot_dma.bin
+%_datadir/%name/multiboot.bin
+%_datadir/%name/multiboot_dma.bin
+%_datadir/%name/pvh.bin
+%dir %_docdir/qemu-x86
+%_docdir/qemu-x86/supported.txt
+
+%package ppc
+Summary:        Machine emulator and virtualizer for Power architectures
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Requires:       %name = %{qemuver}
+Requires:       qemu-SLOF
+Recommends:     qemu-ipxe
+Recommends:     qemu-vgabios
+
+%description ppc
+%{generic_qemu_description}
+
+This package provides ppc and ppc64 emulation.
+
+%files ppc
+%defattr(-, root, root)
+%_bindir/qemu-system-ppc
+%_bindir/qemu-system-ppc64
+%_datadir/%name/bamboo.dtb
+%_datadir/%name/canyonlands.dtb
+%_datadir/%name/openbios-ppc
+%_datadir/%name/qemu_vga.ndrv
+%_datadir/%name/u-boot.e500
+%_datadir/%name/u-boot-sam460-20100605.bin
+%dir %_docdir/qemu-ppc
+%_docdir/qemu-ppc/supported.txt
+
+%package s390x
+Summary:        Machine emulator and virtualizer for S/390 architectures
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Requires:       %name = %{qemuver}
+Provides:       qemu-s390 = %{qemuver}
+Obsoletes:      qemu-s390 < %{qemuver}
+
+%description s390x
+%{generic_qemu_description}
+
+This package provides s390x emulation.
+
+%files s390x
+%defattr(-, root, root)
+%_bindir/qemu-system-s390x
+%_datadir/%name/s390-ccw.img
+%_datadir/%name/s390-netboot.img
+%dir %_docdir/qemu-s390x
+%_docdir/qemu-s390x/supported.txt
+
+%package arm
+Summary:        Machine emulator and virtualizer for ARM architectures
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Requires:       %name = %{qemuver}
+Recommends:     ovmf
+Recommends:     qemu-ipxe
+Recommends:     qemu-uefi-aarch64
+Recommends:     qemu-vgabios
+
+%description arm
+%{generic_qemu_description}
+
+This package provides arm emulation.
+
+%files arm
+%defattr(-, root, root)
+%_bindir/qemu-system-arm
+%_bindir/qemu-system-aarch64
+%_datadir/%name/npcm7xx_bootrom.bin
+%dir %_docdir/qemu-arm
+%_docdir/qemu-arm/supported.txt
+
+%package extra
+Summary:        Machine emulator and virtualizer for "extra" architectures
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Requires:       %name = %{qemuver}
+Recommends:     qemu-ipxe
+Recommends:     qemu-skiboot
+Recommends:     qemu-vgabios
+
+%description extra
+%{generic_qemu_description}
+
+This package provides some lesser used emulations, including alpha, m68k,
+mips, sparc, and xtensa. (The term "extra" is juxtapositioned against more
+popular QEMU packages which are dedicated to a single architecture.)
+
+%files extra
+%defattr(-, root, root)
+%_bindir/qemu-system-alpha
+%_bindir/qemu-system-avr
+%_bindir/qemu-system-cris
+%_bindir/qemu-system-hppa
+%_bindir/qemu-system-m68k
+%_bindir/qemu-system-microblaze
+%_bindir/qemu-system-microblazeel
+%_bindir/qemu-system-mips
+%_bindir/qemu-system-mipsel
+%_bindir/qemu-system-mips64
+%_bindir/qemu-system-mips64el
+%_bindir/qemu-system-nios2
+%_bindir/qemu-system-or1k
+%_bindir/qemu-system-riscv32
+%_bindir/qemu-system-riscv64
+%_bindir/qemu-system-rx
+%_bindir/qemu-system-sh4
+%_bindir/qemu-system-sh4eb
+%_bindir/qemu-system-sparc
+%_bindir/qemu-system-sparc64
+%_bindir/qemu-system-tricore
+%_bindir/qemu-system-xtensa
+%_bindir/qemu-system-xtensaeb
+%_datadir/%name/hppa-firmware.img
+%_datadir/%name/openbios-sparc32
+%_datadir/%name/openbios-sparc64
+%_datadir/%name/opensbi-riscv32-generic-fw_dynamic.bin
+%_datadir/%name/opensbi-riscv32-generic-fw_dynamic.elf
+%_datadir/%name/opensbi-riscv64-generic-fw_dynamic.bin
+%_datadir/%name/opensbi-riscv64-generic-fw_dynamic.elf
+%_datadir/%name/palcode-clipper
+%_datadir/%name/petalogix-ml605.dtb
+%_datadir/%name/petalogix-s3adsp1800.dtb
+%_datadir/%name/QEMU,cgthree.bin
+%_datadir/%name/QEMU,tcx.bin
+
+%if %{legacy_qemu_kvm}
+%package kvm
+Summary:        Wrapper to enable KVM acceleration under QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%ifarch %ix86 x86_64
+Requires:       qemu-x86 = %{qemuver}
+%endif
+%ifarch s390x
+Requires:       qemu-s390x = %{qemuver}
+%endif
+Provides:       kvm = %{qemuver}
+Obsoletes:      kvm < %{qemuver}
+
+%description kvm
+%{generic_qemu_description}
+
+This package provides a symlink to the main QEMU emulator used for KVM
+virtualization. The symlink is named qemu-kvm, which causes the QEMU program
+to enable the KVM accelerator, due to the name reference ending with 'kvm'.
+This package is an artifact of the early origins of QEMU, and is deprecated.
+
+%files kvm
+%defattr(-,root,root)
+%_bindir/qemu-kvm
+%dir %_docdir/qemu-kvm
+%_docdir/qemu-kvm/kvm-supported.html
+%_docdir/qemu-kvm/kvm-supported.txt
+%_mandir/man1/qemu-kvm.1.gz
+%endif
+
+%package lang
+Summary:        Translations for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+
+%description lang
+This package contains a few language translations, particularly for the
+graphical user interface components that come with QEMU. The bulk of strings
+in QEMU are not localized.
+
+%files lang -f %blddir/%name.lang
+%defattr(-, root, root)
+
+%package audio-alsa
+Summary:        ALSA based audio support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description audio-alsa
+This package contains a module for ALSA based audio support for QEMU.
+
+%files audio-alsa
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/audio-alsa.so
+
+%package audio-pa
+Summary:        Pulse Audio based audio support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description audio-pa
+This package contains a module for Pulse Audio based audio support for QEMU.
+
+%files audio-pa
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/audio-pa.so
+
+%package audio-jack
+Summary:        JACK based audio support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description audio-jack
+This package contains a module for JACK based audio support for QEMU.
+
+%files audio-jack
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/audio-jack.so
+
+%package audio-spice
+Summary:        Spice based audio support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/05
+Requires:       qemu-ui-spice-core
+%{qemu_module_conflicts}
+
+%description audio-spice
+This package contains a module for Spice based audio support for QEMU.
+
+%files audio-spice
+%defattr(-, root, root)
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/05
+%dir %_libdir/%name
+%_libdir/%name/audio-spice.so
+
+%package audio-oss
+Summary:        OSS based audio support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description audio-oss
+This package contains a module for OSS based audio support for QEMU.
+
+%files audio-oss
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/audio-oss.so
+
+%package block-curl
+Summary:        cURL block support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description block-curl
+This package contains a module for accessing network-based image files over
+a network connection from qemu-img tool and QEMU system emulation.
+
+%files block-curl
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/block-curl.so
+
+%package block-dmg
+Summary:        DMG block support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description block-dmg
+This package contains a module for accessing Mac OS X image files from
+qemu-img tool and QEMU system emulation.
+
+%files block-dmg
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/block-dmg-bz2.so
+%_libdir/%name/block-dmg-lzfse.so
+
+%package block-gluster
+Summary:        GlusterFS block support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description block-gluster
+This package contains a module for accessing network-based image files over a
+GlusterFS network connection from qemu-img tool and QEMU system emulation.
+
+%files block-gluster
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/block-gluster.so
+
+%package block-iscsi
+Summary:        iSCSI block support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description block-iscsi
+This package contains a module for accessing network-based image files over an
+iSCSI network connection from qemu-img tool and QEMU system emulation.
+
+%files block-iscsi
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/block-iscsi.so
+
+%package block-nfs
+Summary:        direct Network File System support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description block-nfs
+This package contains a module for directly accessing nfs based image files
+for QEMU.
+
+%files block-nfs
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/block-nfs.so
+
+%if 0%{?with_rbd}
+%package block-rbd
+Summary:        Rados Block Device (Ceph) support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description block-rbd
+This package contains a module for accessing ceph (rbd,rados) image files
+for QEMU.
+
+%files block-rbd
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/block-rbd.so
+%endif
+
+%package block-ssh
+Summary:        SSH (SFTP) block support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description block-ssh
+This package contains a module for accessing network-based image files over an
+SSH network connection from qemu-img tool and QEMU system emulation.
+
+%files block-ssh
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/block-ssh.so
+
+%package chardev-baum
+Summary:        Baum braille chardev support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/00
+%{qemu_module_conflicts}
+
+%description chardev-baum
+This package contains a module for baum braille chardev support for QEMU.
+
+%files chardev-baum
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/00
+%dir %_libdir/%name
+%_libdir/%name/chardev-baum.so
+
+%package chardev-spice
+Summary:        Spice vmc and port chardev support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/08
+Requires:       qemu-ui-spice-core
+%{qemu_module_conflicts}
+
+%description chardev-spice
+This package contains a module for Spice chardev support for QEMU.
+
+%files chardev-spice
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/08
+%dir %_libdir/%name
+%_libdir/%name/chardev-spice.so
+
+%package hw-display-qxl
+Summary:        QXL display support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/01
+Requires:       qemu-ui-spice-core
+%{qemu_module_conflicts}
+
+%description hw-display-qxl
+This package contains a module for QXL display support for QEMU.
+
+%files hw-display-qxl
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/01
+%dir %_libdir/%name
+%_libdir/%name/hw-display-qxl.so
+
+%package hw-display-virtio-gpu
+Summary:        Virtio GPU display support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/04
+%{qemu_module_conflicts}
+
+%description hw-display-virtio-gpu
+This package contains a module for Virtio GPU display support for QEMU.
+
+%files hw-display-virtio-gpu
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/04
+%_libdir/%name/hw-display-virtio-gpu.so
+%_libdir/%name/hw-display-virtio-gpu-gl.so
+
+%package hw-display-virtio-gpu-pci
+Summary:        Virtio-gpu pci device for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Requires:       qemu-hw-display-virtio-gpu
+Provides:       %name:%_datadir/%name/forsplits/11
+%{qemu_module_conflicts}
+
+%description hw-display-virtio-gpu-pci
+This package contains a module providing the virtio gpu pci device for QEMU.
+
+%files hw-display-virtio-gpu-pci
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/11
+%dir %_libdir/%name
+%_libdir/%name/hw-display-virtio-gpu-pci.so
+%_libdir/%name/hw-display-virtio-gpu-pci-gl.so
+
+%package hw-display-virtio-vga
+Summary:        Virtio vga device for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/12
+%{qemu_module_conflicts}
+
+%description hw-display-virtio-vga
+This package contains a module providing the virtio vga device for QEMU.
+
+%files hw-display-virtio-vga
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/12
+%dir %_libdir/%name
+%_libdir/%name/hw-display-virtio-vga.so
+%_libdir/%name/hw-display-virtio-vga-gl.so
+
+%package hw-s390x-virtio-gpu-ccw
+Summary:        S390x virtio-gpu ccw device for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Requires:       qemu-hw-display-virtio-gpu
+Provides:       %name:%_datadir/%name/forsplits/13
+%{qemu_module_conflicts}
+
+%description hw-s390x-virtio-gpu-ccw
+This package contains a module providing the s390x virtio gpu ccw device for
+QEMU.
+
+%files hw-s390x-virtio-gpu-ccw
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/13
+%dir %_libdir/%name
+%_libdir/%name/hw-s390x-virtio-gpu-ccw.so
+
+%package hw-usb-redirect
+Summary:        USB redirection support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/02
+%{qemu_module_conflicts}
+
+%description hw-usb-redirect
+This package contains a module for USB redirection support for QEMU.
+
+%files hw-usb-redirect
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/02
+%dir %_libdir/%name
+%_libdir/%name/hw-usb-redirect.so
+
+%package hw-usb-smartcard
+Summary:        USB smartcard support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/03
+%{qemu_module_conflicts}
+
+%description hw-usb-smartcard
+This package contains a modules for USB smartcard support for QEMU.
+
+%files hw-usb-smartcard
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/03
+%dir %_libdir/%name
+%_libdir/%name/hw-usb-smartcard.so
+
+%package hw-usb-host
+Summary:        USB passthrough driver support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/14
+%{qemu_module_conflicts}
+
+%description hw-usb-host
+This package contains a modules for USB passthrough driver for QEMU.
+
+%files hw-usb-host
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/14
+%dir %_libdir/%name
+%_libdir/%name/hw-usb-host.so
+
+%package ui-curses
+Summary:        Curses based UI support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description ui-curses
+This package contains a module for doing curses based UI for QEMU.
+
+%files ui-curses
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/ui-curses.so
+
+%package ui-gtk
+Summary:        GTK based UI support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Requires:       qemu-ui-opengl
+%{qemu_module_conflicts}
+
+%description ui-gtk
+This package contains a module for doing GTK based UI for QEMU.
+
+%files ui-gtk
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/ui-gtk.so
+
+%package ui-opengl
+Summary:        OpenGL based UI support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/10
+%{qemu_module_conflicts}
+
+%description ui-opengl
+This package contains a module for doing OpenGL based UI for QEMU.
+
+%files ui-opengl
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/10
+%dir %_libdir/%name
+%_libdir/%name/ui-egl-headless.so
+%_libdir/%name/ui-opengl.so
+
+%package ui-spice-app
+Summary:        Spice UI support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Requires:       qemu-chardev-spice
+Requires:       qemu-ui-spice-core
+%{qemu_module_conflicts}
+
+%description ui-spice-app
+This package contains a module for doing Spice based UI for QEMU.
+
+%files ui-spice-app
+%defattr(-, root, root)
+%dir %_libdir/%name
+%_libdir/%name/ui-spice-app.so
+
+%package ui-spice-core
+Summary:        Core Spice support for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/09
+Requires:       qemu-ui-opengl
+# This next Requires is only since virt-manager expects audio support
+Requires:       qemu-audio-spice
+%{qemu_module_conflicts}
+
+%description ui-spice-core
+This package contains a module with core Spice support for QEMU.
+
+%files ui-spice-core
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/09
+%dir %_libdir/%name
+%_libdir/%name/ui-spice-core.so
+
+%package vhost-user-gpu
+Summary:        Vhost user mode virtio-gpu 2D/3D rendering backend for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+%{qemu_module_conflicts}
+
+%description vhost-user-gpu
+This package contains a vhost user mode virtio-gpu 2D/3D rendering backend for
+QEMU.
+
+%files vhost-user-gpu
+%defattr(-, root, root)
+%dir %_datadir/%name/vhost-user
+%_datadir/%name/vhost-user/50-qemu-gpu.json
+%_libexecdir/vhost-user-gpu
+
+%package tools
+Summary:        Tools for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Requires(pre):  permissions
+Requires:       group(kvm)
+Recommends:     multipath-tools
+Recommends:     qemu-block-curl
+%if 0%{?with_rbd}
+Recommends:     qemu-block-rbd
+%endif
+
+%description tools
+This package contains various QEMU related tools, including a bridge helper,
+a virtfs helper, ivshmem, disk utilities and scripts for various purposes.
+
+%files tools
+%defattr(-, root, root)
+%_bindir/analyze-migration.py
+%_bindir/qemu-edid
+%_bindir/qemu-img
+%_bindir/qemu-io
+%_bindir/qemu-keymap
+%_bindir/qemu-nbd
+%_bindir/qemu-pr-helper
+%_bindir/qemu-storage-daemon
+%_bindir/vmstate-static-checker.py
+%_bindir/vmxcap
+%verify(not mode) %attr(4750,root,kvm) %_libexecdir/qemu-bridge-helper
+%_libexecdir/virtfs-proxy-helper
+%_libexecdir/virtiofsd
+%_mandir/man1/qemu-img.1.gz
+%_mandir/man1/virtfs-proxy-helper.1.gz
+%_mandir/man8/qemu-nbd.8.gz
+%_mandir/man8/qemu-pr-helper.8.gz
+%dir %_sysconfdir/%name
+%config %_sysconfdir/%name/bridge.conf
+
+%package ivshmem-tools
+Summary:        Inter-VM Shared Memory Tools for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/07
+
+%description ivshmem-tools
+This package contains a sample shared memory client and server which utilize
+QEMU's Inter-VM shared memory device as specified by the ivshmem client-server
+protocol specification documented in docs/specs/ivshmem-spec.txt in QEMU source
+code.
+
+%files ivshmem-tools
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/07
+%_bindir/ivshmem-client
+%_bindir/ivshmem-server
+
+%package guest-agent
+Summary:        Guest agent for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Requires:       group(kvm)
+Requires(post): udev
+Supplements:    modalias(acpi*:QEMU0002%3A*)
+Supplements:    modalias(pci:v00005853d00000001sv*sd*bc*sc*i*)
+Supplements:    modalias(pci:v0000FFFDd00000101sv*sd*bc*sc*i*)
+%{?systemd_ordering}
+
+%description guest-agent
+This package contains the QEMU guest agent. It is installed in the linux guest
+to provide information and control at the guest OS level.
+
+%files guest-agent
+%defattr(-, root, root)
+%attr(0755,root,kvm) %_bindir/qemu-ga
+%dir %_docdir/%name/interop
+%_docdir/%name/interop/qemu-ga.html
+%_mandir/man8/qemu-ga.8.gz
+%{_unitdir}/qemu-guest-agent.service
+/usr/lib/udev/rules.d/80-qemu-ga.rules
+
+%pre guest-agent
+%service_add_pre qemu-guest-agent.service
+
+%post guest-agent
+%service_add_post qemu-guest-agent.service
+if [ -e /dev/virtio-ports/org.qemu.guest_agent.0 ]; then
+  /usr/bin/systemctl start qemu-guest-agent.service || :
+fi
+
+%preun guest-agent
+if [ -e /dev/virtio-ports/org.qemu.guest_agent.0 ]; then
+  /usr/bin/systemctl stop qemu-guest-agent.service || :
+fi
+
+%postun guest-agent
+%service_del_postun_without_restart qemu-guest-agent.service
+if [ "$1" = "1" ] ; then
+  if [ -e /dev/virtio-ports/org.qemu.guest_agent.0 ]; then
+    /usr/bin/systemctl restart qemu-guest-agent.service || :
+  fi
+fi
+
+%package ksm
+Summary:        Kernel Samepage Merging services
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Requires(pre):  coreutils
+Requires(post): coreutils
+
+%description ksm
+Kernel Samepage Merging (KSM) is a memory-saving de-duplication feature, that
+merges anonymous (private) pages (not pagecache ones).
+
+This package provides a service file for starting and stopping KSM.
+
+%files ksm
+%defattr(-, root, root)
+%{_unitdir}/ksm.service
+
+%pre ksm
+%service_add_pre ksm.service
+
+%post ksm
+%service_add_post ksm.service
+
+%preun ksm
+%service_del_preun ksm.service
+
+%postun ksm
+%service_del_postun ksm.service
+
+%package accel-tcg-x86
+Summary:        TCG accelerator for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/15
+%{qemu_module_conflicts}
+
+%description accel-tcg-x86
+TCG is the QEMU binary translator, responsible for converting from target to
+host instruction set.
+
+This package provides the TCG accelerator for QEMU.
+
+%files accel-tcg-x86
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/15
+%dir %_libdir/%name
+%_libdir/%name/accel-tcg-i386.so
+%_libdir/%name/accel-tcg-x86_64.so
+
+%package accel-qtest
+Summary:        QTest accelerator for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+Provides:       %name:%_datadir/%name/forsplits/16
+%{qemu_module_conflicts}
+
+%description accel-qtest
+QTest is a device emulation testing framework. It is useful to test device
+models.
+
+This package provides QTest accelerator for testing QEMU.
+
+%files accel-qtest
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/16
+%dir %_libdir/%name
+%_libdir/%name/accel-qtest-aarch64.so
+%_libdir/%name/accel-qtest-alpha.so
+%_libdir/%name/accel-qtest-arm.so
+%_libdir/%name/accel-qtest-avr.so
+%_libdir/%name/accel-qtest-cris.so
+%_libdir/%name/accel-qtest-hppa.so
+%_libdir/%name/accel-qtest-i386.so
+%_libdir/%name/accel-qtest-m68k.so
+%_libdir/%name/accel-qtest-microblaze.so
+%_libdir/%name/accel-qtest-microblazeel.so
+%_libdir/%name/accel-qtest-mips.so
+%_libdir/%name/accel-qtest-mips64.so
+%_libdir/%name/accel-qtest-mips64el.so
+%_libdir/%name/accel-qtest-mipsel.so
+%_libdir/%name/accel-qtest-nios2.so
+%_libdir/%name/accel-qtest-or1k.so
+%_libdir/%name/accel-qtest-ppc.so
+%_libdir/%name/accel-qtest-ppc64.so
+%_libdir/%name/accel-qtest-riscv32.so
+%_libdir/%name/accel-qtest-riscv64.so
+%_libdir/%name/accel-qtest-rx.so
+%_libdir/%name/accel-qtest-s390x.so
+%_libdir/%name/accel-qtest-sh4.so
+%_libdir/%name/accel-qtest-sh4eb.so
+%_libdir/%name/accel-qtest-sparc.so
+%_libdir/%name/accel-qtest-sparc64.so
+%_libdir/%name/accel-qtest-tricore.so
+%_libdir/%name/accel-qtest-x86_64.so
+%_libdir/%name/accel-qtest-xtensa.so
+%_libdir/%name/accel-qtest-xtensaeb.so
+
+%if %{build_x86_firmware}
+%package microvm
+Summary:        x86 MicroVM firmware for QEMU
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+BuildArch:      noarch
+
+%description microvm
+This package provides minimal x86 firmware for booting certain guests under
+QEMU. qboot provides the minimum resources needed to boot PVH and bzImages.
+bios-microvm, created from a minimal seabios configuration, provides slightly
+wider support than qboot, but still focuses on quick boot up.
+
+%files microvm
+%defattr(-, root, root)
+%dir %_datadir/%name
+%_datadir/%name/bios-microvm.bin
+%_datadir/%name/qboot.rom
+
+%package seabios
+Summary:        x86 Legacy BIOS for QEMU
+Group:          System/Emulators/PC
+Version:        %{sbver}
+Release:        0
+BuildArch:      noarch
+Conflicts:      %name < 1.6.0
+
+%description seabios
+SeaBIOS is an open source implementation of a 16bit x86 BIOS. SeaBIOS
+is the default and legacy BIOS for QEMU.
+
+%files seabios
+%defattr(-, root, root)
+%dir %_datadir/%name
+%_datadir/%name/bios.bin
+%_datadir/%name/bios-256k.bin
+%_datadir/%name/firmware/50-seabios-256k.json
+%_datadir/%name/firmware/60-seabios-128k.json
+
+%package vgabios
+Summary:        VGA BIOSes for QEMU
+Group:          System/Emulators/PC
+Version:        %{sbver}
+Release:        0
+BuildArch:      noarch
+Conflicts:      %name < 1.6.0
+
+%description vgabios
+VGABIOS provides the video ROM BIOSes for the following variants of VGA
+emulated devices: Std VGA, QXL, Cirrus CLGD 5446 and VMware emulated
+video card. For use with QEMU.
+
+%files vgabios
+%defattr(-, root, root)
+%dir %_datadir/%name
+%_datadir/%name/vgabios.bin
+%_datadir/%name/vgabios-ati.bin
+%_datadir/%name/vgabios-bochs-display.bin
+%_datadir/%name/vgabios-cirrus.bin
+%_datadir/%name/vgabios-qxl.bin
+%_datadir/%name/vgabios-ramfb.bin
+%_datadir/%name/vgabios-stdvga.bin
+%_datadir/%name/vgabios-virtio.bin
+%_datadir/%name/vgabios-vmware.bin
+
+%package sgabios
+Summary:        Serial Graphics Adapter BIOS for QEMU
+Group:          System/Emulators/PC
+Version:        8
+Release:        0
+BuildArch:      noarch
+Conflicts:      %name < 1.6.0
+
+%description sgabios
+The Google Serial Graphics Adapter BIOS or SGABIOS provides a means for legacy
+x86 software to communicate with an attached serial console as if a video card
+were attached. For use with QEMU.
+
+%files sgabios
+%defattr(-, root, root)
+%dir %_datadir/%name
+%_datadir/%name/sgabios.bin
+
+%package ipxe
+Summary:        PXE ROMs for QEMU NICs
+Group:          System/Emulators/PC
+Version:        1.0.0+
+Release:        0
+BuildArch:      noarch
+Conflicts:      %name < 1.6.0
+
+%description ipxe
+Provides Preboot Execution Environment (PXE) ROM support for various emulated
+network adapters available with QEMU.
+
+%files ipxe
+%defattr(-, root, root)
+%dir %_datadir/%name
+%_datadir/%name/efi-e1000.rom
+%_datadir/%name/efi-e1000e.rom
+%_datadir/%name/efi-eepro100.rom
+%_datadir/%name/efi-ne2k_pci.rom
+%_datadir/%name/efi-pcnet.rom
+%_datadir/%name/efi-rtl8139.rom
+%_datadir/%name/efi-virtio.rom
+%_datadir/%name/efi-vmxnet3.rom
+%_datadir/%name/pxe-e1000.rom
+%_datadir/%name/pxe-eepro100.rom
+%_datadir/%name/pxe-ne2k_pci.rom
+%_datadir/%name/pxe-pcnet.rom
+%_datadir/%name/pxe-rtl8139.rom
+%_datadir/%name/pxe-virtio.rom
+%endif
+
+%if %{build_ppc_firmware}
+%package skiboot
+Summary:        OPAL firmware (aka skiboot), used in booting OpenPOWER systems
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+BuildArch:      noarch
+Requires(post): update-alternatives
+Requires(postun):update-alternatives
+Provides:       %name:%_datadir/%name/forsplits/06
+
+%description skiboot
+Provides OPAL (OpenPower Abstraction Layer) firmware, aka skiboot, as
+traditionally packaged with QEMU.
+
+%files skiboot
+%defattr(-, root, root)
+%dir %_datadir/%name
+%dir %_datadir/%name/forsplits
+%_datadir/%name/forsplits/06
+%_datadir/%name/skiboot.lid
+%_datadir/%name/skiboot.lid.qemu
+%ghost %_sysconfdir/alternatives/skiboot.lid
+
+%post skiboot
+update-alternatives --install \
+   %{_datadir}/%name/skiboot.lid skiboot.lid %{_datadir}/%name/skiboot.lid.qemu 15
+
+%preun skiboot
+if [ ! -f %{_datadir}/%name/skiboot.lid.qemu ] ; then
+   update-alternatives --remove skiboot.lid %{_datadir}/%name/skiboot.lid.qemu
+fi
+
+%package SLOF
+Summary:        Slimline Open Firmware - SLOF
+Group:          System/Emulators/PC
+Version:        %{qemuver}
+Release:        0
+BuildArch:      noarch
+
+%description SLOF
+Slimline Open Firmware (SLOF) is an implementation of the IEEE 1275 standard.
+It can be used as partition firmware for pSeries machines running on QEMU or KVM.
+
+%files SLOF
+%defattr(-, root, root)
+%dir %_datadir/%name
+%_datadir/%name/slof.bin
+%endif
+
+%prep
+%autosetup -n %{srcname}-%{srcver}
+
+# for the record, this set of firmware files is installed, but we don't
+# build (yet): bamboo.dtb canyonlands.dtb hppa-firmware.img openbios-ppc
+# openbios-sparc32 openbios-sparc64 palcode-clipper petalogix-ml605.dtb
+# petalogix-s3adsp1800.dtb QEMU,cgthree.bin QEMU,tcx.bin qemu_vga.ndrv
+# u-boot.e500 u-boot-sam460-20100605.bin opensbi-riscv32-generic-fw_dynamic.bin
+# opensbi-riscv32-generic-fw_dynamic.elfnpcm7xx_bootrom.bin
+
+# Note that:
+# - default firmwares are built "by default", i.e., they're built automatically
+#   during the process of building QEMU (on each specific arch)
+# - extra firmwares are built "manually" (see below)  from their own sources
+#   (which, typically, are submodules checked out in the {srcdi}r/roms directory)
+%define ppc_default_firmware %{nil}
+%define ppc_extra_firmware {skiboot.lid slof.bin}
+%define riscv64_default_firmware %{nil}
+%define riscv64_extra_firmware {opensbi-riscv64-generic-fw_dynamic.bin \
+opensbi-riscv64-generic-fw_dynamic.elf}
+%define s390x_default_firmware {s390-ccw.img s390-netboot.img}
+%define s390x_extra_firmware %{nil}
+%define x86_default_firmware {linuxboot.bin linuxboot_dma.bin multiboot.bin \
+multiboot_dma.bin kvmvapic.bin pvh.bin}
+%define x86_extra_firmware {bios.bin bios-256k.bin bios-microvm.bin qboot.rom \
+pxe-e1000.rom pxe-eepro100.rom pxe-ne2k_pci.rom pxe-pcnet.rom pxe-rtl8139.rom \
+pxe-virtio.rom sgabios.bin vgabios-ati.bin vgabios-bochs-display.bin \
+vgabios.bin vgabios-cirrus.bin vgabios-qxl.bin vgabios-ramfb.bin \
+vgabios-stdvga.bin vgabios-virtio.bin vgabios-vmware.bin \
+efi-e1000.rom efi-e1000e.rom efi-eepro100.rom efi-ne2k_pci.rom efi-pcnet.rom \
+efi-rtl8139.rom efi-virtio.rom efi-vmxnet3.rom}
+
+# Complete list of all the firmwares that we build, if we consider
+# all the builds, on all the arches.
+%define firmware { \
+%{ppc_default_firmware} %{ppc_extra_firmware} \
+%{riscv64_default_firmware} %{riscv64_extra_firmware} \
+%{s390x_default_firmware} %{s390x_extra_firmware} \
+%{x86_default_firmware} %{x86_extra_firmware} }
+
+# Note that:
+# - {arch}_default_built_firmware are the firmwares that we will be built by
+#   default in this particular build, on the arch where we currently are on
+# - {arch}_extra_built_fimrware, likewise, but for extra firmwares, built manually
+%ifarch ppc64 ppc64le
+%define ppc_default_built_firmware %{ppc_default_firmware}
+%endif
+%ifarch riscv64
+%define riscv64_default_built_firmware %{riscv64_default_firmware}
+%endif
+%ifarch s390x
+%define s390x_default_built_firmware %{s390x_default_firmware}
+%endif
+%ifarch %ix86 x86_64
+%define x86_default_built_firmware %{x86_default_firmware}
+%endif
+
+%if %{build_opensbi_firmware}
+%define riscv64_extra_built_firmware %{riscv64_extra_firmware}
+%endif
+%if %{build_ppc_firmware}
+%define ppc_extra_built_firmware %{ppc_extra_firmware}
+%endif
+%if %{build_x86_firmware}
+%define x86_extra_built_firmware %{x86_extra_firmware}
+%endif
+
+# List of only firmwares that will actually be built, in this instance
+%define built_firmware { \
+%{?ppc_default_built_firmware} %{?ppc_extra_built_firmware} \
+%{?riscv64_default_built_firmware} %{?riscv64_extra_built_firmware} \
+%{?s390x_default_built_firmware} %{?s390x_extra_built_firmware} \
+%{?x86_default_built_firmware} %{?x86_extra_built_firmware} }
+
+%build
+
+%if %{legacy_qemu_kvm}
+# FIXME: Why are we copying the s390 specific one?
+cp %{rpmfilesdir}/supported.s390.txt docs/supported.rst
+sed -i '/^\ \ \ about\/index.*/i \ \ \ supported.rst' docs/index.rst
+%endif
+
+# When generating an upstream release tarball, the following commands
+# are run (see scripts/make-release):
+#  (cd roms/seabios && git describe --tags --long --dirty > .version)
+#  (cd roms/skiboot && ./make_version.sh > .version)
+# This has not happened for the archive we're using, since it's cloned
+# from a git branch. We, therefore, assumed that the following commands
+# have been run, and the result committed to the repository (with seabios
+# and skiboot at the proper commit/tag/...):
+#  (cd roms/seabios && git describe --tags --long --dirty > rpm/seabios_version)
+#  (cd roms/skiboot && ./make_version.sh > rpm/skiboot_version)
+cp %{rpmfilesdir}/seabios_version roms/seabios/.version
+cp %{rpmfilesdir}/skiboot_version roms/skiboot/.version
+find . -iname ".git" -exec rm -rf {} +
+
+mkdir -p %blddir
+cd %blddir
+
+%srcdir/configure \
+	--prefix=%_prefix \
+	--sysconfdir=%_sysconfdir \
+	--libdir=%_libdir \
+	--libexecdir=%_libexecdir \
+	--localstatedir=%_localstatedir \
+	--docdir=%_docdir \
+	--firmwarepath=%_datadir/%name \
+        --python=%_bindir/python3 \
+	--extra-cflags="%{optflags}" \
+	--with-git-submodules=ignore \
+	--with-pkgversion="%(echo '%{distro}' | sed 's/ (.*)//')" \
+	--disable-auth-pam \
+	--disable-capstone \
+	--disable-crypto-afalg \
+	--disable-fuzzing \
+	--disable-libxml2 \
+	--disable-linux-user \
+	--disable-malloc-trim \
+	--disable-module-upgrades \
+	--disable-multiprocess \
+	--disable-netmap \
+	--disable-nettle \
+	--disable-plugins \
+	--disable-qom-cast-debug \
+	--disable-safe-stack \
+	--disable-sanitizers \
+	--disable-sdl \
+	--disable-sdl-image \
+	--disable-stack-protector \
+	--disable-strip \
+	--disable-tcg-interpreter \
+	--disable-whpx \
+%if "%{_lto_cflags}" != "%{nil}"
+	--enable-lto \
+%endif
+%if %{kvm_available}
+	--enable-kvm \
+%else
+	--disable-kvm \
+%endif
+%ifarch x86_64
+	--enable-xen \
+	--enable-xen-pci-passthrough \
+	--enable-libpmem \
+%else
+	--disable-xen \
+	--disable-libpmem \
+%endif
+%ifarch %arm s390x
+	--disable-numa \
+%else
+	--enable-numa \
+%endif
+%if 0%{?with_daxctl}
+	--enable-libdaxctl \
+%else
+	--disable-libdaxctl \
+%endif
+%if 0%{?with_uring}
+        --enable-linux-io-uring \
+%else
+        --disable-linux-io-uring \
+%endif
+%if 0%{?with_rbd}
+	--enable-rbd \
+%else
+	--disable-rbd \
+%endif
+%if %{with system_membarrier}
+	--enable-membarrier \
+%else
+	--disable-membarrier \
+%endif
+	--disable-hax \
+	--disable-hvf \
+	--enable-attr \
+	--enable-bochs \
+	--enable-brlapi \
+	--enable-bzip2 \
+	--enable-cap-ng \
+	--enable-cloop \
+	--enable-coroutine-pool \
+	--enable-curl \
+	--enable-curses \
+	--enable-dmg \
+	--enable-docs \
+	--enable-fdt \
+	--enable-gcrypt \
+	--enable-gio \
+	--enable-glusterfs \
+	--enable-gnutls \
+	--enable-gtk \
+	--enable-guest-agent \
+	--enable-iconv \
+	--enable-libiscsi \
+	--enable-libnfs \
+	--enable-libssh \
+	--enable-libusb \
+	--enable-linux-aio \
+	--enable-lzfse \
+	--enable-lzo \
+	--enable-modules \
+	--enable-mpath \
+	--enable-opengl \
+	--enable-parallels \
+	--enable-pie \
+	--enable-pvrdma \
+	--enable-qcow1 \
+	--enable-qed \
+	--enable-rdma \
+	--enable-replication \
+	--enable-seccomp \
+	--enable-slirp=system \
+	--enable-smartcard \
+	--enable-snappy \
+	--enable-spice \
+	--enable-system \
+	--enable-tools \
+	--enable-tpm \
+	--enable-usb-redir \
+	--enable-vde \
+	--enable-vdi \
+	--enable-vhost-crypto \
+	--enable-vhost-kernel \
+	--enable-vhost-net \
+	--enable-vhost-scsi \
+	--enable-vhost-user \
+	--enable-vhost-user-blk-server \
+	--enable-vhost-vdpa \
+	--enable-vhost-vsock \
+	--enable-virglrenderer \
+	--enable-virtfs \
+	--enable-vnc \
+	--enable-vnc-jpeg \
+	--enable-vnc-png \
+	--enable-vnc-sasl \
+	--enable-vte \
+	--enable-vvfat \
+	--enable-werror \
+	--enable-xfsctl \
+	--enable-zstd \
+        --enable-vhost-user-fs \
+        --enable-xkbcommon \
+	--with-default-devices
+
+echo "=== Content of config-host.mak: ==="
+cat config-host.mak
+echo "=== ==="
+
+# For building QEMU and all the "default" firmwares, for each arch,
+# for the package qemu, we first need to delete the firmware files that
+# we intend to build...
+#
+# TODO: check if this can be common to qemu and qemu-linux-user
+for i in %built_firmware
+do
+  unlink %srcdir/pc-bios/$i
+done
+
+%make_build
+
+# ... And then, reinstate the firmwares that have been built already
+for i in %{?s390x_default_built_firmware}
+do
+  cp pc-bios/s390-ccw/$i %srcdir/pc-bios/
+done
+
+for i in %{?x86_default_built_firmware}
+do
+  cp pc-bios/optionrom/$i %srcdir/pc-bios/
+done
+
+# Build the "extra" firmwares. Note that the QEMU Makefile in {srcdir}/roms
+# does some cross-compiler auto detection. So we often don't need to define
+# or pass CROSS= and CROSS_COMPILE ourselves.
+
+%if %{build_ppc_firmware}
+# FIXME: check if we can upstream: Makefile-define-endianess-for-cross-buil.patch
+%make_build -C %srcdir/roms skiboot
+
+%make_build -C %srcdir/roms slof
+%endif
+
+%if %{build_opensbi_firmware}
+%make_build -C %srcdir/roms opensbi64-generic
+%endif
+
+%if %{build_x86_firmware}
+%make_build %{?_smp_mflags} -C %srcdir/roms bios \
+  SEABIOS_EXTRAVERSION="-rebuilt.opensuse.org" \
+
+# FIXME: check if we can upstream: roms-Makefile-add-cross-file-to-qboot-me.patch
+# and qboot-add-cross.ini-file-to-handle-aarch.patch
+%make_build -C %srcdir/roms qboot
+
+%make_build -C %srcdir/roms seavgabios \
+
+%make_build -C %srcdir/roms seavgabios-ati \
+
+%make_build -C %srcdir/roms pxerom
+
+%make_build -C %srcdir/roms efirom \
+  EDK2_BASETOOLS_OPTFLAGS='-fPIE'
+
+# We're currently not building firmware on ix86, but let's make sure this works
+# fine if one enables it, e.g., locally (for debugging or something).
+# FIXME: check if we can get rid or upstream: roms-sgabios-Fix-csum8-to-be-built-by-ho.patch
+make -C %srcdir/roms sgabios HOSTCC=cc \
+%ifnarch %ix86 x86_64
+    CC=x86_64-suse-linux-gcc LD=x86_64-suse-linux-ld \
+%endif
+
+%if %{force_fit_virtio_pxe_rom}
+pushd %srcdir
+patch -p1 < %{rpmfilesdir}/stub-out-the-SAN-req-s-in-int13.patch
+popd
+%make_build -C %srcdir/roms pxerom_variants=virtio pxerom_targets=1af41000 pxerom
+%endif
+
+for i in %supported_nics_large %unsupported_nics
+  do
+    if test "`stat -c '%s' %srcdir/pc-bios/pxe-$i.rom`" -gt "131072" ; then
+    echo "pxe rom is too large"
+    exit 1
+  fi
+  if test "`stat -c '%s' %srcdir/pc-bios/pxe-$i.rom`" -le "65536" ; then
+    ./%srcdir/roms/ipxe/src/util/padimg.pl %srcdir/pc-bios/pxe-$i.rom -s 65536 -b 255
+    echo -ne "SEGMENT OVERAGE\0" >> %srcdir/pc-bios/pxe-$i.rom
+  fi
+done
+for i in %supported_nics_small
+  do
+    if test "`stat -c '%s' %srcdir/pc-bios/pxe-$i.rom`" -gt "65536" ; then
+    echo "pxe rom is too large"
+    exit 1
+  fi
+done
+# End of "if build_x86_firmware"
+%endif
+
+%install
+cd %blddir
+
+%make_build install DESTDIR=%{buildroot}
+
+%find_lang %name
+install -d -m 0755 %{buildroot}%_datadir/%name/firmware
+install -d -m 0755 %{buildroot}/usr/lib/supportconfig/plugins
+install -d -m 0755 %{buildroot}%_sysconfdir/%name/firmware
+install -D -m 0644 %{rpmfilesdir}/bridge.conf %{buildroot}%_sysconfdir/%name/bridge.conf
+install -D -m 0755 %{rpmfilesdir}/qemu-ifup %{buildroot}%_datadir/%name/qemu-ifup
+install -D -p -m 0644 %{rpmfilesdir}/80-qemu-ga.rules %{buildroot}/usr/lib/udev/rules.d/80-qemu-ga.rules
+install -D -m 0755 scripts/analyze-migration.py  %{buildroot}%_bindir/analyze-migration.py
+install -D -m 0755 scripts/vmstate-static-checker.py  %{buildroot}%_bindir/vmstate-static-checker.py
+install -D -m 0755 scripts/kvm/vmxcap  %{buildroot}%_bindir/vmxcap
+install -D -m 0755 %{rpmfilesdir}/qemu-supportconfig %{buildroot}/usr/lib/supportconfig/plugins/%name
+install -D -m 0644 %{rpmfilesdir}/supported.arm.txt %{buildroot}%_docdir/qemu-arm/supported.txt
+install -D -m 0644 %{rpmfilesdir}/supported.ppc.txt %{buildroot}%_docdir/qemu-ppc/supported.txt
+install -D -m 0644 %{rpmfilesdir}/supported.x86.txt %{buildroot}%_docdir/qemu-x86/supported.txt
+install -D -m 0644 %{rpmfilesdir}/supported.s390.txt %{buildroot}%_docdir/qemu-s390x/supported.txt
+%if %{legacy_qemu_kvm}
+install -D -m 0644 %{rpmfilesdir}/qemu-kvm.1.gz %{buildroot}%_mandir/man1/qemu-kvm.1.gz
+install -d %{buildroot}%_docdir/qemu-kvm
+%ifarch s390x
+ln -s qemu-system-s390x %{buildroot}%_bindir/qemu-kvm
+ln -s ../qemu-s390x/supported.txt %{buildroot}%_docdir/qemu-kvm/kvm-supported.txt
+rst2html --exit-status=2 %{buildroot}%_docdir/qemu-s390x/supported.txt %{buildroot}%_docdir/qemu-kvm/kvm-supported.html
+%else
+ln -s qemu-system-x86_64 %{buildroot}%_bindir/qemu-kvm
+ln -s ../qemu-x86/supported.txt %{buildroot}%_docdir/qemu-kvm/kvm-supported.txt
+rst2html --exit-status=2 %{buildroot}%_docdir/qemu-x86/supported.txt %{buildroot}%_docdir/qemu-kvm/kvm-supported.html
+%endif
+# End of "if legacy_qemu_kvm"
+%endif
+
+%if %{kvm_available}
+install -D -m 0644 %{rpmfilesdir}/80-kvm.rules %{buildroot}/usr/lib/udev/rules.d/80-kvm.rules
+%endif
+install -D -p -m 0644 %{rpmfilesdir}/qemu-guest-agent.service %{buildroot}%{_unitdir}/qemu-guest-agent.service
+install -D -p -m 0644 %{rpmfilesdir}/ksm.service %{buildroot}%{_unitdir}/ksm.service
+%ifarch s390x
+install -D -m 0644 %{rpmfilesdir}/kvm.conf %{buildroot}%{_prefix}/lib/modules-load.d/kvm.conf
+%endif
+
+# We rely on a separate project / package to provide edk2 firmware
+unlink %{buildroot}%_datadir/%name/edk2-licenses.txt
+unlink %{buildroot}%_datadir/%name/firmware/50-edk2-i386-secure.json
+unlink %{buildroot}%_datadir/%name/firmware/50-edk2-x86_64-secure.json
+unlink %{buildroot}%_datadir/%name/firmware/60-edk2-aarch64.json
+unlink %{buildroot}%_datadir/%name/firmware/60-edk2-arm.json
+unlink %{buildroot}%_datadir/%name/firmware/60-edk2-i386.json
+unlink %{buildroot}%_datadir/%name/firmware/60-edk2-x86_64.json
+unlink %{buildroot}%_datadir/%name/edk2-aarch64-code.fd
+unlink %{buildroot}%_datadir/%name/edk2-arm-code.fd
+unlink %{buildroot}%_datadir/%name/edk2-arm-vars.fd
+unlink %{buildroot}%_datadir/%name/edk2-i386-code.fd
+unlink %{buildroot}%_datadir/%name/edk2-i386-secure-code.fd
+unlink %{buildroot}%_datadir/%name/edk2-i386-vars.fd
+unlink %{buildroot}%_datadir/%name/edk2-x86_64-code.fd
+unlink %{buildroot}%_datadir/%name/edk2-x86_64-secure-code.fd
+
+# this was never meant for customer consumption - delete even though installed
+unlink %{buildroot}%_bindir/elf2dmp
+
+install -D -m 0644 %{rpmfilesdir}/pkg-split.txt %{buildroot}%_datadir/%name/forsplits/pkg-split.txt
+for X in 00 01 02 03 04 05 07 08 09 10 11 12 13 14 15 16 17 18 19
+do
+  ln -s pkg-split.txt %{buildroot}%_datadir/%name/forsplits/$X
+done
+
+# For PPC and x86 firmwares, there are a few extra install steps necessary.
+# In general, if we know that we have not built a firmware, remove it from the
+# install base, as the one that we have there is the upstream binary, that got
+# copied there during `make install`.
+
+%if %{build_ppc_firmware}
+# in support of update-alternatives
+mv %{buildroot}%_datadir/%name/skiboot.lid %{buildroot}%_datadir/%name/skiboot.lid.qemu
+# create a dummy target for /etc/alternatives/skiboot.lid
+mkdir -p %{buildroot}%{_sysconfdir}/alternatives
+ln -s -f %{_sysconfdir}/alternatives/skiboot.lid %{buildroot}%{_datadir}/%name/skiboot.lid
+ln -s pkg-split.txt %{buildroot}%_datadir/%name/forsplits/06
+%else
+for f in %{ppc_extra_firmware} ; do
+  unlink %{buildroot}%_datadir/%name/$f
+done
+%endif
+
+# For riscv64 firmwares (currently, only opensbi), we leave them there in
+# any case, because they're part of the qemu-extra package, and riscv is
+# a bit special in many ways already.
+
+%if %{build_x86_firmware}
+install -D -m 0644 %{rpmfilesdir}/50-seabios-256k.json %{buildroot}%_datadir/%name/firmware/50-seabios-256k.json
+install -D -m 0644 %{rpmfilesdir}/60-seabios-128k.json %{buildroot}%_datadir/%name/firmware/60-seabios-128k.json
+%else
+for f in %{x86_extra_firmware} ; do
+  unlink %{buildroot}%_datadir/%name/$f
+done
+%endif
+
+%suse_update_desktop_file qemu
+
+%fdupes -s %{buildroot}
+
+%check
+cd %blddir
+
+%if 0%{?qemu_user_space_build}
+# Seccomp is not supported by linux-user emulation
+echo 'int main (void) { return 0; }' > %{srcdir}/tests/unit/test-seccomp.c
+%endif
+
+# Compile the QOM test binary first, so that ...
+%make_build tests/qtest/qom-test
+# ... make comes in fresh and has lots of address space (needed for 32bit, bsc#957379)
+# FIXME: is this still a problem?
+
+# Let's build everything first
+%make_build check-build
+# Let's now run the 'make check' component individually, so we have
+# more control on the options (like -j, etc)
+%make_build check-unit
+%make_build check-qapi-schema
+%make_build check-softfloat
+# This would be `make_build check-block`. But iotests are not reliable
+# if ran in parallel in OBS, so let's be slow for now.
+make -O V=1 VERBOSE=1 -j1 check-block
+%if %{with chkqtests} && !0%{?qemu_user_space_build}
+# Run qtests sequentially, as it's too unreliable, when run in OBS, if parallelized
+make -O V=1 VERBOSE=1 -j1 check-qtest
+%endif
+# Last step will be to run a full check-report, but we will
+# enable this at a later point
+#make -O V=1 VERBOSE=1 -j1 check-report.junit.xml
+
+%changelog
