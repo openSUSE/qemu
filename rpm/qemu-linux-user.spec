@@ -69,6 +69,8 @@ syscall layer occurs on the native hardware and operating system.
 %_bindir/qemu-alpha
 %_bindir/qemu-arm
 %_bindir/qemu-armeb
+%_bindir/qemu-binfmt
+%_bindir/qemu-*-binfmt
 %_bindir/qemu-cris
 %_bindir/qemu-hexagon
 %_bindir/qemu-hppa
@@ -316,7 +318,10 @@ install -d -m 755 %{buildroot}%_sbindir
 install -m 755 scripts/qemu-binfmt-conf.sh %{buildroot}%_sbindir
 install -d -m 755 %{buildroot}%{_prefix}/lib/binfmt.d/
 scripts/qemu-binfmt-conf.sh --systemd ALL --persistent yes --preserve-argv0 yes --exportdir %{buildroot}%{_prefix}/lib/binfmt.d/
-
+for arch in aarch64 aarch64_be alpha arm armeb cris hexagon hppa i386 loongarch64 m68k microblaze microblazeel mips mips64 mips64el mipsel mipsn32 mipsn32el nios2 or1k ppc ppc64 ppc64le riscv32 riscv64 s390x sh4 sh4eb sparc sparc32plus sparc64 x86_64 xtensa xtensaeb
+do
+  ln -s qemu-binfmt %{buildroot}%_bindir/qemu-${arch}-binfmt
+done
 %fdupes -s %{buildroot}
 
 %check
