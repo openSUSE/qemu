@@ -194,7 +194,7 @@ BuildRequires:  fdupes
 BuildRequires:  gcc-c++
 BuildRequires:  meson
 BuildRequires:  ninja >= 1.7
-BuildRequires:  perl-Text-Markdown
+BuildRequires:  discount
 BuildRequires:  python3-base >= 3.6
 BuildRequires:  python3-setuptools
 %if %{kvm_available}
