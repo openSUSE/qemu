@@ -194,7 +194,7 @@ BuildRequires:  fdupes
 BuildRequires:  gcc-c++
 BuildRequires:  meson
 BuildRequires:  ninja >= 1.7
-BuildRequires:  perl-Text-Markdown
+BuildRequires:  discount
 BuildRequires:  python3-base >= 3.6
 BuildRequires:  python3-setuptools
 %if %{kvm_available}
@@ -787,7 +787,7 @@ for f in *.md
 do
   b="${f%.md}"
   # Ensure the correct media type
-  Markdown.pl "${f}" >"${b}.html"
+  markdown "${f}" >"${b}.html"
   # Links to b.md will be rendered as to b
   ln -Ts "${b}.html" "${b}"
 done
