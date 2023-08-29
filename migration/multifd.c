@@ -618,6 +618,7 @@ int multifd_send_sync_main(QEMUFile *f)
 
         trace_multifd_send_sync_main_signal(p->id);
 
+        qemu_sem_wait(&multifd_send_state->channels_ready);
         qemu_mutex_lock(&p->mutex);
 
         if (p->quit) {
@@ -635,7 +636,6 @@ int multifd_send_sync_main(QEMUFile *f)
     for (i = 0; i < migrate_multifd_channels(); i++) {
         MultiFDSendParams *p = &multifd_send_state->params[i];
 
-        qemu_sem_wait(&multifd_send_state->channels_ready);
         trace_multifd_send_sync_main_wait(p->id);
         qemu_sem_wait(&p->sem_sync);
 
