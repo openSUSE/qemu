@@ -258,10 +258,12 @@ static void raven_pcihost_realizefn(DeviceState *d, Error **errp)
 
     memory_region_init_io(&h->conf_mem, OBJECT(h), &pci_host_conf_le_ops, s,
                           "pci-conf-idx", 4);
+    h->conf_mem.disable_reentrancy_guard = true;
     memory_region_add_subregion(&s->pci_io, 0xcf8, &h->conf_mem);
 
     memory_region_init_io(&h->data_mem, OBJECT(h), &pci_host_data_le_ops, s,
                           "pci-conf-data", 4);
+    h->data_mem.disable_reentrancy_guard = true;
     memory_region_add_subregion(&s->pci_io, 0xcfc, &h->data_mem);
 
     memory_region_init_io(&h->mmcfg, OBJECT(s), &raven_pci_io_ops, s,
