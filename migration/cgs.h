@@ -29,10 +29,10 @@ typedef struct CgsMig {
     int (*savevm_state_end)(QEMUFile *f);
     int (*savevm_state_ram_abort)(hwaddr gfn_end);
     long (*savevm_state_ram_cancel)(QEMUFile *f, hwaddr gpa);
-    void (*savevm_state_cleanup)(uint32_t nr_channels);
+    void (*savevm_state_cleanup)(void);
     int (*loadvm_state_setup)(uint32_t nr_channels, uint32_t nr_pages);
     int (*loadvm_state)(QEMUFile *f, uint32_t channel_id);
-    void (*loadvm_state_cleanup)(uint32_t nr_channels);
+    void (*loadvm_state_cleanup)(void);
     /* Multifd support */
     uint32_t (*iov_num)(uint32_t page_batch_num);
     int (*multifd_send_prepare)(MultiFDSendParams *p, Error **errp);

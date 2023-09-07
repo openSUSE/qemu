@@ -479,25 +479,26 @@ static void tdx_mig_stream_cleanup(TdxMigStream *stream)
     close(stream->fd);
 }
 
-static void tdx_mig_cleanup(uint32_t nr_channels)
+static void tdx_mig_cleanup(void)
 {
     int i;
 
-    for (i = 0; i < nr_channels; i++) {
+    for (i = 0; i < tdx_mig.nr_streams; i++) {
         tdx_mig_stream_cleanup(&tdx_mig.streams[i]);
-        tdx_mig.nr_streams--;
     }
+
+    tdx_mig.nr_streams = 0;
 
     g_free(tdx_mig.streams);
     tdx_mig.streams = NULL;
 }
 
-static void tdx_mig_loadvm_state_cleanup(uint32_t nr_channels)
+static void tdx_mig_loadvm_state_cleanup(void)
 {
     TdxMigStream *stream = &tdx_mig.streams[0];
 
     tdx_mig_stream_ioctl(stream, KVM_TDX_MIG_IMPORT_END, 0, 0);
-    tdx_mig_cleanup(nr_channels);
+    tdx_mig_cleanup();
 }
 
 static int tdx_mig_savevm_state_ram_abort(hwaddr gfn_end)

@@ -202,19 +202,9 @@ long cgs_mig_savevm_state_ram_cancel(QEMUFile *f, RAMBlock *block,
 
 void cgs_mig_savevm_state_cleanup(void)
 {
-    uint32_t nr_channels = 1;
-
-    if (!cgs_mig.savevm_state_cleanup) {
-        return;
+    if (cgs_mig.savevm_state_cleanup) {
+        cgs_mig.savevm_state_cleanup();
     }
-
-    if (migrate_use_multifd()) {
-        nr_channels = migrate_multifd_channels();
-    } else if (migrate_postcopy_preempt()) {
-        nr_channels = RAM_CHANNEL_MAX;
-    }
-
-    cgs_mig.savevm_state_cleanup(nr_channels);
 }
 
 int cgs_mig_loadvm_state_setup(QEMUFile *f)
@@ -255,19 +245,9 @@ int cgs_mig_loadvm_state(QEMUFile *f, uint32_t channel_id)
 
 void cgs_mig_loadvm_state_cleanup(void)
 {
-    uint32_t nr_channels = 1;
-
-    if (!cgs_mig.loadvm_state_cleanup) {
-        return;
+    if (cgs_mig.loadvm_state_cleanup) {
+        cgs_mig.loadvm_state_cleanup();
     }
-
-    if (migrate_use_multifd()) {
-        nr_channels = migrate_multifd_channels();
-    } else if (migrate_postcopy_preempt()) {
-        nr_channels = RAM_CHANNEL_MAX;
-    }
-
-    cgs_mig.loadvm_state_cleanup(nr_channels);
 }
 
 int cgs_mig_multifd_send_prepare(MultiFDSendParams *p, Error **errp)
