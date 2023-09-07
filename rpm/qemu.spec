@@ -82,7 +82,7 @@ URL:            https://www.qemu.org/
 Summary:        Machine emulator and virtualizer
 License:        BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
 Group:          System/Emulators/PC
-Version:        8.0.0
+Version:        8.1.0
 Release:        0
 Source0:        qemu-%{version}.tar.xz
 Source1:        common.inc
@@ -484,7 +484,6 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--prefix=%_prefix \
         --python=%_bindir/python3 \
 	--sysconfdir=%_sysconfdir \
-	--with-git-submodules=ignore \
 	--with-pkgversion="%(echo '%{distro}' | sed 's/ (.*)//')" \
 	--disable-alsa \
 	--disable-attr \
@@ -514,6 +513,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--disable-debug-tcg \
 	--disable-dmg \
 	--disable-docs \
+	--disable-download \
 	--disable-dsound \
 	--disable-fdt \
 	--disable-fuse \
