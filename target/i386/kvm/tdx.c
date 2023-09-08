@@ -1189,6 +1189,7 @@ static int setup_td_guest_attributes(X86CPU *x86cpu)
 
     if (tdx_guest_need_prebinding() || tdx_guest_need_binding()) {
         tdx_guest->attributes |= TDX_TD_ATTRIBUTES_MIG;
+        kvm_ram_default_shared = true;
     }
 
     return tdx_validate_attributes(tdx_guest);

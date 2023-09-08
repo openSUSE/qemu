@@ -103,6 +103,7 @@ bool kvm_direct_msi_allowed;
 bool kvm_ioeventfd_any_length_allowed;
 bool kvm_msi_use_devid;
 bool kvm_has_guest_debug;
+bool kvm_ram_default_shared;
 int kvm_vm_type;
 static int kvm_sstep_flags;
 static bool kvm_immediate_exit;
@@ -1430,7 +1431,8 @@ static void kvm_set_phys_mem(KVMMemoryListener *kml,
         }
 
         /* If TDX VM, make the default region private. */
-        if (object_dynamic_cast(OBJECT(MACHINE(qdev_get_machine())->cgs),
+        if (!kvm_ram_default_shared &&
+            object_dynamic_cast(OBJECT(MACHINE(qdev_get_machine())->cgs),
                                 "tdx-guest") &&
             memory_region_can_be_private(mr)) {
             err = kvm_encrypt_reg_region(start_addr, slot_size, true);
