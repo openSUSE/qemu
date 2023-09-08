@@ -105,6 +105,12 @@ syscall layer occurs on the native hardware and operating system.
 %prep
 %autosetup -n qemu-%{version}
 
+# We have the meson subprojects there, but as submodules (because OBS
+# SCM bridge can handle the latter, but not the former) so we need to
+# apply the layering of the packagefiles manually
+meson subprojects packagefiles --apply berkeley-testfloat-3
+meson subprojects packagefiles --apply berkeley-softfloat-3
+
 %build
 
 %define rpmfilesdir %{_builddir}/qemu-%{version}/rpm
