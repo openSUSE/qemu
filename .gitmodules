@@ -43,3 +43,18 @@
 [submodule "tests/lcitool/libvirt-ci"]
 	path = tests/lcitool/libvirt-ci
 	url = https://gitlab.com/libvirt/libvirt-ci.git
+[submodule "subprojects/berkeley-softfloat-3"]
+	path = subprojects/berkeley-softfloat-3
+	url = https://gitlab.com/qemu-project/berkeley-softfloat-3
+[submodule "subprojects/berkeley-testfloat-3"]
+	path = subprojects/berkeley-testfloat-3
+	url = https://gitlab.com/qemu-project/berkeley-testfloat-3
+[submodule "subprojects/dtc"]
+	path = subprojects/dtc
+	url = https://gitlab.com/qemu-project/dtc.git
+[submodule "subprojects/libvfio-user"]
+	path = subprojects/libvfio-user
+	url = https://gitlab.com/qemu-project/libvfio-user.git
+[submodule "subprojects/keycodemapdb"]
+	path = subprojects/keycodemapdb
+	url = https://gitlab.com/qemu-project/keycodemapdb.git
