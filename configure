@@ -1047,7 +1047,7 @@ if test "$download" = "enabled" -a "$docs" = "enabled" ; then
 fi
 
 if test "$docs" != "disabled" ; then
-    if ! $mkvenv ensure \
+    if false && ! $mkvenv ensure \
          $mkvenv_flags \
          --diagnose "sphinx-build" \
          "sphinx>=1.6.0" "sphinx-rtd-theme>=0.5.0";
@@ -1058,6 +1058,7 @@ if test "$docs" != "disabled" ; then
         echo "Sphinx not found/usable, disabling docs."
         docs=disabled
     else
+        ln -s /usr/bin/sphinx-build pyvenv/bin/
         docs=enabled
     fi
 fi
