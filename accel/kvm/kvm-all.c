@@ -1430,16 +1430,21 @@ static void kvm_set_phys_mem(KVMMemoryListener *kml,
             abort();
         }
 
-        /* If TDX VM, make the default region private. */
+        /* If TDX VM, make the low mem (0~2GB) private. */
         if (!kvm_ram_default_shared &&
             object_dynamic_cast(OBJECT(MACHINE(qdev_get_machine())->cgs),
                                 "tdx-guest") &&
             memory_region_can_be_private(mr)) {
-            err = kvm_encrypt_reg_region(start_addr, slot_size, true);
-            if (err) {
-                fprintf(stderr, "%s: error converting slot to private: %s\n",
-                        __func__, strerror(-err));
-                abort();
+            if (start_addr == 0) {
+                hwaddr convert_size = 2UL << 30;
+                if (convert_size > slot_size)
+                    convert_size = slot_size;
+                err = kvm_encrypt_reg_region(start_addr, convert_size, true);
+                if (err) {
+                    fprintf(stderr, "%s: error converting slot to private: %s\n",
+                            __func__, strerror(-err));
+                    abort();
+                }
             }
         }
 
