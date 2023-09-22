@@ -136,7 +136,7 @@ int tdx_vtpm_trans_send_direct(QIOChannelSocket *socket_ioc,
     return ret;
 }
 
-void tdx_guest_init_vtpm(TdxGuest *tdx)
+int tdx_guest_init_vtpm(TdxGuest *tdx)
 {
     TdxVmcallService *vms = &tdx->vmcall_service;
     TdxVmcallServiceType vtpm;
@@ -156,7 +156,7 @@ void tdx_guest_init_vtpm(TdxGuest *tdx)
     if (!instance) {
         error_report("Failed to create vtpm %s instance.",
                      vms->vtpm_type);
-        return;
+        return -1;
     }
 
     if (is_server) {
@@ -174,9 +174,10 @@ void tdx_guest_init_vtpm(TdxGuest *tdx)
     vtpm.opaque = instance;
     tdx_vmcall_service_register_type(tdx, &vtpm);
 
-    return;
+    return 0;
  free:
     g_free(instance);
+    return -1;
 }
 
 int socket_recv_buffer_init(SocketRecvBuffer *srb, int init_size)

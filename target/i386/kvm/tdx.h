@@ -175,7 +175,7 @@ TdxVmcallServiceType* tdx_vmcall_service_find_handler(QemuUUID *guid,
                                                       TdxVmcallService *vmc);
 void tdx_vmcall_service_register_type(TdxGuest *tdx,
                                       TdxVmcallServiceType* type);
-void tdx_guest_init_vtpm(TdxGuest *tdx);
+int tdx_guest_init_vtpm(TdxGuest *tdx);
 void tdx_guest_init_service_query(TdxGuest *tdx);
 
 #endif /* QEMU_I386_TDX_H */

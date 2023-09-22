@@ -1476,7 +1476,11 @@ static void tdx_guest_init_vmcall_service_vtpm(TdxGuest *tdx)
         return;
     }
 
-    tdx_guest_init_vtpm(tdx);
+    if (!tdx_guest_init_vtpm(tdx))
+    {
+        bool vtpm_enabled = true;
+        tdx_vm_ioctl(KVM_TDX_SET_VTPM_ENABLED, 0, &vtpm_enabled);
+    }
 }
 
 static void tdx_guest_set_vtpm_type(Object *obj, const char *val, Error **err)
