@@ -864,14 +864,15 @@ static void multifd_new_send_channel_cleanup(MultiFDSendParams *p,
                                              QIOChannel *ioc, Error *err)
 {
      migrate_set_error(migrate_get_current(), err);
-     /* Error happen, we need to tell who pay attention to me */
+
+    /*
+     * Although multifd_send_thread is not created, but main migration
+     * thread need to judge whether it is running, so we need to mark
+     * its status.
+     */
+    p->quit = true;
+
      qemu_sem_post(&p->sem_sync);
-     /*
-      * Although multifd_send_thread is not created, but main migration
-      * thread need to judge whether it is running, so we need to mark
-      * its status.
-      */
-     p->quit = true;
      object_unref(OBJECT(ioc));
      error_free(err);
 }
