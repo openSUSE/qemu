@@ -746,7 +746,8 @@ static void *multifd_send_thread(void *opaque)
     }
 
 out:
-    if (local_err) {
+    if (ret) {
+        assert(local_err);
         trace_multifd_send_error(p->id);
         multifd_send_terminate_threads(local_err);
         error_free(local_err);
@@ -758,6 +759,7 @@ out:
      */
     if (ret != 0) {
         qemu_sem_post(&p->sem_sync);
+        error_free(local_err);
     }
 
     qemu_mutex_lock(&p->mutex);
