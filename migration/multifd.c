@@ -466,23 +466,11 @@ int multifd_queue_page(QEMUFile *f, RAMBlock *block, ram_addr_t offset)
     return 1;
 }
 
-static void multifd_send_terminate_threads(Error *err)
+static void multifd_send_terminate_threads(void)
 {
     int i;
 
-    trace_multifd_send_terminate_threads(err != NULL);
-
-    if (err) {
-        MigrationState *s = migrate_get_current();
-        migrate_set_error(s, err);
-        if (s->state == MIGRATION_STATUS_SETUP ||
-            s->state == MIGRATION_STATUS_PRE_SWITCHOVER ||
-            s->state == MIGRATION_STATUS_DEVICE ||
-            s->state == MIGRATION_STATUS_ACTIVE) {
-            migrate_set_state(&s->state, s->state,
-                              MIGRATION_STATUS_FAILED);
-        }
-    }
+    trace_multifd_send_terminate_threads();
 
     /*
      * We don't want to exit each threads twice.  Depending on where
@@ -519,7 +507,7 @@ void multifd_save_cleanup(void)
     if (!migrate_multifd()) {
         return;
     }
-    multifd_send_terminate_threads(NULL);
+    multifd_send_terminate_threads();
     for (i = 0; i < migrate_multifd_channels(); i++) {
         MultiFDSendParams *p = &multifd_send_state->params[i];
 
@@ -747,17 +735,21 @@ static void *multifd_send_thread(void *opaque)
 
 out:
     if (ret) {
-        assert(local_err);
-        trace_multifd_send_error(p->id);
-        multifd_send_terminate_threads(local_err);
-        error_free(local_err);
-    }
+        MigrationState *s = migrate_get_current();
 
-    /*
-     * Error happen, I will exit, but I can't just leave, tell
-     * who pay attention to me.
-     */
-    if (ret != 0) {
+        trace_multifd_send_error(p->id);
+        assert(local_err);
+        migrate_set_error(s, local_err);
+
+        if (s->state == MIGRATION_STATUS_SETUP ||
+            s->state == MIGRATION_STATUS_PRE_SWITCHOVER ||
+            s->state == MIGRATION_STATUS_DEVICE ||
+            s->state == MIGRATION_STATUS_ACTIVE) {
+            migrate_set_state(&s->state, s->state,
+                              MIGRATION_STATUS_FAILED);
+        }
+
+        multifd_send_terminate_threads();
         qemu_sem_post(&p->sem_sync);
         error_free(local_err);
     }
