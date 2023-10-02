@@ -631,6 +631,25 @@ int multifd_send_sync_main(QEMUFile *f)
     return 0;
 }
 
+/*
+ * Mark that the thread has quit (including if it never even started)
+ * and release any waiters that might be stuck.
+ */
+static void multifd_send_thread_release(MultiFDSendParams *p)
+{
+    /*
+     * Not all instances where this function is called happen with a
+     * live thread, but let's be conservative and always take the
+     * lock.
+     */
+    qemu_mutex_lock(&p->mutex);
+    p->quit = true;
+    qemu_mutex_unlock(&p->mutex);
+
+    qemu_sem_post(&multifd_send_state->channels_ready);
+    qemu_sem_post(&p->sem_sync);
+}
+
 static void *multifd_send_thread(void *opaque)
 {
     MultiFDSendParams *p = opaque;
@@ -750,7 +769,7 @@ out:
         }
 
         multifd_send_terminate_threads();
-        qemu_sem_post(&p->sem_sync);
+        multifd_send_thread_release(p);
         error_free(local_err);
     }
 
@@ -784,13 +803,7 @@ static void multifd_tls_outgoing_handshake(QIOTask *task,
     }
 
     trace_multifd_tls_outgoing_handshake_error(ioc, error_get_pretty(err));
-
-    /*
-     * Error happen, mark multifd_send_thread status as 'quit' although it
-     * is not created, and then tell who pay attention to me.
-     */
-    p->quit = true;
-    qemu_sem_post(&p->sem_sync);
+    multifd_send_thread_release(p);
 }
 
 static void *multifd_tls_handshake_thread(void *opaque)
@@ -859,15 +872,7 @@ static void multifd_new_send_channel_cleanup(MultiFDSendParams *p,
                                              QIOChannel *ioc, Error *err)
 {
      migrate_set_error(migrate_get_current(), err);
-
-    /*
-     * Although multifd_send_thread is not created, but main migration
-     * thread need to judge whether it is running, so we need to mark
-     * its status.
-     */
-    p->quit = true;
-
-     qemu_sem_post(&p->sem_sync);
+    multifd_send_thread_release(p);
      object_unref(OBJECT(ioc));
      error_free(err);
 }
