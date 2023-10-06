@@ -234,6 +234,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--disable-pa \
 	--disable-parallels \
 	--disable-pie \
+	--disable-pipewire \
 	--disable-plugins \
 	--disable-png \
 	--disable-pvrdma \
