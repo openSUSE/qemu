@@ -170,6 +170,7 @@ BuildRequires:  pkgconfig(libiscsi) >= 1.9.0
 BuildRequires:  pkgconfig(libjpeg)
 BuildRequires:  pkgconfig(libnfs) >= 1.9.3
 BuildRequires:  pkgconfig(libpng)
+BuildRequires:  pkgconfig(libpipewire-0.3)
 BuildRequires:  pkgconfig(libpulse)
 BuildRequires:  pkgconfig(libsasl2)
 BuildRequires:  pkgconfig(libseccomp) >= 2.3.0
@@ -567,6 +568,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--disable-pa \
 	--disable-parallels \
 	--disable-pie \
+	--disable-pipewire \
 	--disable-plugins \
 	--disable-png \
 	--disable-pvrdma \
@@ -630,7 +632,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 %if "%{_lto_cflags}" != "%{nil}"
 	--enable-lto \
 %endif
-	--audio-drv-list=pa,alsa,jack,oss \
+	--audio-drv-list=pipewire,pa,alsa,jack,oss \
 	--enable-auth-pam \
 %ifarch x86_64
 	--enable-avx2 \
@@ -695,6 +697,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-pa \
 	--enable-parallels \
 	--enable-pie \
+	--enable-pipewire \
 	--enable-png \
 	--enable-pvrdma \
 	--enable-qcow1 \
@@ -1238,6 +1241,18 @@ This package contains a module for OSS based audio support for QEMU.
 %files audio-oss
 %dir %_libdir/%name
 %_libdir/%name/audio-oss.so
+
+%package audio-pipewire
+Summary:        Pipewire based audio support for QEMU
+Group:          System/Emulators/PC
+%{qemu_module_conflicts}
+
+%description audio-pipewire
+This package contains a module for Pipewire based audio support for QEMU.
+
+%files audio-pipewire
+%dir %_libdir/%name
+%_libdir/%name/audio-pipewire.so
 
 %package block-curl
 Summary:        cURL block support for QEMU
