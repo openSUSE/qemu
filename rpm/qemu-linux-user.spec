@@ -103,7 +103,7 @@ syscall layer occurs on the native hardware and operating system.
 %_prefix/lib/binfmt.d/qemu-*.conf
 
 %prep
-%autosetup -n qemu-%{version}
+%autosetup -n qemu-%{version} -p1
 
 # We have the meson subprojects there, but as submodules (because OBS
 # SCM bridge can handle the latter, but not the former) so we need to
