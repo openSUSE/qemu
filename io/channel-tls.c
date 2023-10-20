@@ -177,11 +177,12 @@ static void qio_channel_tls_handshake_task(QIOChannelTLS *ioc,
         }
 
         trace_qio_channel_tls_handshake_pending(ioc, status);
-        qio_channel_add_watch(ioc->master,
-                              condition,
-                              qio_channel_tls_handshake_io,
-                              task,
-                              NULL);
+        ioc->hs_ioc_tag =
+            qio_channel_add_watch(ioc->master,
+                                  condition,
+                                  qio_channel_tls_handshake_io,
+                                  task,
+                                  NULL);
     }
 
  cleanup:
@@ -197,6 +198,7 @@ static gboolean qio_channel_tls_handshake_io(QIOChannel *ioc,
     QIOChannelTLS *tioc = QIO_CHANNEL_TLS(
         qio_task_get_source(task));
 
+    tioc->hs_ioc_tag = 0;
     qio_channel_tls_handshake_task(
        tioc, task);
 
@@ -345,6 +347,11 @@ static int qio_channel_tls_close(QIOChannel *ioc,
                                  Error **errp)
 {
     QIOChannelTLS *tioc = QIO_CHANNEL_TLS(ioc);
+
+    if (tioc->hs_ioc_tag) {
+        g_source_remove(tioc->hs_ioc_tag);
+        tioc->hs_ioc_tag = 0;
+    }
 
     return qio_channel_close(tioc->master, errp);
 }
