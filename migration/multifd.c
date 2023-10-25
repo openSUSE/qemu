@@ -434,6 +434,7 @@ static int multifd_send_pages(void)
     }
 
     qemu_sem_wait(&multifd_send_state->channels_ready);
+
     /*
      * next_channel can remain from a previous migration that was
      * using more channels, so ensure it doesn't overflow if the
