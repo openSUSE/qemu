@@ -437,6 +437,7 @@ static int multifd_send_pages(void)
     }
 
     qemu_sem_wait(&multifd_send_state->channels_ready);
+
     /*
      * next_channel can remain from a previous migration that was
      * using more channels, so ensure it doesn't overflow if the
@@ -652,6 +653,11 @@ int multifd_send_sync_main(void)
 
             qemu_mutex_lock(&p->mutex);
             assert(!p->pending_job || p->quit);
+            if (p->quit) {
+                error_report("%s: channel %d has already quit!", __func__, i);
+                qemu_mutex_unlock(&p->mutex);
+                return -1;
+            }
             qemu_mutex_unlock(&p->mutex);
 
             qemu_sem_post(&p->sem);
