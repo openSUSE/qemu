@@ -851,6 +851,7 @@ static bool multifd_channel_connect(MultiFDSendParams *p,
         migration_ioc_register_yank(ioc);
         p->registered_yank = true;
         p->c = ioc;
+        p->running = true;
         qemu_thread_create(&p->thread, p->name, multifd_send_thread, p,
                            QEMU_THREAD_JOINABLE);
     }
@@ -884,7 +885,6 @@ static void multifd_new_send_channel_async(QIOTask *task, gpointer opaque)
     if (!qio_task_propagate_error(task, &local_err)) {
         p->c = ioc;
         qio_channel_set_delay(p->c, false);
-        p->running = true;
         if (multifd_channel_connect(p, ioc, &local_err)) {
             return;
         }
