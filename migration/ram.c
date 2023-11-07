@@ -2767,7 +2767,7 @@ static void ram_list_init_bitmaps(void)
         }
 
         RAMBLOCK_FOREACH_NOT_IGNORED(block) {
-            pages = block->max_length >> TARGET_PAGE_BITS;
+            pages = block->used_length >> TARGET_PAGE_BITS;
             /*
              * The initial dirty bitmap for migration must be set with all
              * ones to make sure we'll migrate every guest RAM page to
@@ -3438,7 +3438,7 @@ int colo_init_ram_cache(void)
     */
     if (ram_bytes_total()) {
         RAMBLOCK_FOREACH_NOT_IGNORED(block) {
-            unsigned long pages = block->max_length >> TARGET_PAGE_BITS;
+            unsigned long pages = block->used_length >> TARGET_PAGE_BITS;
             block->bmap = bitmap_new(pages);
         }
     }
@@ -3460,7 +3460,7 @@ void colo_incoming_start_dirty_log(void)
         RAMBLOCK_FOREACH_NOT_IGNORED(block) {
             ramblock_sync_dirty_bitmap(ram_state, block);
             /* Discard this dirty bitmap record */
-            bitmap_zero(block->bmap, block->max_length >> TARGET_PAGE_BITS);
+            bitmap_zero(block->bmap, block->used_length >> TARGET_PAGE_BITS);
         }
         memory_global_dirty_log_start(GLOBAL_DIRTY_MIGRATION);
     }
