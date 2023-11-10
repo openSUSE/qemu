@@ -48,4 +48,5 @@ char *find_common_machine_version(const char *mtype, const char *var1,
 char *resolve_machine_version(const char *alias, const char *var1,
                               const char *var2);
 bool probe_o_direct_support(const char *tmpfs);
+void migration_test_add(const char *path, void (*fn)(void));
 #endif /* MIGRATION_HELPERS_H */
