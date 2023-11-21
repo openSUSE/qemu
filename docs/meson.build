@@ -13,12 +13,12 @@ if sphinx_build.found()
   sphinx_version = run_command(SPHINX_ARGS + ['--version'],
                                check: true).stdout().split()[1]
   if sphinx_version.version_compare('>=1.7.0')
-    SPHINX_ARGS += ['-j', 'auto']
+    SPHINX_ARGS += ['-j', '1']
   else
     nproc = find_program('nproc')
     if nproc.found()
       jobs = run_command(nproc, check: true).stdout()
-      SPHINX_ARGS += ['-j', jobs]
+      SPHINX_ARGS += ['-j', '1']
     endif
   endif
 
