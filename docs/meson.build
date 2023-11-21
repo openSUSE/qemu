@@ -10,6 +10,9 @@ if sphinx_build.found()
     SPHINX_ARGS += [ '-W', '-Dkerneldoc_werror=1' ]
   endif
 
+  # Make Sphinx build reproducible (boo#1102408)
+  SPHINX_ARGS += ['-j', '1']
+
   # This is a bit awkward but works: create a trivial document and
   # try to run it with our configuration file (which enforces a
   # version requirement). This will fail if sphinx-build is too old.
