@@ -100,7 +100,7 @@ syscall layer occurs on the native hardware and operating system.
 %_prefix/lib/binfmt.d/qemu-*.conf
 
 %prep
-%autosetup -n %{srcname}-%{srcver}
+%autosetup -n %{srcname}-%{srcver} -p1
 
 %build
 
