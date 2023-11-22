@@ -1644,7 +1644,7 @@ It can be used as partition firmware for pSeries machines running on QEMU or KVM
 %endif
 
 %prep
-%autosetup -n %{srcname}-%{srcver}
+%autosetup -n %{srcname}-%{srcver} -p1
 
 # for the record, this set of firmware files is installed, but we don't
 # build (yet): bamboo.dtb canyonlands.dtb hppa-firmware.img openbios-ppc

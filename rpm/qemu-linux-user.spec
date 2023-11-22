@@ -97,7 +97,7 @@ syscall layer occurs on the native hardware and operating system.
 %_sbindir/qemu-binfmt-conf.sh
 
 %prep
-%autosetup -n %{srcname}-%{srcver}
+%autosetup -n %{srcname}-%{srcver} -p1
 
 %build
 
