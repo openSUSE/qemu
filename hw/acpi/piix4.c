@@ -20,6 +20,7 @@
  */
 
 #include "qemu/osdep.h"
+#include "qemu/qemu-print.h"
 #include "hw/i386/pc.h"
 #include "hw/southbridge/piix.h"
 #include "hw/irq.h"
@@ -269,6 +270,41 @@ static bool piix4_vmstate_need_smbus(void *opaque, int version_id)
     return pm_smbus_vmstate_needed();
 }
 
+/*
+ * An incorrect function was passed to the VMSTATE_PCI_HOTPLUG macro.
+ * This function received a pointer to PIIX4PMState, but referenced it
+ * as AcpiPciHpState. The used memory area used to be zero. As a result
+ * the sending side did not place "acpi_index" into the migration
+ * stream, and the receiving side did not expect "acpi_index" in the
+ * migration stream.
+ *
+ * At some point the layout of PIIX4PMState changed, and the memory area
+ * was non-zero. As a result the sending side placed "acpi_index" into
+ * the migration stream, and the receiving side expected "acpi_index" in
+ * the migration stream. If both sides ran different variants of this
+ * v6.2 qemu, a mismatch occurred and the migration was aborted.
+ *
+ * Since in the past the function always returned false, this behavior
+ * is preserved: "acpi_index" is neither send nor expected in the
+ * migration stream. This was fixed properly in v7.0.
+ */
+static bool vmstate_suse_force_disable_piix4_acpi_index(void *opaque, int version_id)
+{
+#if 0
+     union {
+         AcpiPciHpState *wrong;
+         PIIX4PMState *correct;
+     } u;
+     uint32_t acpi_index;
+     bool use_acpi_hotplug_bridge;
+     u.correct = opaque;
+     acpi_index = u.wrong->acpi_index;
+     use_acpi_hotplug_bridge = u.correct->use_acpi_hotplug_bridge;
+     qemu_printf("%s: bug#1216985 acpi_index %x, use_acpi_hotplug_bridge %x\n",
+                __func__, acpi_index, use_acpi_hotplug_bridge);
+#endif
+     return false;
+}
 /* qemu-kvm 1.2 uses version 3 but advertised as 2
  * To support incoming qemu-kvm 1.2 migration, change version_id
  * and minimum_version_id to 2 below (which breaks migration from
@@ -299,7 +335,7 @@ static const VMStateDescription vmstate_acpi = {
             struct AcpiPciHpPciStatus),
         VMSTATE_PCI_HOTPLUG(acpi_pci_hotplug, PIIX4PMState,
                             vmstate_test_use_acpi_hotplug_bridge,
-                            vmstate_acpi_pcihp_use_acpi_index),
+                            vmstate_suse_force_disable_piix4_acpi_index),
         VMSTATE_END_OF_LIST()
     },
     .subsections = (const VMStateDescription*[]) {
