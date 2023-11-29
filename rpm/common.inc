@@ -27,8 +27,8 @@
 %define _lto_cflags %{nil}
 %endif
 
-%define qemuver 7.1.0
-%define srcver  7.1.0
+%define qemuver 7.2.0
+%define srcver  7.2.0
 %define sbver   1.16.0_0_gd239552
 %define srcname qemu
 

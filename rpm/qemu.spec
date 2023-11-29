@@ -114,7 +114,7 @@ BuildRequires:  cross-ppc64-gcc%gcc_version
 %endif
 %ifarch x86_64
 BuildRequires:  gcc-32bit
-BuildRequires:  xen-devel >= 4.2
+#BuildRequires:  xen-devel >= 4.2
 BuildRequires:  pkgconfig(libpmem)
 %endif
 %ifnarch %arm s390x
@@ -402,7 +402,7 @@ Recommends:     qemu-microvm
 This package provides i386 and x86_64 emulation.
 
 %files x86
-%_bindir/qemu-system-i386
+#%_bindir/qemu-system-i386
 %_bindir/qemu-system-x86_64
 %_datadir/%name/kvmvapic.bin
 %_datadir/%name/linuxboot.bin
@@ -412,6 +412,7 @@ This package provides i386 and x86_64 emulation.
 %_datadir/%name/pvh.bin
 %doc %_docdir/qemu-x86
 
+%if 0
 %package ppc
 Summary:        Machine emulator and virtualizer for Power architectures
 Group:          System/Emulators/PC
@@ -480,6 +481,7 @@ This package provides arm emulation.
 %_bindir/qemu-system-aarch64
 %_datadir/%name/npcm7xx_bootrom.bin
 %doc %_docdir/qemu-arm
+%endif
 
 %package extra
 Summary:        Machine emulator and virtualizer for "extra" architectures
@@ -499,6 +501,7 @@ mips, sparc, and xtensa. (The term "extra" is juxtapositioned against more
 popular QEMU packages which are dedicated to a single architecture.)
 
 %files extra
+%if 0
 %_bindir/qemu-system-alpha
 %_bindir/qemu-system-avr
 %_bindir/qemu-system-cris
@@ -523,6 +526,7 @@ popular QEMU packages which are dedicated to a single architecture.)
 %_bindir/qemu-system-tricore
 %_bindir/qemu-system-xtensa
 %_bindir/qemu-system-xtensaeb
+%endif
 %_datadir/%name/hppa-firmware.img
 %_datadir/%name/openbios-sparc32
 %_datadir/%name/openbios-sparc64
@@ -533,6 +537,17 @@ popular QEMU packages which are dedicated to a single architecture.)
 %_datadir/%name/petalogix-s3adsp1800.dtb
 %_datadir/%name/QEMU,cgthree.bin
 %_datadir/%name/QEMU,tcx.bin
+# Files coming from suppressed subpackages
+%_datadir/%name/bamboo.dtb
+%_datadir/%name/canyonlands.dtb
+%_datadir/%name/openbios-ppc
+%_datadir/%name/qemu_vga.ndrv
+%_datadir/%name/u-boot.e500
+%_datadir/%name/u-boot-sam460-20100605.bin
+%_datadir/%name/vof*.bin
+%_datadir/%name/s390-ccw.img
+%_datadir/%name/s390-netboot.img
+%_datadir/%name/npcm7xx_bootrom.bin
 
 %package lang
 Summary:        Translations for QEMU
@@ -1139,7 +1154,7 @@ This package provides the TCG accelerator for QEMU.
 %files accel-tcg-x86
 %dir %_datadir/%name
 %dir %_libdir/%name
-%_libdir/%name/accel-tcg-i386.so
+#%_libdir/%name/accel-tcg-i386.so
 %_libdir/%name/accel-tcg-x86_64.so
 
 %package accel-qtest
@@ -1158,6 +1173,7 @@ This package provides QTest accelerator for testing QEMU.
 %files accel-qtest
 %dir %_datadir/%name
 %dir %_libdir/%name
+%if 0
 %_libdir/%name/accel-qtest-aarch64.so
 %_libdir/%name/accel-qtest-alpha.so
 %_libdir/%name/accel-qtest-arm.so
@@ -1186,9 +1202,10 @@ This package provides QTest accelerator for testing QEMU.
 %_libdir/%name/accel-qtest-sparc.so
 %_libdir/%name/accel-qtest-sparc64.so
 %_libdir/%name/accel-qtest-tricore.so
-%_libdir/%name/accel-qtest-x86_64.so
 %_libdir/%name/accel-qtest-xtensa.so
 %_libdir/%name/accel-qtest-xtensaeb.so
+%endif
+%_libdir/%name/accel-qtest-x86_64.so
 
 %if 0%{?with_rbd}
 %package block-rbd
@@ -1519,6 +1536,7 @@ cd %blddir
 EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g') -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -Wno-error"
 
 %srcdir/configure \
+	--target-list=x86_64-softmmu \
 	--docdir=%_docdir \
 	--datadir=%_datadir \
 	--extra-cflags="${EXTRA_CFLAGS}" \
@@ -1675,8 +1693,6 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 %ifarch x86_64
 	--enable-avx2 \
 	--enable-libpmem \
-	--enable-xen \
-	--enable-xen-pci-passthrough \
 %endif
 %ifnarch %arm s390x
 	--enable-numa \
@@ -1743,8 +1759,8 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-replication \
 	--enable-seccomp \
 	--enable-selinux \
+	--enable-slirp \
 	--enable-slirp-smbd \
-	--enable-slirp=system \
 	--enable-smartcard \
 	--enable-snappy \
 	--enable-spice \
@@ -1899,10 +1915,10 @@ install -D -m 0755 scripts/analyze-migration.py  %{buildroot}%_bindir/analyze-mi
 install -D -m 0755 scripts/vmstate-static-checker.py  %{buildroot}%_bindir/vmstate-static-checker.py
 install -D -m 0755 scripts/kvm/vmxcap  %{buildroot}%_bindir/vmxcap
 install -D -m 0755 %{rpmfilesdir}/qemu-supportconfig %{buildroot}/usr/lib/supportconfig/plugins/%name
-install -D -m 0644 %{rpmfilesdir}/supported.arm.txt %{buildroot}%_docdir/qemu-arm/supported.txt
-install -D -m 0644 %{rpmfilesdir}/supported.ppc.txt %{buildroot}%_docdir/qemu-ppc/supported.txt
+#install -D -m 0644 %{rpmfilesdir}/supported.arm.txt %{buildroot}%_docdir/qemu-arm/supported.txt
+#install -D -m 0644 %{rpmfilesdir}/supported.ppc.txt %{buildroot}%_docdir/qemu-ppc/supported.txt
 install -D -m 0644 %{rpmfilesdir}/supported.x86.txt %{buildroot}%_docdir/qemu-x86/supported.txt
-install -D -m 0644 %{rpmfilesdir}/supported.s390.txt %{buildroot}%_docdir/qemu-s390x/supported.txt
+#install -D -m 0644 %{rpmfilesdir}/supported.s390.txt %{buildroot}%_docdir/qemu-s390x/supported.txt
 
 %if %{legacy_qemu_kvm}
 install -D -m 0644 %{rpmfilesdir}/qemu-kvm.1.gz %{buildroot}%_mandir/man1/qemu-kvm.1.gz
