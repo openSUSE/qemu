@@ -10,6 +10,7 @@
 #include "qemu/error-report.h"
 #include "qapi/error.h"
 #include "channel.h"
+#include "fd.h"
 #include "file.h"
 #include "migration.h"
 #include "io/channel-file.h"
@@ -65,8 +66,13 @@ void file_send_channel_create(QIOTaskFunc f, void *data)
     QIOTask *task;
     Error *err = NULL;
     int flags = O_WRONLY;
+    int fd = fd_args_get_fd();
 
-    ioc = qio_channel_file_new_path(outgoing_args.fname, flags, 0, &err);
+    if (fd && fd != -1) {
+        ioc = qio_channel_file_new_fd(fd);
+    } else {
+        ioc = qio_channel_file_new_path(outgoing_args.fname, flags, 0, &err);
+    }
 
     task = qio_task_new(OBJECT(ioc), f, (gpointer)data, NULL);
     if (!ioc) {
