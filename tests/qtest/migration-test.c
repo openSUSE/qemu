@@ -2135,6 +2135,14 @@ static void *test_mode_reboot_start(QTestState *from, QTestState *to)
     return NULL;
 }
 
+static void *migrate_fixed_ram_start(QTestState *from, QTestState *to)
+{
+    migrate_set_capability(from, "fixed-ram", true);
+    migrate_set_capability(to, "fixed-ram", true);
+
+    return NULL;
+}
+
 static void test_mode_reboot(void)
 {
     g_autofree char *uri = g_strdup_printf("file:%s/%s", tmpfs,
@@ -2144,6 +2152,32 @@ static void test_mode_reboot(void)
         .connect_uri = uri,
         .listen_uri = "defer",
         .start_hook = test_mode_reboot_start
+    };
+
+    test_file_common(&args, true);
+}
+
+static void test_precopy_file_fixed_ram_live(void)
+{
+    g_autofree char *uri = g_strdup_printf("file:%s/%s", tmpfs,
+                                           FILE_TEST_FILENAME);
+    MigrateCommon args = {
+        .connect_uri = uri,
+        .listen_uri = "defer",
+        .start_hook = migrate_fixed_ram_start,
+    };
+
+    test_file_common(&args, false);
+}
+
+static void test_precopy_file_fixed_ram(void)
+{
+    g_autofree char *uri = g_strdup_printf("file:%s/%s", tmpfs,
+                                           FILE_TEST_FILENAME);
+    MigrateCommon args = {
+        .connect_uri = uri,
+        .listen_uri = "defer",
+        .start_hook = migrate_fixed_ram_start,
     };
 
     test_file_common(&args, true);
@@ -2397,12 +2431,30 @@ static void *migrate_precopy_fd_file_start(QTestState *from, QTestState *to)
     return NULL;
 }
 
+static void *migrate_fd_file_fixed_ram_start(QTestState *from, QTestState *to)
+{
+    migrate_fixed_ram_start(from, to);
+
+    return migrate_precopy_fd_file_start(from, to);
+}
+
 static void test_migrate_precopy_fd_file(void)
 {
     MigrateCommon args = {
         .listen_uri = "defer",
         .connect_uri = "fd:fd-mig",
         .start_hook = migrate_precopy_fd_file_start,
+        .finish_hook = test_migrate_fd_finish_hook
+    };
+    test_file_common(&args, true);
+}
+
+static void test_migrate_precopy_fd_file_fixed_ram(void)
+{
+    MigrateCommon args = {
+        .listen_uri = "defer",
+        .connect_uri = "fd:fd-mig",
+        .start_hook = migrate_fd_file_fixed_ram_start,
         .finish_hook = test_migrate_fd_finish_hook
     };
     test_file_common(&args, true);
@@ -3431,6 +3483,11 @@ int main(int argc, char **argv)
         qtest_add_func("/migration/mode/reboot", test_mode_reboot);
     }
 
+    qtest_add_func("/migration/precopy/file/fixed-ram",
+                   test_precopy_file_fixed_ram);
+    qtest_add_func("/migration/precopy/file/fixed-ram/live",
+                   test_precopy_file_fixed_ram_live);
+
 #ifdef CONFIG_GNUTLS
     qtest_add_func("/migration/precopy/unix/tls/psk",
                    test_precopy_unix_tls_psk);
@@ -3489,6 +3546,8 @@ int main(int argc, char **argv)
 #ifndef _WIN32
     qtest_add_func("/migration/precopy/fd/tcp", test_migrate_precopy_fd_socket);
     qtest_add_func("/migration/precopy/fd/file", test_migrate_precopy_fd_file);
+    qtest_add_func("/migration/precopy/fd/file/fixed-ram",
+                   test_migrate_precopy_fd_file_fixed_ram);
 #endif
     qtest_add_func("/migration/validate_uuid", test_validate_uuid);
     qtest_add_func("/migration/validate_uuid_error", test_validate_uuid_error);
