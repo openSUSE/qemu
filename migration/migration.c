@@ -354,6 +354,46 @@ static void migrate_generate_event(int new_state)
     }
 }
 
+void migration_direct_io_start(QEMUFile *file, off_t align)
+{
+    off_t base;
+
+    if (!migrate_direct_io() || migrate_multifd()) {
+        return;
+    }
+
+    base = qemu_get_offset(file);
+    if (base < 0 || qemu_file_get_error(file)) {
+        goto err_align;
+    }
+
+    qemu_set_offset(file, ROUND_UP(base, align), SEEK_SET);
+
+    if (qemu_file_get_error(file)) {
+        goto err_align;
+    }
+
+    if (!qemu_file_set_direct_io(file, true)) {
+        error_report("Failed to enable direct-io");
+    }
+
+    return;
+
+err_align:
+    error_report("Failed to align stream for direct-io");
+}
+
+void migration_direct_io_finish(QEMUFile *file)
+{
+    if (!migrate_direct_io() || migrate_multifd()) {
+        return;
+    }
+
+    if (!qemu_file_set_direct_io(file, false)) {
+        error_report("Failed to disable direct-io");
+    }
+}
+
 /*
  * Send a message on the return channel back to the source
  * of the migration.
