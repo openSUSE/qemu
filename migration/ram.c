@@ -2246,6 +2246,9 @@ static int ram_save_host_page(RAMState *rs, PageSearchStatus *pss)
     /* Update host page boundary information */
     pss_host_page_prepare(pss);
 
+    migration_direct_io_start(pss->pss_channel,
+                              FIXED_RAM_FILE_OFFSET_ALIGNMENT);
+
     do {
         page_dirty = migration_bitmap_clear_dirty(rs, pss->block, pss->page);
 
@@ -2279,6 +2282,7 @@ static int ram_save_host_page(RAMState *rs, PageSearchStatus *pss)
 
         if (tmppages < 0) {
             pss_host_page_finish(pss);
+            migration_direct_io_finish(pss->pss_channel);
             return tmppages;
         }
 
@@ -2286,6 +2290,7 @@ static int ram_save_host_page(RAMState *rs, PageSearchStatus *pss)
     } while (pss_within_range(pss));
 
     pss_host_page_finish(pss);
+    migration_direct_io_finish(pss->pss_channel);
 
     res = ram_save_release_protection(rs, pss, start_page);
     return (res < 0 ? res : pages);
