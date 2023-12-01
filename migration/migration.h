@@ -550,4 +550,7 @@ void migration_rp_kick(MigrationState *s);
 
 int migration_stop_vm(RunState state);
 
+void migration_direct_io_start(QEMUFile *file, off_t align);
+void migration_direct_io_finish(QEMUFile *file);
+
 #endif

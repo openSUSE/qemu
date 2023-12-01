@@ -916,3 +916,15 @@ int qemu_file_get_to_fd(QEMUFile *f, int fd, size_t size)
 
     return 0;
 }
+
+bool qemu_file_set_direct_io(QEMUFile *f, bool enabled)
+{
+    Error *local_err = NULL;
+
+    qio_channel_file_set_direct_io(f->ioc, enabled, &local_err);
+    if (local_err) {
+        qemu_file_set_error_obj(f, -EINVAL, local_err);
+        return false;
+    }
+    return true;
+}
