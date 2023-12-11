@@ -990,6 +990,24 @@ make -O V=1 VERBOSE=1 -j1 check-qtest
 # enable this at a later point
 #make -O V=1 VERBOSE=1 -j1 check-report.junit.xml
 
+%package spice
+Summary:        Modules and packages for SPICE
+Group:          System/Emulators/PC
+Requires:       qemu-headless
+Requires:       qemu-audio-spice
+Requires:       qemu-chardev-spice
+Requires:       qemu-hw-display-qxl
+Requires:       qemu-hw-usb-redirect
+Requires:       qemu-ui-spice-core
+
+%description spice
+%{generic_qemu_description}
+
+This meta-package brings in, as dependencies, the modules and packages
+necessary for having SPICE working for your VMs.
+
+%files spice
+
 %package headless
 Summary:        Minimum set of packages for having a functional QEMU
 Group:          System/Emulators/PC
@@ -998,10 +1016,7 @@ Requires:       qemu-img
 %if %{legacy_qemu_kvm}
 Requires:       qemu-kvm
 %endif
-Requires:       qemu-hw-usb-redirect
-# qemu-ui-spice-core will bring in qemu-audio-spice qemu-ui-opengl too
-Requires:       qemu-ui-spice-core
-Requires:       qemu-chardev-spice
+Recommends:     qemu-tools
 
 %description headless
 %{generic_qemu_description}
