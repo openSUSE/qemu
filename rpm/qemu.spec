@@ -716,6 +716,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-tcg \
 	--enable-tools \
 	--enable-tpm \
+	--enable-trace-backends=ftrace,log \
 	--enable-usb-redir \
 	--enable-vde \
 	--enable-vdi \
