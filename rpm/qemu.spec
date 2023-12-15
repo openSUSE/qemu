@@ -115,7 +115,9 @@ BuildRequires:  cross-ppc64-gcc%gcc_version
 %endif
 %ifarch x86_64
 BuildRequires:  gcc-32bit
+%if %{with_xen}
 BuildRequires:  xen-devel >= 4.2
+%endif
 BuildRequires:  pkgconfig(libpmem)
 %endif
 %ifnarch %arm s390x
@@ -637,8 +639,10 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 %ifarch x86_64
 	--enable-avx2 \
 	--enable-libpmem \
+%if %{with_xen}
 	--enable-xen \
 	--enable-xen-pci-passthrough \
+%endif
 %endif
 %ifnarch %arm s390x
 	--enable-numa \
