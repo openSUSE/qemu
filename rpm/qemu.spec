@@ -1014,7 +1014,10 @@ necessary for having SPICE working for your VMs.
 Summary:        Minimum set of packages for having a functional QEMU
 Group:          System/Emulators/PC
 Requires:       qemu
+Requires:       qemu-block-curl
+Requires:       qemu-block-nfs
 Requires:       qemu-img
+Requires:       virtiofsd
 %if %{legacy_qemu_kvm}
 Requires:       qemu-kvm
 %endif
