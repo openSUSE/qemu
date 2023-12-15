@@ -3,7 +3,7 @@
 	url = https://github.com/openSUSE/qemu-seabios.git
 [submodule "roms/SLOF"]
 	path = roms/SLOF
-	url = https://gitlab.com/qemu-project/SLOF.git
+	url = https://github.com/openSUSE/qemu-SLOF.git
 [submodule "roms/ipxe"]
 	path = roms/ipxe
 	url = https://github.com/openSUSE/qemu-ipxe.git
