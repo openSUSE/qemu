@@ -364,6 +364,9 @@
 #define __NR_futex_waitv 449
 #define __NR_set_mempolicy_home_node 450
 #define __NR_map_shadow_stack 453
+#define __NR_futex_wake 454
+#define __NR_futex_wait 455
+#define __NR_futex_requeue 456
 
 
 #endif /* _ASM_UNISTD_64_H */
