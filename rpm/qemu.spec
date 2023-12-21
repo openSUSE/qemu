@@ -129,6 +129,9 @@ BuildRequires:  pkgconfig(libndctl)
 %if 0%{?with_rbd}
 BuildRequires:  librbd-devel
 %endif
+%if 0%{with canokey}
+BuildRequires:  canokey-qemu-devel
+%endif
 %if 0%{?with_uring}
 BuildRequires:  pkgconfig(liburing) >= %liburing_min_version
 %endif
@@ -658,6 +661,9 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 %endif
 %if 0%{?with_rbd}
 	--enable-rbd \
+%endif
+%if 0%{with canokey}
+	--enable-canokey \
 %endif
 	--enable-alsa \
 	--enable-attr \
