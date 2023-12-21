@@ -30,6 +30,12 @@
 
 %bcond_with chkqtests
 
+%ifarch x86_64
+%bcond_without canokey
+%else
+%bcond_with canokey
+%endif
+
 # non-x86 archs still seem to have some issues with Link Time Optimization
 %ifnarch %ix86 x86_64
 %define _lto_cflags %{nil}
