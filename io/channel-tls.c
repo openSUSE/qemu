@@ -374,6 +374,7 @@ static int qio_channel_tls_close(QIOChannel *ioc,
     QIOChannelTLS *tioc = QIO_CHANNEL_TLS(ioc);
 
     if (tioc->hs_ioc_tag > 0) {
+        trace_qio_channel_tls_handshake_cancel(ioc);
         g_source_remove(tioc->hs_ioc_tag);
         tioc->hs_ioc_tag = 0;
     }
