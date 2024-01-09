@@ -1027,7 +1027,9 @@ Requires:       qemu
 Requires:       qemu-block-curl
 Requires:       qemu-block-nfs
 Requires:       qemu-img
+%if %{has_virtiofsd}
 Requires:       virtiofsd
+%endif
 %if %{legacy_qemu_kvm}
 Requires:       qemu-kvm
 %endif
@@ -1631,8 +1633,7 @@ Requires(pre):  permissions
 Requires:       qemu-img
 Requires:       qemu-pr-helper
 Requires:       group(kvm)
-# Upstream virtiofsd does not even build on 32 bit systems...
-%ifnarch %ix86 %arm
+%if %{has_virtiofsd}
 Requires:       virtiofsd
 %endif
 Recommends:     multipath-tools
