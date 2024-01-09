@@ -36,6 +36,12 @@
 %bcond_with canokey
 %endif
 
+%define has_virtiofsd 1
+# Upstream virtiofsd does not even build on 32 bit systems
+%ifarch %ix86 %arm
+%define has_virtiofsd 0
+%endif
+
 # non-x86 archs still seem to have some issues with Link Time Optimization
 %ifnarch %ix86 x86_64
 %define _lto_cflags %{nil}
