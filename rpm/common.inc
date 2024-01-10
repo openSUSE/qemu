@@ -30,10 +30,13 @@
 
 %bcond_with chkqtests
 
+%if 0%{?suse_version} > 1600
+# canokey is an openSUSE thing, not a SLE one
 %ifarch x86_64
 %bcond_without canokey
 %else
 %bcond_with canokey
+%endif
 %endif
 
 %define has_virtiofsd 1
