@@ -1,6 +1,6 @@
 %define _buildshell /bin/bash
 
-%define sbver   1.16.2_3_gd478f380
+%define sbver   1.16.3_3_ga6ed6b70
 
 %define srcdir %{_builddir}/%buildsubdir
 %define blddir %srcdir/build
@@ -38,6 +38,18 @@
 %bcond_with canokey
 %endif
 %endif
+
+%if 0%{?suse_version} > 1600
+# XDP seems not to be there in SLE...
+%bcond_without xdp
+%else
+%bcond_with xdp
+%endif
+
+# We do not have the stuff needed to compile rutabaga support.
+# If/when we want to do it, we can check how it's done here:
+#  https://src.fedoraproject.org/rpms/qemu/c/deeb9357cb751df21c566fd8408936cfb034d43b?branch=rawhide
+%define has_rutabaga_gfx 0
 
 %define has_virtiofsd 1
 # Upstream virtiofsd does not even build on 32 bit systems
