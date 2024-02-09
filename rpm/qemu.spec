@@ -653,6 +653,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-xen \
 	--enable-xen-pci-passthrough \
 %endif
+%endif
 %if 0%{with xdp}
 	--enable-af-xdp \
 %endif
@@ -679,7 +680,6 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 %endif
 %ifnarch %arm s390x
 	--enable-numa \
-%endif
 %endif
 %if 0%{?with_rbd}
 	--enable-rbd \
