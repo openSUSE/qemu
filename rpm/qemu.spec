@@ -1004,6 +1004,8 @@ cp %{rpmfilesdir}/APIC.core-count2 %{rpmfilesdir}/DSDT.core-count2 %{rpmfilesdir
 %if 0%{?qemu_user_space_build}
 # Seccomp is not supported by linux-user emulation
 echo 'int main (void) { return 0; }' > %{srcdir}/tests/unit/test-seccomp.c
+# keyctl is not yet supported by linux-user emulation
+echo 'int main (void) { return 0; }' > %{srcdir}/tests/unit/test-crypto-secret.c
 %endif
 
 # Compile the QOM test binary first, so that ...
