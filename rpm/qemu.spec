@@ -268,10 +268,15 @@ Suggests:       qemu-skiboot
 Suggests:       qemu-vhost-user-gpu
 Suggests:       qemu-ui-gtk
 Suggests:       qemu-doc
-## Pacakges we OBSOLETE
-Obsoletes:      qemu-sgabios <= 8
+## Packages we PROVIDE
+Provides:       kvm = %{version}
+Provides:       qemu-kvm = %{version}
+## Pacakges we OBSOLETE (and CONFLICT)
+Obsoletes:      kvm <= %{version}
 Obsoletes:      qemu-audio-oss < %{version}
 Obsoletes:      qemu-audio-sdl < %{version}
+Obsoletes:      qemu-kvm <= %{version}
+Obsoletes:      qemu-sgabios <= 8
 Obsoletes:      qemu-ui-sdl < %{version}
 ## What we do with the main emulator depends on the architecture we're on
 %if %{kvm_available}
@@ -310,6 +315,18 @@ Suggests:       qemu-extra
 This package acts as an umbrella package to the other QEMU sub-packages.
 
 %files
+%if %{kvm_available}
+%ifarch s390x
+%{_prefix}/lib/modules-load.d/kvm.conf
+%endif
+/usr/lib/udev/rules.d/80-kvm.rules
+# End of "if kvm_available"
+%endif
+%if %{legacy_qemu_kvm}
+%doc %_docdir/qemu-kvm
+%_mandir/man1/qemu-kvm.1.gz
+%endif
+%_bindir/qemu-kvm
 %dir %_datadir/icons/hicolor
 %dir %_datadir/icons/hicolor/*/
 %dir %_datadir/icons/hicolor/*/apps
@@ -320,12 +337,6 @@ This package acts as an umbrella package to the other QEMU sub-packages.
 %dir %_sysconfdir/%name/firmware
 %dir /usr/lib/supportconfig
 %dir /usr/lib/supportconfig/plugins
-%if %{kvm_available}
-%ifarch s390x
-%{_prefix}/lib/modules-load.d/kvm.conf
-%endif
-/usr/lib/udev/rules.d/80-kvm.rules
-%endif
 %_datadir/applications/qemu.desktop
 %_datadir/icons/hicolor/16x16/apps/qemu.png
 %_datadir/icons/hicolor/24x24/apps/qemu.png
@@ -919,16 +930,38 @@ install -D -m 0644 %{rpmfilesdir}/qemu-kvm.1.gz %{buildroot}%_mandir/man1/qemu-k
 install -d %{buildroot}%_docdir/qemu-kvm
 # FIXME: Why do we onlly generate the HTML for the legacy package documentation?
 %ifarch s390x
-ln -s qemu-system-s390x %{buildroot}%_bindir/qemu-kvm
 ln -s ../qemu-s390x/supported.txt %{buildroot}%_docdir/qemu-kvm/kvm-supported.txt
 rst2html --exit-status=2 %{buildroot}%_docdir/qemu-s390x/supported.txt %{buildroot}%_docdir/qemu-kvm/kvm-supported.html
 %else
-ln -s qemu-system-x86_64 %{buildroot}%_bindir/qemu-kvm
 ln -s ../qemu-x86/supported.txt %{buildroot}%_docdir/qemu-kvm/kvm-supported.txt
 rst2html --exit-status=2 %{buildroot}%_docdir/qemu-x86/supported.txt %{buildroot}%_docdir/qemu-kvm/kvm-supported.html
 # End of "ifarch s390x"
 %endif
 # End of "if legacy_qemu_kvm"
+%endif
+%ifarch %ix86
+ln -s qemu-system-i386 %{buildroot}%_bindir/qemu-kvm
+%endif
+%ifarch x86_64
+ln -s qemu-system-x86_64 %{buildroot}%_bindir/qemu-kvm
+%endif
+%ifarch %arm
+ln -s qemu-system-arm %{buildroot}%_bindir/qemu-kvm
+%endif
+%ifarch aarch64
+ln -s qemu-system-aarch64 %{buildroot}%_bindir/qemu-kvm
+%endif
+%ifarch ppc
+ln -s qemu-system-ppc %{buildroot}%_bindir/qemu-kvm
+%endif
+%ifarch ppc64 ppc64le
+ln -s qemu-system-ppc64/ %{buildroot}%_bindir/qemu-kvm
+%endif
+%ifarch s390x
+ln -s qemu-system-s390x/ %{buildroot}%_bindir/qemu-kvm
+%endif
+%ifarch riscv64
+ln -s qemu-system-riscv64 %{buildroot}%_bindir/qemu-kvm
 %endif
 
 %if %{kvm_available}
@@ -1150,9 +1183,6 @@ Requires:       qemu-block-nfs
 Requires:       qemu-img
 %if %{has_virtiofsd}
 Requires:       virtiofsd
-%endif
-%if %{legacy_qemu_kvm}
-Requires:       qemu-kvm
 %endif
 Recommends:     qemu-tools
 
@@ -1875,34 +1905,6 @@ for QEMU.
 %dir %_libdir/%name
 %_libdir/%name/block-rbd.so
 # End of "if with_rbd"
-%endif
-
-%if %{legacy_qemu_kvm}
-%package kvm
-Summary:        Wrapper to enable KVM acceleration under QEMU
-Group:          System/Emulators/PC
-%ifarch %ix86 x86_64
-Requires:       qemu-x86 = %{version}
-%endif
-%ifarch s390x
-Requires:       qemu-s390x = %{version}
-%endif
-Provides:       kvm = %{version}
-Obsoletes:      kvm < %{version}
-
-%description kvm
-%{generic_qemu_description}
-
-This package provides a symlink to the main QEMU emulator used for KVM
-virtualization. The symlink is named qemu-kvm, which causes the QEMU program
-to enable the KVM accelerator, due to the name reference ending with 'kvm'.
-This package is an artifact of the early origins of QEMU, and is deprecated.
-
-%files kvm
-%_bindir/qemu-kvm
-%doc %_docdir/qemu-kvm
-%_mandir/man1/qemu-kvm.1.gz
-# End of "if legacy_qemu_kvm"
 %endif
 
 %if %{build_ppc_firmware}
