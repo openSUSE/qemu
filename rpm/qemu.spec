@@ -1103,7 +1103,7 @@ necessary for having SPICE working for your VMs.
 %package audio-spice
 Summary:        Spice based audio support for QEMU
 Group:          System/Emulators/PC
-Requires:       qemu-ui-spice-core
+Requires:       qemu-ui-spice-core = %{version}-%{release}
 %{qemu_module_conflicts}
 
 %description audio-spice
@@ -1116,7 +1116,7 @@ This package contains a module for Spice based audio support for QEMU.
 %package chardev-spice
 Summary:        Spice vmc and port chardev support for QEMU
 Group:          System/Emulators/PC
-Requires:       qemu-ui-spice-core
+Requires:       qemu-ui-spice-core = %{version}-%{release}
 %{qemu_module_conflicts}
 
 %description chardev-spice
@@ -1130,8 +1130,8 @@ This package contains a module for Spice chardev support for QEMU.
 %package ui-spice-app
 Summary:        Spice UI support for QEMU
 Group:          System/Emulators/PC
-Requires:       qemu-chardev-spice
-Requires:       qemu-ui-spice-core
+Requires:       qemu-chardev-spice = %{version}-%{release}
+Requires:       qemu-ui-spice-core = %{version}-%{release}
 %{qemu_module_conflicts}
 
 %description ui-spice-app
@@ -1146,7 +1146,7 @@ Summary:        Core Spice support for QEMU
 Group:          System/Emulators/PC
 Requires:       qemu-ui-opengl
 # This next Requires is only since virt-manager expects audio support
-Requires:       qemu-audio-spice
+Requires:       qemu-audio-spice = %{version}-%{release}
 %{qemu_module_conflicts}
 
 %description ui-spice-core
@@ -1160,7 +1160,7 @@ This package contains a module with core Spice support for QEMU.
 %package hw-display-qxl
 Summary:        QXL display support for QEMU
 Group:          System/Emulators/PC
-Requires:       qemu-ui-spice-core
+Requires:       qemu-ui-spice-core = %{version}-%{release}
 %{qemu_module_conflicts}
 
 %description hw-display-qxl
@@ -1519,6 +1519,12 @@ This package contains a module for baum braille chardev support for QEMU.
 %package hw-display-virtio-gpu
 Summary:        Virtio GPU display support for QEMU
 Group:          System/Emulators/PC
+# Make sure that VGA is pretty much always there. Technically, this isn't
+# really necessary (and/or, should be dealt with in other places) but it
+# makes it easier to deal with strange situation where, e.g., GRUB is
+# configured to work only with a graphical terminal (see bsc#1219164),
+# and the hw-display-virtio-vga package is small enough, anyway.
+Requires:       qemu-hw-display-virtio-vga = %{version}-%{release}
 %{qemu_module_conflicts}
 
 %description hw-display-virtio-gpu
@@ -1532,7 +1538,7 @@ This package contains a module for Virtio GPU display support for QEMU.
 %package hw-display-virtio-gpu-pci
 Summary:        Virtio-gpu pci device for QEMU
 Group:          System/Emulators/PC
-Requires:       qemu-hw-display-virtio-gpu
+Requires:       qemu-hw-display-virtio-gpu = %{version}-%{release}
 %{qemu_module_conflicts}
 
 %description hw-display-virtio-gpu-pci
@@ -1561,7 +1567,7 @@ This package contains a module providing the virtio vga device for QEMU.
 %package hw-s390x-virtio-gpu-ccw
 Summary:        S390x virtio-gpu ccw device for QEMU
 Group:          System/Emulators/PC
-Requires:       qemu-hw-display-virtio-gpu
+Requires:       qemu-hw-display-virtio-gpu = %{version}-%{release}
 %{qemu_module_conflicts}
 
 %description hw-s390x-virtio-gpu-ccw
