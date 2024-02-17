@@ -960,6 +960,9 @@ ln -s qemu-system-ppc64/ %{buildroot}%_bindir/qemu-kvm
 %ifarch s390x
 ln -s qemu-system-s390x/ %{buildroot}%_bindir/qemu-kvm
 %endif
+%ifarch riscv64
+ln -s qemu-system-riscv64 %{buildroot}%_bindir/qemu-kvm
+%endif
 
 %if %{kvm_available}
 install -D -m 0644 %{rpmfilesdir}/80-kvm.rules %{buildroot}/usr/lib/udev/rules.d/80-kvm.rules
