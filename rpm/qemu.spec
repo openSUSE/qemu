@@ -939,29 +939,12 @@ rst2html --exit-status=2 %{buildroot}%_docdir/qemu-x86/supported.txt %{buildroot
 %endif
 # End of "if legacy_qemu_kvm"
 %endif
-%ifarch %ix86
-ln -s qemu-system-i386 %{buildroot}%_bindir/qemu-kvm
+
+%ifarch aarch64 %arm %ix86 ppc ppc64 ppc64le riscv64 s390x x86_64
+%ifarch ppc64le
+%define qemu_arch ppc64
 %endif
-%ifarch x86_64
-ln -s qemu-system-x86_64 %{buildroot}%_bindir/qemu-kvm
-%endif
-%ifarch %arm
-ln -s qemu-system-arm %{buildroot}%_bindir/qemu-kvm
-%endif
-%ifarch aarch64
-ln -s qemu-system-aarch64 %{buildroot}%_bindir/qemu-kvm
-%endif
-%ifarch ppc
-ln -s qemu-system-ppc %{buildroot}%_bindir/qemu-kvm
-%endif
-%ifarch ppc64 ppc64le
-ln -s qemu-system-ppc64/ %{buildroot}%_bindir/qemu-kvm
-%endif
-%ifarch s390x
-ln -s qemu-system-s390x/ %{buildroot}%_bindir/qemu-kvm
-%endif
-%ifarch riscv64
-ln -s qemu-system-riscv64 %{buildroot}%_bindir/qemu-kvm
+ln -s qemu-system-%{qemu_arch} %{buildroot}%_bindir/qemu-kvm
 %endif
 
 %if %{kvm_available}

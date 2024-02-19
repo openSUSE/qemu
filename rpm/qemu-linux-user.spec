@@ -343,35 +343,8 @@ scripts/qemu-binfmt-conf.sh --systemd ALL --persistent yes --preserve-argv0 yes 
 %check
 cd %blddir
 
-%ifarch %ix86
-%define qemu_arch i386
-%endif
-%ifarch x86_64
-%define qemu_arch x86_64
-%endif
-%ifarch %arm
-%define qemu_arch arm
-%endif
-%ifarch aarch64
-%define qemu_arch aarch64
-%endif
-%ifarch ppc
-%define qemu_arch ppc
-%endif
-%ifarch ppc64
-%define qemu_arch ppc64
-%endif
-%ifarch ppc64le
-%define qemu_arch ppc64le
-%endif
-%ifarch s390x
-%define qemu_arch s390x
-%endif
-
-%ifarch %ix86 x86_64 %arm aarch64 ppc ppc64 ppc64le s390x
-%ifnarch %arm
+%ifarch aarch64 %ix86 ppc ppc64 ppc64le riscv64 s390x x86_64
 %{qemu_arch}-linux-user/qemu-%{qemu_arch} %_bindir/ls > /dev/null
-%endif
 %endif
 
 %make_build check-softfloat
