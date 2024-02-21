@@ -1,7 +1,7 @@
 #
 # spec file for package qemu
 #
-# Copyright (c) 2023 SUSE LLC
+# Copyright (c) 2024 SUSE LLC
 #
 # All modifications and additions to the file contributed by third parties
 # remain the property of their copyright owners, unless otherwise agreed
@@ -147,11 +147,11 @@ BuildRequires:  pkgconfig(liburing) >= %liburing_min_version
 BuildRequires:  libxdp-devel
 %endif
 %if 0%{?suse_version} >= 1600
-BuildRequires:  python3-base >= 3.8
 BuildRequires:  python3-Sphinx
+BuildRequires:  python3-base >= 3.8
 %else
-BuildRequires:  python311-base
 BuildRequires:  python311-Sphinx
+BuildRequires:  python311-base
 %endif
 BuildRequires:  Mesa-devel
 BuildRequires:  bison
@@ -1068,9 +1068,9 @@ make -O V=1 VERBOSE=1 -j1 check-qtest
 %package spice
 Summary:        Modules and packages for SPICE
 Group:          System/Emulators/PC
-Requires:       qemu-headless
 Requires:       qemu-audio-spice
 Requires:       qemu-chardev-spice
+Requires:       qemu-headless
 Requires:       qemu-hw-display-qxl
 Requires:       qemu-hw-usb-redirect
 Requires:       qemu-ui-spice-core
@@ -1915,7 +1915,7 @@ Summary:        OPAL firmware (aka skiboot), used in booting OpenPOWER systems
 Group:          System/Emulators/PC
 BuildArch:      noarch
 Requires(post): update-alternatives
-Requires(postun):update-alternatives
+Requires(postun): update-alternatives
 
 %description skiboot
 Provides OPAL (OpenPower Abstraction Layer) firmware, aka skiboot, as
