@@ -1,7 +1,7 @@
 #
 # spec file for package qemu-linux-user
 #
-# Copyright (c) 2023 SUSE LLC
+# Copyright (c) 2024 SUSE LLC
 #
 # All modifications and additions to the file contributed by third parties
 # remain the property of their copyright owners, unless otherwise agreed
@@ -46,18 +46,18 @@ BuildRequires:  zlib-devel-static
 %if 0%{?qemu_user_space_build:1}
 #!BuildIgnore:  post-build-checks
 %endif
+BuildRequires:  discount
 BuildRequires:  fdupes
 BuildRequires:  flex
 BuildRequires:  gcc-c++
 BuildRequires:  meson
 BuildRequires:  ninja >= 1.7
-BuildRequires:  discount
 %if 0%{?suse_version} >= 1600
-BuildRequires:  python3-base >= 3.8
 BuildRequires:  python3-Sphinx
+BuildRequires:  python3-base >= 3.8
 %else
-BuildRequires:  python311-base
 BuildRequires:  python311-Sphinx
+BuildRequires:  python311-base
 %endif
 
 %description
