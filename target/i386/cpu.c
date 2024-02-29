@@ -7756,7 +7756,15 @@ static void x86_cpu_realizefn(DeviceState *dev, Error **errp)
          * In this case, the default is the value used by TCG (40).
          */
         if (cpu->phys_bits == 0) {
-            cpu->phys_bits = TCG_PHYS_ADDR_BITS;
+            /* SUSE Downstream patch: TCG_PHYS_ADDR_BITS is 40. We, instead
+             * need the phys_bits to be 42 (only if the host supports that, of
+             * course), because we did set it to 42 (unconditionally!) a while
+             * ago, and now we need to stay compatible with that. However,
+             * instead of messing with the macro, just use the value here,
+             * to avoid messing with other places where the macro is used
+             * (namely, for TCG).
+             */
+            cpu->phys_bits = (MIN(42, host_cpu_phys_bits()));
         }
         if (cpu->guest_phys_bits &&
             (cpu->guest_phys_bits > cpu->phys_bits ||
