@@ -2239,6 +2239,7 @@ void host_cpuid(uint32_t function, uint32_t count,
                 uint32_t *eax, uint32_t *ebx, uint32_t *ecx, uint32_t *edx);
 
 /* Note: Only safe for use on x86(-64) hosts */
+#ifdef __x86_64__
 static inline uint32_t host_cpu_phys_bits(void)
 {
     uint32_t eax;
@@ -2265,6 +2266,12 @@ static inline uint32_t host_cpu_phys_bits(void)
 
     return host_phys_bits;
 }
+#else
+static inline uint32_t host_cpu_phys_bits(void)
+{
+    return 40; // TCG_PHYS_ADDR_BITS
+}
+#endif
 
 /* helper.c */
 void x86_cpu_set_a20(X86CPU *cpu, int a20_state);
