@@ -531,6 +531,8 @@ uint32_t kvm_dirty_ring_size(void);
 
 void kvm_mark_guest_state_protected(void);
 
+int kvm_create_guest_memfd(uint64_t size, uint64_t flags, Error **errp);
+
 int kvm_set_memory_attributes_private(hwaddr start, uint64_t size);
 int kvm_set_memory_attributes_shared(hwaddr start, uint64_t size);
 
