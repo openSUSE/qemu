@@ -225,8 +225,9 @@ int bdrv_query_snapshot_info_list(BlockDriverState *bs,
  * Helper function for other query info functions.  Store information about @bs
  * in @info, setting @errp on error.
  */
-static void GRAPH_RDLOCK
-bdrv_do_query_node_info(BlockDriverState *bs, BlockNodeInfo *info, Error **errp)
+void coroutine_fn
+bdrv_co_do_query_node_info(BlockDriverState *bs, BlockNodeInfo *info,
+                           Error **errp)
 {
     int64_t size;
     const char *backing_filename;
@@ -234,7 +235,7 @@ bdrv_do_query_node_info(BlockDriverState *bs, BlockNodeInfo *info, Error **errp)
     int ret;
     Error *err = NULL;
 
-    size = bdrv_getlength(bs);
+    size = bdrv_co_getlength(bs);
     if (size < 0) {
         error_setg_errno(errp, -size, "Can't get image size '%s'",
                          bs->exact_filename);
@@ -246,13 +247,13 @@ bdrv_do_query_node_info(BlockDriverState *bs, BlockNodeInfo *info, Error **errp)
     info->filename        = g_strdup(bs->filename);
     info->format          = g_strdup(bdrv_get_format_name(bs));
     info->virtual_size    = size;
-    info->actual_size     = bdrv_get_allocated_file_size(bs);
+    info->actual_size     = bdrv_co_get_allocated_file_size(bs);
     info->has_actual_size = info->actual_size >= 0;
     if (bs->encrypted) {
         info->encrypted = true;
         info->has_encrypted = true;
     }
-    if (bdrv_get_info(bs, &bdi) >= 0) {
+    if (bdrv_co_get_info(bs, &bdi) >= 0) {
         if (bdi.cluster_size != 0) {
             info->cluster_size = bdi.cluster_size;
             info->has_cluster_size = true;
