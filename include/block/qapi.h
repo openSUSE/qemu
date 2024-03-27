@@ -41,7 +41,11 @@ bdrv_query_snapshot_info_list(BlockDriverState *bs,
 void GRAPH_RDLOCK
 bdrv_query_image_info(BlockDriverState *bs, ImageInfo **p_info, bool flat,
                       bool skip_implicit_filters, Error **errp);
-void GRAPH_RDLOCK
+
+void coroutine_fn GRAPH_RDLOCK
+bdrv_co_query_block_graph_info(BlockDriverState *bs, BlockGraphInfo **p_info,
+                               Error **errp);
+void co_wrapper_bdrv_rdlock
 bdrv_query_block_graph_info(BlockDriverState *bs, BlockGraphInfo **p_info,
                             Error **errp);
 
