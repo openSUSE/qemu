@@ -304,7 +304,7 @@ bdrv_co_do_query_node_info(BlockDriverState *bs, BlockNodeInfo *info,
 }
 
 /**
- * bdrv_query_image_info:
+ * bdrv_co_query_image_info:
  * @bs: block node to examine
  * @p_info: location to store image information
  * @flat: skip backing node information
@@ -325,17 +325,15 @@ bdrv_co_do_query_node_info(BlockDriverState *bs, BlockNodeInfo *info,
  *
  * @p_info will be set only on success. On error, store error in @errp.
  */
-void bdrv_query_image_info(BlockDriverState *bs,
-                           ImageInfo **p_info,
-                           bool flat,
-                           bool skip_implicit_filters,
-                           Error **errp)
+void coroutine_fn
+bdrv_co_query_image_info(BlockDriverState *bs, ImageInfo **p_info, bool flat,
+                         bool skip_implicit_filters, Error **errp)
 {
     ERRP_GUARD();
     ImageInfo *info;
 
     info = g_new0(ImageInfo, 1);
-    bdrv_do_query_node_info(bs, qapi_ImageInfo_base(info), errp);
+    bdrv_co_do_query_node_info(bs, qapi_ImageInfo_base(info), errp);
     if (*errp) {
         goto fail;
     }
@@ -353,8 +351,8 @@ void bdrv_query_image_info(BlockDriverState *bs,
         }
 
         if (backing) {
-            bdrv_query_image_info(backing, &info->backing_image, false,
-                                  skip_implicit_filters, errp);
+            bdrv_co_query_image_info(backing, &info->backing_image, false,
+                                     skip_implicit_filters, errp);
             if (*errp) {
                 goto fail;
             }
