@@ -406,7 +406,7 @@ fail:
 }
 
 /**
- * bdrv_query_block_graph_info:
+ * bdrv_co_query_block_graph_info:
  * @bs: root node to start from
  * @p_info: location to store image information
  * @errp: location to store error information
@@ -415,18 +415,21 @@ fail:
  *
  * @p_info will be set only on success. On error, store error in @errp.
  */
-void bdrv_query_block_graph_info(BlockDriverState *bs,
-                                 BlockGraphInfo **p_info,
-                                 bool limits,
-                                 Error **errp)
+void coroutine_fn
+bdrv_co_query_block_graph_info(BlockDriverState *bs,
+                               BlockGraphInfo **p_info,
+                               bool limits,
+                               Error **errp)
 {
     ERRP_GUARD();
     BlockGraphInfo *info;
     BlockChildInfoList **children_list_tail;
     BdrvChild *c;
 
+    assert_bdrv_graph_readable();
+
     info = g_new0(BlockGraphInfo, 1);
-    bdrv_do_query_node_info(bs, qapi_BlockGraphInfo_base(info), limits, errp);
+    bdrv_co_do_query_node_info(bs, qapi_BlockGraphInfo_base(info), limits, errp);
     if (*errp) {
         goto fail;
     }
@@ -440,7 +443,7 @@ void bdrv_query_block_graph_info(BlockDriverState *bs,
         QAPI_LIST_APPEND(children_list_tail, c_info);
 
         c_info->name = g_strdup(c->name);
-        bdrv_query_block_graph_info(c->bs, &c_info->info, limits, errp);
+        bdrv_co_query_block_graph_info(c->bs, &c_info->info, limits, errp);
         if (*errp) {
             goto fail;
         }
