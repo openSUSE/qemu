@@ -153,6 +153,7 @@ BuildRequires:  python3-base >= 3.8
 BuildRequires:  python311-Sphinx
 BuildRequires:  python311-base
 %endif
+BuildRequires:  texinfo
 BuildRequires:  Mesa-devel
 BuildRequires:  bison
 BuildRequires:  brlapi-devel
@@ -1950,5 +1951,20 @@ Suggests:       qemu
 %{generic_qemu_description}
 
 This package contains user and developer documentation for QEMU.
+
+%package info
+Summary:        Documentation for QEMU in the info-pages format
+Group:          System/Emulators/PC
+BuildArch:      noarch
+Suggests:       qemu
+
+%files info
+%{_infodir}/*
+
+%description info
+%{generic_qemu_description}
+
+This package contains user and developer documentation for QEMU in
+the GNU info-pages format.
 
 %changelog
