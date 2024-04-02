@@ -244,6 +244,7 @@ int block_job_add_bdrv(BlockJob *job, const char *name, BlockDriverState *bs,
 
     job->nodes = g_slist_prepend(job->nodes, c);
     bdrv_op_block_all(bs, job->blocker);
+    bdrv_op_unblock(bs, BLOCK_OP_TYPE_INFO, job->blocker);
 
     return 0;
 }
