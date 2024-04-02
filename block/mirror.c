@@ -1196,6 +1196,7 @@ static void mirror_complete(Job *job, Error **errp)
         error_setg(&s->replace_blocker,
                    "block device is in use by block-job-complete");
         bdrv_op_block_all(s->to_replace, s->replace_blocker);
+        bdrv_op_unblock(s->to_replace, BLOCK_OP_TYPE_INFO, s->replace_blocker);
         bdrv_ref(s->to_replace);
     }
 
