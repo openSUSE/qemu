@@ -2848,6 +2848,7 @@ qcow2_co_invalidate_cache(BlockDriverState *bs, Error **errp)
     BdrvChild *data_file;
     int flags = s->flags;
     QCryptoBlock *crypto = NULL;
+    Error *blocker = NULL;
     QDict *options;
     int ret;
 
@@ -2858,6 +2859,17 @@ qcow2_co_invalidate_cache(BlockDriverState *bs, Error **errp)
 
     crypto = s->crypto;
     s->crypto = NULL;
+
+    /*
+     * When qcow2_do_open() below reads the qcow header, it yields to
+     * wait for the I/O which allows a concurrent QMP query-block
+     * command to be dispatched on the same context before
+     * BDRVQcow2State has been completely repopulated. Block the
+     * query-info operation during this window to avoid having
+     * qcow2_get_specific_info() access bogus values.
+     */
+    error_setg(&blocker, "invalidating cached metadata");
+    bdrv_op_block(bs, BLOCK_OP_TYPE_INFO, blocker);
 
     /*
      * Do not reopen s->data_file (i.e., have qcow2_do_close() not close it,
@@ -2878,6 +2890,8 @@ qcow2_co_invalidate_cache(BlockDriverState *bs, Error **errp)
     qemu_co_mutex_lock(&s->lock);
     ret = qcow2_do_open(bs, options, flags, false, errp);
     qemu_co_mutex_unlock(&s->lock);
+    bdrv_op_unblock(bs, BLOCK_OP_TYPE_INFO, blocker);
+    g_free(blocker);
     qobject_unref(options);
     if (ret < 0) {
         error_prepend(errp, "Could not reopen qcow2 layer: ");
@@ -5253,6 +5267,12 @@ qcow2_get_specific_info(BlockDriverState *bs, Error **errp)
     BDRVQcow2State *s = bs->opaque;
     ImageInfoSpecific *spec_info;
     QCryptoBlockInfo *encrypt_info = NULL;
+
+    if (qemu_in_coroutine() &&
+        bdrv_op_is_blocked(bs, BLOCK_OP_TYPE_INFO, errp)) {
+        *errp = NULL;
+        aio_co_reschedule_self(iohandler_get_aio_context());
+    }
 
     if (s->crypto != NULL) {
         encrypt_info = qcrypto_block_get_info(s->crypto, errp);
