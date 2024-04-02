@@ -1296,6 +1296,7 @@ static void GRAPH_WRLOCK bdrv_backing_attach(BdrvChild *c)
                     parent->backing_blocker);
     bdrv_op_unblock(backing_hd, BLOCK_OP_TYPE_BACKUP_TARGET,
                     parent->backing_blocker);
+    bdrv_op_unblock(backing_hd, BLOCK_OP_TYPE_INFO, parent->backing_blocker);
 }
 
 static void bdrv_backing_detach(BdrvChild *c)
