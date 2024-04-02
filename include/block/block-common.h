@@ -364,6 +364,7 @@ typedef enum BlockOpType {
     BLOCK_OP_TYPE_RESIZE,
     BLOCK_OP_TYPE_STREAM,
     BLOCK_OP_TYPE_REPLACE,
+    BLOCK_OP_TYPE_INFO,
     BLOCK_OP_TYPE_MAX,
 } BlockOpType;
 
