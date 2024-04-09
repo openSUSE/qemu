@@ -78,7 +78,10 @@
     { "qemu64-" TYPE_X86_CPU, "model-id", "QEMU Virtual CPU version " v, },\
     { "athlon-" TYPE_X86_CPU, "model-id", "QEMU Virtual CPU version " v, },
 
-GlobalProperty pc_compat_8_1[] = {};
+GlobalProperty pc_compat_8_1[] = {
+    { TYPE_X86_CPU, "guest-phys-bits", "0" },
+    { "sev-guest", "legacy-vm-type", "true" },
+};
 const size_t pc_compat_8_1_len = G_N_ELEMENTS(pc_compat_8_1);
 
 GlobalProperty pc_compat_8_0[] = {
