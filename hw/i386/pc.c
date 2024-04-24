@@ -81,6 +81,7 @@
 
 GlobalProperty pc_compat_8_1[] = {
     { TYPE_X86_CPU, "x-amd-topoext-features-only", "false" },
+    { TYPE_X86_CPU, "x-l1-cache-per-thread", "false" },
     { TYPE_X86_CPU, "guest-phys-bits", "0" },
     { "sev-guest", "legacy-vm-type", "on" },
     { TYPE_INTEL_IOMMU_DEVICE, "aw-bits", "39" },
