@@ -82,7 +82,7 @@ URL:            https://www.qemu.org/
 Summary:        Machine emulator and virtualizer
 License:        BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
 Group:          System/Emulators/PC
-Version:        8.2.3
+Version:        9.0.0
 Release:        0
 Source0:        qemu-%{version}.tar.xz
 Source1:        common.inc
@@ -401,8 +401,8 @@ meson subprojects packagefiles --apply berkeley-testfloat-3
 meson subprojects packagefiles --apply berkeley-softfloat-3
 
 # for the record, this set of firmware files is installed, but we don't
-# build (yet): bamboo.dtb canyonlands.dtb hppa-firmware.img openbios-ppc
-# openbios-sparc32 openbios-sparc64 palcode-clipper petalogix-ml605.dtb
+# build (yet): bamboo.dtb canyonlands.dtb hppa-firmware.img hppa-firmware.img 64
+# openbios-ppc openbios-sparc32 openbios-sparc64 palcode-clipper petalogix-ml605.dtb
 # petalogix-s3adsp1800.dtb QEMU,cgthree.bin QEMU,tcx.bin qemu_vga.ndrv
 # u-boot.e500 u-boot-sam460-20100605.bin opensbi-riscv32-generic-fw_dynamic.bin
 # opensbi-riscv32-generic-fw_dynamic.elfnpcm7xx_bootrom.bin vof.bin
@@ -1314,6 +1314,7 @@ popular QEMU packages which are dedicated to a single architecture.)
 %_bindir/qemu-system-xtensa
 %_bindir/qemu-system-xtensaeb
 %_datadir/%name/hppa-firmware.img
+%_datadir/%name/hppa-firmware64.img
 %_datadir/%name/openbios-sparc32
 %_datadir/%name/openbios-sparc64
 %_datadir/%name/opensbi-riscv32-generic-fw_dynamic.bin
