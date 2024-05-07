@@ -23,6 +23,7 @@
 
 #include "qemu/cutils.h"
 #include "qemu/cacheflush.h"
+#include "qemu/lockable.h"
 
 #ifdef CONFIG_TCG
 #include "hw/core/tcg-cpu-ops.h"
@@ -3096,13 +3097,12 @@ void cpu_register_map_client(QEMUBH *bh)
 {
     MapClient *client = g_malloc(sizeof(*client));
 
-    qemu_mutex_lock(&map_client_list_lock);
+    QEMU_LOCK_GUARD(&map_client_list_lock);
     client->bh = bh;
     QLIST_INSERT_HEAD(&map_client_list, client, link);
     if (!qatomic_read(&bounce.in_use)) {
         cpu_notify_map_clients_locked();
     }
-    qemu_mutex_unlock(&map_client_list_lock);
 }
 
 void cpu_exec_init_all(void)
@@ -3125,21 +3125,19 @@ void cpu_unregister_map_client(QEMUBH *bh)
 {
     MapClient *client;
 
-    qemu_mutex_lock(&map_client_list_lock);
+    QEMU_LOCK_GUARD(&map_client_list_lock);
     QLIST_FOREACH(client, &map_client_list, link) {
         if (client->bh == bh) {
             cpu_unregister_map_client_do(client);
             break;
         }
     }
-    qemu_mutex_unlock(&map_client_list_lock);
 }
 
 static void cpu_notify_map_clients(void)
 {
-    qemu_mutex_lock(&map_client_list_lock);
+    QEMU_LOCK_GUARD(&map_client_list_lock);
     cpu_notify_map_clients_locked();
-    qemu_mutex_unlock(&map_client_list_lock);
 }
 
 static bool flatview_access_valid(FlatView *fv, hwaddr addr, hwaddr len,
