@@ -498,6 +498,8 @@ find . -iname ".git" -exec rm -rf {} +
 
 mkdir -p %blddir
 cd %blddir
+export USER=abuild
+export HOSTNAME=OBS # is used in roms/SLOF/Makefile.gen (boo#1084909)
 
 # We define a few general and common options and then we disable
 # pretty much everything. Afterwards, there is a section for each
@@ -904,8 +906,6 @@ done
 
 %install
 cd %blddir
-export USER=abuild
-export HOSTNAME=OBS # is used in roms/SLOF/Makefile.gen (boo#1084909)
 
 %make_build install DESTDIR=%{buildroot}
 
