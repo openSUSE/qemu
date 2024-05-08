@@ -673,7 +673,11 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--disable-xkbcommon \
 	--disable-zstd \
 	--without-default-devices \
+%if 0%{?suse_version} >= 1600
 	--audio-drv-list=pipewire,pa,alsa,jack,oss \
+%else
+	--audio-drv-list=pa,pipewire,alsa,jack,oss \
+%endif
 %ifarch x86_64
 	--enable-avx2 \
 	--enable-libpmem \
