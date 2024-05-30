@@ -832,11 +832,11 @@ struct kvm_sev_snp_launch_start {
 };
 
 /* Kept in sync with firmware values for simplicity. */
-#define KVM_SEV_SNP_PAGE_TYPE_NORMAL            0x1
-#define KVM_SEV_SNP_PAGE_TYPE_ZERO              0x3
-#define KVM_SEV_SNP_PAGE_TYPE_UNMEASURED        0x4
-#define KVM_SEV_SNP_PAGE_TYPE_SECRETS           0x5
-#define KVM_SEV_SNP_PAGE_TYPE_CPUID             0x6
+#define KVM_SEV_SNP_PAGE_TYPE_NORMAL		0x1
+#define KVM_SEV_SNP_PAGE_TYPE_ZERO		0x3
+#define KVM_SEV_SNP_PAGE_TYPE_UNMEASURED	0x4
+#define KVM_SEV_SNP_PAGE_TYPE_SECRETS		0x5
+#define KVM_SEV_SNP_PAGE_TYPE_CPUID		0x6
 
 struct kvm_sev_snp_launch_update {
 	__u64 gfn_start;
@@ -849,11 +849,11 @@ struct kvm_sev_snp_launch_update {
 	__u64 pad2[4];
 };
 
-#define KVM_SEV_SNP_ID_BLOCK_SIZE       96
-#define KVM_SEV_SNP_ID_AUTH_SIZE        4096
-#define KVM_SEV_SNP_FINISH_DATA_SIZE    3
+#define KVM_SEV_SNP_ID_BLOCK_SIZE	96
+#define KVM_SEV_SNP_ID_AUTH_SIZE	4096
+#define KVM_SEV_SNP_FINISH_DATA_SIZE	32
 
-struct kvm_sev_snp_launch_finish  {
+struct kvm_sev_snp_launch_finish {
 	__u64 id_block_uaddr;
 	__u64 id_auth_uaddr;
 	__u8 id_block_en;
@@ -863,7 +863,7 @@ struct kvm_sev_snp_launch_finish  {
 	__u8 pad0[3];
 	__u16 flags;
 	__u64 pad1[4];
-}
+};
 
 #define KVM_X2APIC_API_USE_32BIT_IDS            (1ULL << 0)
 #define KVM_X2APIC_API_DISABLE_BROADCAST_QUIRK  (1ULL << 1)
