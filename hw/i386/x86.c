@@ -1133,17 +1133,30 @@ void x86_load_linux(X86MachineState *x86ms,
     nb_option_roms++;
 }
 
-void x86_bios_rom_init(MachineState *ms, const char *default_firmware,
+static void x86_isa_bios_init(MemoryRegion *isa_bios, MemoryRegion *isa_memory,
+                       MemoryRegion *bios, bool read_only)
+{
+    uint64_t bios_size = memory_region_size(bios);
+    uint64_t isa_bios_size = MIN(bios_size, 128 * KiB);
+
+    memory_region_init_alias(isa_bios, NULL, "isa-bios", bios,
+                             bios_size - isa_bios_size, isa_bios_size);
+    memory_region_add_subregion_overlap(isa_memory, 1 * MiB - isa_bios_size,
+                                        isa_bios, 1);
+    memory_region_set_readonly(isa_bios, read_only);
+}
+
+void x86_bios_rom_init(X86MachineState *x86ms, const char *default_firmware,
                        MemoryRegion *rom_memory, bool isapc_ram_fw)
 {
     const char *bios_name;
     char *filename;
     MemoryRegion *bios, *isa_bios;
-    int bios_size, isa_bios_size;
+    int bios_size;
     ssize_t ret;
 
     /* BIOS load */
-    bios_name = ms->firmware ?: default_firmware;
+    bios_name = MACHINE(x86ms)->firmware ?: default_firmware;
     filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
     if (filename) {
         bios_size = get_image_size(filename);
@@ -1155,7 +1168,11 @@ void x86_bios_rom_init(MachineState *ms, const char *default_firmware,
         goto bios_error;
     }
     bios = g_malloc(sizeof(*bios));
-    memory_region_init_ram(bios, NULL, "pc.bios", bios_size, &error_fatal);
+    if (machine_require_guest_memfd(MACHINE(x86ms))) {
+        memory_region_init_ram_guest_memfd(bios, NULL, "pc.bios", bios_size, &error_fatal);
+    } else {
+        memory_region_init_ram(bios, NULL, "pc.bios", bios_size, &error_fatal);
+    }
     if (sev_enabled()) {
         /*
          * The concept of a "reset" simply doesn't exist for
@@ -1178,17 +1195,11 @@ void x86_bios_rom_init(MachineState *ms, const char *default_firmware,
     }
     g_free(filename);
 
-    /* map the last 128KB of the BIOS in ISA space */
-    isa_bios_size = MIN(bios_size, 128 * KiB);
-    isa_bios = g_malloc(sizeof(*isa_bios));
-    memory_region_init_alias(isa_bios, NULL, "isa-bios", bios,
-                             bios_size - isa_bios_size, isa_bios_size);
-    memory_region_add_subregion_overlap(rom_memory,
-                                        0x100000 - isa_bios_size,
-                                        isa_bios,
-                                        1);
-    if (!isapc_ram_fw) {
-        memory_region_set_readonly(isa_bios, true);
+    if (!machine_require_guest_memfd(MACHINE(x86ms))) {
+        /* map the last 128KB of the BIOS in ISA space */
+        isa_bios = g_malloc(sizeof(*isa_bios));
+        x86_isa_bios_init(isa_bios, rom_memory, bios,
+                          !isapc_ram_fw);
     }
 
     /* map all the bios at the top of memory */
