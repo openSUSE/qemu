@@ -62,6 +62,7 @@ cp_portable() {
                                      -e 'linux/kernel' \
                                      -e 'linux/sysinfo' \
                                      -e 'asm/setup_data.h' \
+                                     -e 'asm/kvm_para.h' \
                                      > /dev/null
     then
         echo "Unexpected #include in input file $f".
@@ -69,6 +70,15 @@ cp_portable() {
     fi
 
     header=$(basename "$f");
+
+    if test -z "$arch"; then
+        # Let users of include/standard-headers/linux/ headers pick the
+        # asm-* header that they care about
+        arch_cmd='/<asm\/\([^>]*\)>/d'
+    else
+        arch_cmd='s/<asm\/\([^>]*\)>/"standard-headers\/asm-'$arch'\/\1"/'
+    fi
+
     sed -e 's/__aligned_u64/__u64 __attribute__((aligned(8)))/g' \
         -e 's/__u\([0-9][0-9]*\)/uint\1_t/g' \
         -e 's/u\([0-9][0-9]*\)/uint\1_t/g' \
@@ -77,7 +87,7 @@ cp_portable() {
         -e 's/__be\([0-9][0-9]*\)/uint\1_t/g' \
         -e 's/"\(input-event-codes\.h\)"/"standard-headers\/linux\/\1"/' \
         -e 's/<linux\/\([^>]*\)>/"standard-headers\/linux\/\1"/' \
-        -e 's/<asm\/\([^>]*\)>/"standard-headers\/asm-'$arch'\/\1"/' \
+        -e "$arch_cmd" \
         -e 's/__bitwise//' \
         -e 's/__attribute__((packed))/QEMU_PACKED/' \
         -e 's/__inline__/inline/' \
@@ -199,6 +209,10 @@ if [ -d "$linux/LICENSES" ]; then
     done
 fi
 
+cat <<EOF >$output/linux-headers/linux/kvm_para.h
+#include "standard-headers/linux/kvm_para.h"
+#include <asm/kvm_para.h>
+EOF
 cat <<EOF >$output/linux-headers/linux/virtio_config.h
 #include "standard-headers/linux/virtio_config.h"
 EOF
