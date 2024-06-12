@@ -17,6 +17,7 @@ libsystem_ss.add(files(
   'dma-helpers.c',
   'globals.c',
   'ioport.c',
+  'ram-block-attribute.c',
   'memory_mapping.c',
   'memory.c',
   'physmem.c',
