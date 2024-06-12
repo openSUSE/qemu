@@ -23,6 +23,10 @@
 #include "cpu-common.h"
 #include "qemu/rcu.h"
 #include "exec/ramlist.h"
+#include "system/hostmem.h"
+
+#define TYPE_RAM_BLOCK_ATTRIBUTE "ram-block-attribute"
+OBJECT_DECLARE_TYPE(RamBlockAttribute, RamBlockAttributeClass, RAM_BLOCK_ATTRIBUTE)
 
 struct RAMBlock {
     struct rcu_head rcu;
@@ -90,5 +94,25 @@ struct RAMBlock {
      */
     ram_addr_t postcopy_length;
 };
+
+struct RamBlockAttribute {
+    Object parent;
+
+    MemoryRegion *mr;
+
+    /* 1-setting of the bit represents the memory is populated (shared) */
+    unsigned shared_bitmap_size;
+    unsigned long *shared_bitmap;
+
+    QLIST_HEAD(, PrivateSharedListener) psl_list;
+};
+
+struct RamBlockAttributeClass {
+    ObjectClass parent_class;
+};
+
+int ram_block_attribute_realize(RamBlockAttribute *attr, MemoryRegion *mr);
+void ram_block_attribute_unrealize(RamBlockAttribute *attr);
+
 #endif
 #endif
