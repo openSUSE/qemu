@@ -1885,6 +1885,20 @@ static void ram_block_add(RAMBlock *new_block, Error **errp)
             qemu_mutex_unlock_ramlist();
             goto out_free;
         }
+
+        new_block->ram_block_attribute = RAM_BLOCK_ATTRIBUTE(object_new(TYPE_RAM_BLOCK_ATTRIBUTE));
+        if (ram_block_attribute_realize(new_block->ram_block_attribute, new_block->mr)) {
+            error_setg(errp, "Failed to realize ram block attribute");
+            /*
+             * The error path could be unified if the rest of ram_block_add() ever
+             * develops a need to check for errors.
+             */
+            object_unref(OBJECT(new_block->ram_block_attribute));
+            close(new_block->guest_memfd);
+            ram_block_discard_require(false);
+            qemu_mutex_unlock_ramlist();
+            goto out_free;
+        }
     }
 
     ram_size = (new_block->offset + new_block->max_length) >> TARGET_PAGE_BITS;
@@ -2138,6 +2152,8 @@ static void reclaim_ramblock(RAMBlock *block)
     }
 
     if (block->guest_memfd >= 0) {
+        ram_block_attribute_unrealize(block->ram_block_attribute);
+        object_unref(OBJECT(block->ram_block_attribute));
         close(block->guest_memfd);
         ram_block_discard_require(false);
     }
