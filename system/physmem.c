@@ -1931,6 +1931,19 @@ static void ram_block_add(RAMBlock *new_block, Error **errp)
             goto out_free;
         }
 
+        new_block->ram_shared = ram_block_attribute_create(new_block->mr);
+        if (!new_block->ram_shared) {
+            error_setg(errp, "Failed to create ram block attribute");
+            /*
+             * The error path could be unified if the rest of ram_block_add()
+             * ever develops a need to check for errors.
+             */
+            close(new_block->guest_memfd);
+            ram_block_discard_require(false);
+            qemu_mutex_unlock_ramlist();
+            goto out_free;
+        }
+
         /*
          * Add a specific guest_memfd blocker if a generic one would not be
          * added by ram_block_add_cpr_blocker.
@@ -2287,6 +2300,7 @@ static void reclaim_ramblock(RAMBlock *block)
     }
 
     if (block->guest_memfd >= 0) {
+        ram_block_attribute_destroy(block->ram_shared);
         close(block->guest_memfd);
         ram_block_discard_require(false);
     }

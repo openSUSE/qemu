@@ -890,6 +890,13 @@ static uint64_t ramblock_dirty_bitmap_clear_discarded_pages(RAMBlock *rb)
 
     if (rb->mr && rb->bmap && memory_region_has_ram_discard_manager(rb->mr)) {
         RamDiscardManager *rdm = memory_region_get_ram_discard_manager(rb->mr);
+
+        if (object_dynamic_cast(OBJECT(rdm), TYPE_RAM_BLOCK_ATTRIBUTE)) {
+            error_report("%s: Live migration for confidential VM is not "
+                         "supported yet.", __func__);
+            exit(1);
+        }
+
         MemoryRegionSection section = {
             .mr = rb->mr,
             .offset_within_region = 0,
@@ -913,6 +920,13 @@ bool ramblock_page_is_discarded(RAMBlock *rb, ram_addr_t start)
 {
     if (rb->mr && memory_region_has_ram_discard_manager(rb->mr)) {
         RamDiscardManager *rdm = memory_region_get_ram_discard_manager(rb->mr);
+
+        if (object_dynamic_cast(OBJECT(rdm), TYPE_RAM_BLOCK_ATTRIBUTE)) {
+            error_report("%s: Live migration for confidential VM is not "
+                         "supported yet.", __func__);
+            exit(1);
+        }
+
         MemoryRegionSection section = {
             .mr = rb->mr,
             .offset_within_region = start,
@@ -1552,6 +1566,13 @@ static void ram_block_populate_read(RAMBlock *rb)
      */
     if (rb->mr && memory_region_has_ram_discard_manager(rb->mr)) {
         RamDiscardManager *rdm = memory_region_get_ram_discard_manager(rb->mr);
+
+        if (object_dynamic_cast(OBJECT(rdm), TYPE_RAM_BLOCK_ATTRIBUTE)) {
+            error_report("%s: Live migration for confidential VM is not "
+                         "supported yet.", __func__);
+            exit(1);
+        }
+
         MemoryRegionSection section = {
             .mr = rb->mr,
             .offset_within_region = 0,
@@ -1611,6 +1632,13 @@ static int ram_block_uffd_protect(RAMBlock *rb, int uffd_fd)
     /* See ram_block_populate_read() */
     if (rb->mr && memory_region_has_ram_discard_manager(rb->mr)) {
         RamDiscardManager *rdm = memory_region_get_ram_discard_manager(rb->mr);
+
+        if (object_dynamic_cast(OBJECT(rdm), TYPE_RAM_BLOCK_ATTRIBUTE)) {
+            error_report("%s: Live migration for confidential VM is not "
+                         "supported yet.", __func__);
+            exit(1);
+        }
+
         MemoryRegionSection section = {
             .mr = rb->mr,
             .offset_within_region = 0,
