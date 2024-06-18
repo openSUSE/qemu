@@ -253,6 +253,140 @@ ram_block_attribute_rdm_replay_discard(const RamDiscardManager *rdm,
                                             ram_block_attribute_rdm_replay_cb);
 }
 
+static bool ram_block_attribute_is_valid_range(RamBlockAttribute *attr,
+                                               uint64_t offset, uint64_t size)
+{
+    MemoryRegion *mr = attr->mr;
+
+    g_assert(mr);
+
+    uint64_t region_size = memory_region_size(mr);
+    int block_size = ram_block_attribute_get_block_size(attr);
+
+    if (!QEMU_IS_ALIGNED(offset, block_size)) {
+        return false;
+    }
+    if (offset + size < offset || !size) {
+        return false;
+    }
+    if (offset >= region_size || offset + size > region_size) {
+        return false;
+    }
+    return true;
+}
+
+static void ram_block_attribute_notify_to_discard(RamBlockAttribute *attr,
+                                                  uint64_t offset,
+                                                  uint64_t size)
+{
+    RamDiscardListener *rdl;
+
+    QLIST_FOREACH(rdl, &attr->rdl_list, next) {
+        MemoryRegionSection tmp = *rdl->section;
+
+        if (!memory_region_section_intersect_range(&tmp, offset, size)) {
+            continue;
+        }
+        rdl->notify_discard(rdl, &tmp);
+    }
+}
+
+static int
+ram_block_attribute_notify_to_populated(RamBlockAttribute *attr,
+                                        uint64_t offset, uint64_t size)
+{
+    RamDiscardListener *rdl;
+    int ret = 0;
+
+    QLIST_FOREACH(rdl, &attr->rdl_list, next) {
+        MemoryRegionSection tmp = *rdl->section;
+
+        if (!memory_region_section_intersect_range(&tmp, offset, size)) {
+            continue;
+        }
+        ret = rdl->notify_populate(rdl, &tmp);
+        if (ret) {
+            break;
+        }
+    }
+
+    return ret;
+}
+
+static bool ram_block_attribute_is_range_populated(RamBlockAttribute *attr,
+                                                   uint64_t offset,
+                                                   uint64_t size)
+{
+    const int block_size = ram_block_attribute_get_block_size(attr);
+    const unsigned long first_bit = offset / block_size;
+    const unsigned long last_bit = first_bit + (size / block_size) - 1;
+    unsigned long found_bit;
+
+    /* We fake a shorter bitmap to avoid searching too far. */
+    found_bit = find_next_zero_bit(attr->bitmap, last_bit + 1,
+                                   first_bit);
+    return found_bit > last_bit;
+}
+
+static bool
+ram_block_attribute_is_range_discard(RamBlockAttribute *attr,
+                                     uint64_t offset, uint64_t size)
+{
+    const int block_size = ram_block_attribute_get_block_size(attr);
+    const unsigned long first_bit = offset / block_size;
+    const unsigned long last_bit = first_bit + (size / block_size) - 1;
+    unsigned long found_bit;
+
+    /* We fake a shorter bitmap to avoid searching too far. */
+    found_bit = find_next_bit(attr->bitmap, last_bit + 1, first_bit);
+    return found_bit > last_bit;
+}
+
+int ram_block_attribute_state_change(RamBlockAttribute *attr, uint64_t offset,
+                                     uint64_t size, bool to_private)
+{
+    const int block_size = ram_block_attribute_get_block_size(attr);
+    const unsigned long first_bit = offset / block_size;
+    const unsigned long nbits = size / block_size;
+    int ret = 0;
+
+    if (!ram_block_attribute_is_valid_range(attr, offset, size)) {
+        error_report("%s, invalid range: offset 0x%lx, size 0x%lx",
+                     __func__, offset, size);
+        return -1;
+    }
+
+    /* Already discard/populated */
+    if ((ram_block_attribute_is_range_discard(attr, offset, size) &&
+         to_private) ||
+        (ram_block_attribute_is_range_populated(attr, offset, size) &&
+         !to_private)) {
+        return 0;
+    }
+
+    /* Unexpected mixture */
+    if ((!ram_block_attribute_is_range_populated(attr, offset, size) &&
+         to_private) ||
+        (!ram_block_attribute_is_range_discard(attr, offset, size) &&
+         !to_private)) {
+        error_report("%s, the range is not all in the desired state: "
+                     "(offset 0x%lx, size 0x%lx), %s",
+                     __func__, offset, size,
+                     to_private ? "private" : "shared");
+        return -1;
+    }
+
+    if (to_private) {
+        bitmap_clear(attr->bitmap, first_bit, nbits);
+        ram_block_attribute_notify_to_discard(attr, offset, size);
+    } else {
+        bitmap_set(attr->bitmap, first_bit, nbits);
+        ret = ram_block_attribute_notify_to_populated(attr, offset, size);
+    }
+
+    return ret;
+}
+
 RamBlockAttribute *ram_block_attribute_create(MemoryRegion *mr)
 {
     uint64_t bitmap_size;

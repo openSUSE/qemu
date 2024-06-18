@@ -108,6 +108,8 @@ struct RamBlockAttribute {
     QLIST_HEAD(, RamDiscardListener) rdl_list;
 };
 
+int ram_block_attribute_state_change(RamBlockAttribute *attr, uint64_t offset,
+                                     uint64_t size, bool to_private);
 RamBlockAttribute *ram_block_attribute_create(MemoryRegion *mr);
 void ram_block_attribute_destroy(RamBlockAttribute *attr);
 
