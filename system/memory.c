@@ -2206,6 +2206,16 @@ void generic_state_manager_unregister_listener(GenericStateManager *gsm,
     gsmc->unregister_listener(gsm, scl);
 }
 
+int private_shared_manager_state_change(PrivateSharedManager *mgr,
+                                        uint64_t offset, uint64_t size,
+                                        bool to_private)
+{
+    PrivateSharedManagerClass *psmc = PRIVATE_SHARED_MANAGER_GET_CLASS(mgr);
+
+    g_assert(psmc->state_change);
+    return psmc->state_change(mgr, offset, size, to_private);
+}
+
 /* Called with rcu_read_lock held.  */
 bool memory_get_xlat_addr(IOMMUTLBEntry *iotlb, void **vaddr,
                           ram_addr_t *ram_addr, bool *read_only,

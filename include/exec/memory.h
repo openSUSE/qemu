@@ -780,6 +780,9 @@ struct PrivateSharedListener {
 struct PrivateSharedManagerClass {
     /* private */
     GenericStateManagerClass parent_class;
+
+    int (*state_change)(PrivateSharedManager *mgr, uint64_t offset, uint64_t size,
+                        bool to_private);
 };
 
 static inline void private_shared_listener_init(PrivateSharedListener *psl,
@@ -788,6 +791,10 @@ static inline void private_shared_listener_init(PrivateSharedListener *psl,
 {
     state_change_listener_init(&psl->scl, populate_fn, discard_fn);
 }
+
+int private_shared_manager_state_change(PrivateSharedManager *mgr,
+                                        uint64_t offset, uint64_t size,
+                                        bool to_private);
 
 /**
  * memory_get_xlat_addr: Extract addresses from a TLB entry

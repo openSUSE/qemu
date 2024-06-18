@@ -233,6 +233,195 @@ static int ram_block_attribute_psm_replay_on_private(const GenericStateManager *
                                                         ram_block_attribute_psm_replay_cb);
 }
 
+static bool ram_block_attribute_is_valid_range(RamBlockAttribute *attr,
+                                               uint64_t offset, uint64_t size)
+{
+    MemoryRegion *mr = attr->mr;
+
+    g_assert(mr);
+
+    uint64_t region_size = memory_region_size(mr);
+    int block_size = ram_block_attribute_get_block_size(attr);
+
+    if (!QEMU_IS_ALIGNED(offset, block_size)) {
+        return false;
+    }
+    if (offset + size < offset || !size) {
+        return false;
+    }
+    if (offset >= region_size || offset + size > region_size) {
+        return false;
+    }
+    return true;
+}
+
+static void ram_block_attribute_notify_to_private(RamBlockAttribute *attr,
+                                                  uint64_t offset, uint64_t size)
+{
+    PrivateSharedListener *psl;
+
+    QLIST_FOREACH(psl, &attr->psl_list, next) {
+        StateChangeListener *scl = &psl->scl;
+        MemoryRegionSection tmp = *scl->section;
+
+        if (!memory_region_section_intersect_range(&tmp, offset, size)) {
+            continue;
+        }
+        scl->notify_to_state_clear(scl, &tmp);
+    }
+}
+
+static int ram_block_attribute_notify_to_shared(RamBlockAttribute *attr,
+                                                uint64_t offset, uint64_t size)
+{
+    PrivateSharedListener *psl, *psl2;
+    int ret = 0;
+
+    QLIST_FOREACH(psl, &attr->psl_list, next) {
+        StateChangeListener *scl = &psl->scl;
+        MemoryRegionSection tmp = *scl->section;
+
+        if (!memory_region_section_intersect_range(&tmp, offset, size)) {
+            continue;
+        }
+        ret = scl->notify_to_state_set(scl, &tmp);
+        if (ret) {
+            break;
+        }
+    }
+
+    if (ret) {
+        /* Notify all already-notified listeners. */
+        QLIST_FOREACH(psl2, &attr->psl_list, next) {
+            StateChangeListener *scl2 = &psl2->scl;
+            MemoryRegionSection tmp = *scl2->section;
+
+            if (psl == psl2) {
+                break;
+            }
+            if (!memory_region_section_intersect_range(&tmp, offset, size)) {
+                continue;
+            }
+            scl2->notify_to_state_clear(scl2, &tmp);
+        }
+    }
+    return ret;
+}
+
+static bool ram_block_attribute_is_range_shared(RamBlockAttribute *attr,
+                                                uint64_t offset, uint64_t size)
+{
+    const int block_size = ram_block_attribute_get_block_size(attr);
+    const unsigned long first_bit = offset / block_size;
+    const unsigned long last_bit = first_bit + (size / block_size) - 1;
+    unsigned long found_bit;
+
+    /* We fake a shorter bitmap to avoid searching too far. */
+    found_bit = find_next_zero_bit(attr->shared_bitmap, last_bit + 1, first_bit);
+    return found_bit > last_bit;
+}
+
+static bool ram_block_attribute_is_range_private(RamBlockAttribute *attr,
+                                                uint64_t offset, uint64_t size)
+{
+    const int block_size = ram_block_attribute_get_block_size(attr);
+    const unsigned long first_bit = offset / block_size;
+    const unsigned long last_bit = first_bit + (size / block_size) - 1;
+    unsigned long found_bit;
+
+    /* We fake a shorter bitmap to avoid searching too far. */
+    found_bit = find_next_bit(attr->shared_bitmap, last_bit + 1, first_bit);
+    return found_bit > last_bit;
+}
+
+static int ram_block_attribute_psm_state_change(PrivateSharedManager *mgr, uint64_t offset,
+                                                uint64_t size, bool to_private)
+{
+    RamBlockAttribute *attr = RAM_BLOCK_ATTRIBUTE(mgr);
+    const int block_size = ram_block_attribute_get_block_size(attr);
+    const unsigned long first_bit = offset / block_size;
+    const unsigned long nbits = size / block_size;
+    const uint64_t end = offset + size;
+    unsigned long bit;
+    uint64_t cur;
+    int ret = 0;
+
+    if (!ram_block_attribute_is_valid_range(attr, offset, size)) {
+        error_report("%s, invalid range: offset 0x%lx, size 0x%lx",
+                     __func__, offset, size);
+        return -1;
+    }
+
+    if (to_private) {
+        if (ram_block_attribute_is_range_private(attr, offset, size)) {
+            /* Already private */
+        } else if (!ram_block_attribute_is_range_shared(attr, offset, size)) {
+            /* Unexpected mixture: process individual blocks */
+            for (cur = offset; cur < end; cur += block_size) {
+                bit = cur / block_size;
+                if (!test_bit(bit, attr->shared_bitmap)) {
+                    continue;
+                }
+                clear_bit(bit, attr->shared_bitmap);
+                ram_block_attribute_notify_to_private(attr, cur, block_size);
+            }
+        } else {
+            /* Completely shared */
+            bitmap_clear(attr->shared_bitmap, first_bit, nbits);
+            ram_block_attribute_notify_to_private(attr, offset, size);
+        }
+    } else {
+        if (ram_block_attribute_is_range_shared(attr, offset, size)) {
+            /* Already shared */
+        } else if (!ram_block_attribute_is_range_private(attr, offset, size)) {
+            /* Unexpected mixture: process individual blocks */
+            unsigned long *modified_bitmap = bitmap_new(nbits);
+
+            for (cur = offset; cur < end; cur += block_size) {
+                bit = cur / block_size;
+                if (test_bit(bit, attr->shared_bitmap)) {
+                    continue;
+                }
+                set_bit(bit, attr->shared_bitmap);
+                ret = ram_block_attribute_notify_to_shared(attr, cur, block_size);
+                if (!ret) {
+                    set_bit(bit - first_bit, modified_bitmap);
+                    continue;
+                }
+                clear_bit(bit, attr->shared_bitmap);
+                break;
+            }
+
+            if (ret) {
+                /*
+                 * Very unexpected: something went wrong. Revert to the old
+                 * state, marking only the blocks as private that we converted
+                 * to shared.
+                 */
+                for (cur = offset; cur < end; cur += block_size) {
+                    bit = cur / block_size;
+                    if (!test_bit(bit - first_bit, modified_bitmap)) {
+                        continue;
+                    }
+                    assert(test_bit(bit, attr->shared_bitmap));
+                    clear_bit(bit, attr->shared_bitmap);
+                    ram_block_attribute_notify_to_private(attr, cur, block_size);
+                }
+            }
+            g_free(modified_bitmap);
+        } else {
+            /* Complete private */
+            bitmap_set(attr->shared_bitmap, first_bit, nbits);
+            ret = ram_block_attribute_notify_to_shared(attr, offset, size);
+            if (ret) {
+                bitmap_clear(attr->shared_bitmap, first_bit, nbits);
+            }
+        }
+    }
+
+    return ret;
+}
+
 int ram_block_attribute_realize(RamBlockAttribute *attr, MemoryRegion *mr)
 {
     uint64_t shared_bitmap_size;
@@ -272,6 +461,7 @@ static void ram_block_attribute_finalize(Object *obj)
 static void ram_block_attribute_class_init(ObjectClass *oc, void *data)
 {
     GenericStateManagerClass *gsmc = GENERIC_STATE_MANAGER_CLASS(oc);
+    PrivateSharedManagerClass *psmc = PRIVATE_SHARED_MANAGER_CLASS(oc);
 
     gsmc->get_min_granularity = ram_block_attribute_psm_get_min_granularity;
     gsmc->register_listener = ram_block_attribute_psm_register_listener;
@@ -279,4 +469,5 @@ static void ram_block_attribute_class_init(ObjectClass *oc, void *data)
     gsmc->is_state_set = ram_block_attribute_psm_is_shared;
     gsmc->replay_on_state_set = ram_block_attribute_psm_replay_on_shared;
     gsmc->replay_on_state_clear = ram_block_attribute_psm_replay_on_private;
+    psmc->state_change = ram_block_attribute_psm_state_change;
 }
