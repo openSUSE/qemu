@@ -48,6 +48,15 @@ const char *fw_cfg_arch_key_name(uint16_t key)
     return NULL;
 }
 
+/* Add etc/e820 late, once all regions should be present */
+void fw_cfg_add_e820(FWCfgState *fw_cfg)
+{
+    struct e820_entry *table;
+    int nr_e820 = e820_get_table(&table);
+
+    fw_cfg_add_file(fw_cfg, "etc/e820", table, nr_e820 * sizeof(*table));
+}
+
 void fw_cfg_build_smbios(MachineState *ms, FWCfgState *fw_cfg)
 {
 #ifdef CONFIG_SMBIOS
@@ -56,6 +65,7 @@ void fw_cfg_build_smbios(MachineState *ms, FWCfgState *fw_cfg)
     struct smbios_phys_mem_area *mem_array;
     unsigned i, array_count;
     X86CPU *cpu = X86_CPU(ms->possible_cpus->cpus[0].cpu);
+    int nr_e820;
 
     /* tell smbios about cpuid version and features */
     smbios_set_cpuid(cpu->env.cpuid_version, cpu->env.features[FEAT_1_EDX]);
@@ -67,8 +77,9 @@ void fw_cfg_build_smbios(MachineState *ms, FWCfgState *fw_cfg)
     }
 
     /* build the array of physical mem area from e820 table */
-    mem_array = g_malloc0(sizeof(*mem_array) * e820_get_num_entries());
-    for (i = 0, array_count = 0; i < e820_get_num_entries(); i++) {
+    nr_e820 = e820_get_table(NULL);
+    mem_array = g_malloc0(sizeof(*mem_array) * nr_e820);
+    for (i = 0, array_count = 0; i < nr_e820; i++) {
         uint64_t addr, len;
 
         if (e820_get_entry(i, E820_RAM, &addr, &len)) {
@@ -126,9 +137,6 @@ FWCfgState *fw_cfg_arch_create(MachineState *ms,
                      acpi_tables, acpi_tables_len);
 #endif
     fw_cfg_add_i32(fw_cfg, FW_CFG_IRQ0_OVERRIDE, 1);
-
-    fw_cfg_add_file(fw_cfg, "etc/e820", e820_table,
-                    sizeof(struct e820_entry) * e820_get_num_entries());
 
     fw_cfg_add_bytes(fw_cfg, FW_CFG_HPET, &hpet_cfg, sizeof(hpet_cfg));
     /* allocate memory for the NUMA channel: one (64bit) word for the number
