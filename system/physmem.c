@@ -1871,7 +1871,7 @@ static void ram_block_add(RAMBlock *new_block, Error **errp)
         assert(kvm_enabled());
         assert(new_block->guest_memfd < 0);
 
-        ret = ram_block_discard_require(true);
+        ret = ram_block_coordinated_discard_require(true);
         if (ret < 0) {
             error_setg_errno(errp, -ret,
                              "cannot set up private guest memory: discard currently blocked");
@@ -1895,7 +1895,7 @@ static void ram_block_add(RAMBlock *new_block, Error **errp)
              */
             object_unref(OBJECT(new_block->ram_block_attribute));
             close(new_block->guest_memfd);
-            ram_block_discard_require(false);
+            ram_block_coordinated_discard_require(false);
             qemu_mutex_unlock_ramlist();
             goto out_free;
         }
@@ -2155,7 +2155,7 @@ static void reclaim_ramblock(RAMBlock *block)
         ram_block_attribute_unrealize(block->ram_block_attribute);
         object_unref(OBJECT(block->ram_block_attribute));
         close(block->guest_memfd);
-        ram_block_discard_require(false);
+        ram_block_coordinated_discard_require(false);
     }
 
     g_free(block);
