@@ -153,6 +153,7 @@ struct SevSnpGuestState {
     /* configuration parameters */
     char *guest_visible_workarounds;
     char *id_block_base64;
+    uint8_t *id_block;
     char *id_auth;
     char *host_data;
 
@@ -2169,16 +2170,15 @@ sev_snp_guest_set_id_block(Object *obj, const char *value, Error **errp)
     gsize len;
 
     finish->id_block_en = 0;
+    g_free(sev_snp_guest->id_block);
     g_free(sev_snp_guest->id_block_base64);
-    g_free((guchar *)finish->id_block_uaddr);
 
     /* store the base64 str so we don't need to re-encode in getter */
     sev_snp_guest->id_block_base64 = g_strdup(value);
+    sev_snp_guest->id_block =
+        qbase64_decode(sev_snp_guest->id_block_base64, -1, &len, errp);
 
-    finish->id_block_uaddr =
-        (uint64_t)qbase64_decode(sev_snp_guest->id_block_base64, -1, &len, errp);
-
-    if (!finish->id_block_uaddr) {
+    if (!sev_snp_guest->id_block) {
         return;
     }
 
@@ -2189,6 +2189,7 @@ sev_snp_guest_set_id_block(Object *obj, const char *value, Error **errp)
     }
 
     finish->id_block_en = 1;
+    finish->id_block_uaddr = (uintptr_t)sev_snp_guest->id_block;
 }
 
 static char *
