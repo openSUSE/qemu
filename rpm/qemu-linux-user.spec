@@ -137,7 +137,6 @@ cd %blddir
 # for them.
 
 # TODO: Check whether we want to enable the followings:
-# * avx512f
 # * debug-info
 # * fuse
 # * malloc-trim
@@ -172,7 +171,6 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--disable-attr \
 	--disable-auth-pam \
 	--disable-avx2 \
-	--disable-avx512f \
 	--disable-block-drv-whitelist-in-tools \
 	--disable-bochs \
 	--disable-bpf \
@@ -226,7 +224,6 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--disable-linux-aio \
 	--disable-linux-io-uring \
 	--disable-linux-user \
-	--disable-live-block-migration \
 	--disable-lto \
 	--disable-lzfse \
 	--disable-lzo \
@@ -249,7 +246,6 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--disable-pixman \
 	--disable-plugins \
 	--disable-png \
-	--disable-pvrdma \
 	--disable-qcow1 \
 	--disable-qed \
 	--disable-qom-cast-debug \
