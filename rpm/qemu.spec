@@ -971,6 +971,8 @@ unlink %{buildroot}%_datadir/%name/edk2-i386-secure-code.fd
 unlink %{buildroot}%_datadir/%name/edk2-i386-vars.fd
 unlink %{buildroot}%_datadir/%name/edk2-x86_64-code.fd
 unlink %{buildroot}%_datadir/%name/edk2-x86_64-secure-code.fd
+unlink %{buildroot}%_datadir/%name/edk2-riscv-code.fd
+unlink %{buildroot}%_datadir/%name/edk2-riscv-vars.fd
 
 # this was never meant for customer consumption - delete even though installed
 unlink %{buildroot}%_bindir/elf2dmp
