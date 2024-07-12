@@ -535,7 +535,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--localstatedir=%_localstatedir \
 	--prefix=%_prefix \
 	--sysconfdir=%_sysconfdir \
-	--with-pkgversion="%(echo '%{distro}' | sed 's/ (.*)//')" \
+	--with-pkgversion="$(echo '%{distro}' | sed 's/ (.*)//')" \
 	--disable-af-xdp \
 	--disable-alsa \
 	--disable-attr \
