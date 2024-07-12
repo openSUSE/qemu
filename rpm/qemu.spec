@@ -1300,7 +1300,6 @@ popular QEMU packages which are dedicated to a single architecture.)
 %_bindir/qemu-system-mipsel
 %_bindir/qemu-system-mips64
 %_bindir/qemu-system-mips64el
-%_bindir/qemu-system-nios2
 %_bindir/qemu-system-or1k
 %_bindir/qemu-system-riscv32
 %_bindir/qemu-system-riscv64
@@ -1863,7 +1862,6 @@ This package provides QTest accelerator for testing QEMU.
 %_libdir/%name/accel-qtest-mips64.so
 %_libdir/%name/accel-qtest-mips64el.so
 %_libdir/%name/accel-qtest-mipsel.so
-%_libdir/%name/accel-qtest-nios2.so
 %_libdir/%name/accel-qtest-or1k.so
 %_libdir/%name/accel-qtest-ppc.so
 %_libdir/%name/accel-qtest-ppc64.so
