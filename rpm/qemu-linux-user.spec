@@ -88,7 +88,6 @@ syscall layer occurs on the native hardware and operating system.
 %_bindir/qemu-mipsel
 %_bindir/qemu-mipsn32
 %_bindir/qemu-mipsn32el
-%_bindir/qemu-nios2
 %_bindir/qemu-or1k
 %_bindir/qemu-ppc
 %_bindir/qemu-ppc64
