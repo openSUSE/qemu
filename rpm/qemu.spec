@@ -875,16 +875,17 @@ popd
 
 %make_build -C %srcdir/roms seavgabios-ati \
 
-%make_build -C %srcdir/roms pxerom
+%make_build -C %srcdir/roms pxerom NO_WERROR=1
 
 %make_build -C %srcdir/roms edk2-basetools EXTRA_OPTFLAGS='-fPIE'
-%make_build -C %srcdir/roms efirom
+
+%make_build -C %srcdir/roms efirom NO_WERROR=1
 
 %if %{force_fit_virtio_pxe_rom}
 pushd %srcdir
 patch -p1 < %{rpmfilesdir}/openSUSE-pcbios-stub-out-the-SAN-req-s-i.patch
 popd
-%make_build -C %srcdir/roms pxerom_variants=virtio pxerom_targets=1af41000 pxerom
+%make_build -C %srcdir/roms NO_WERROR=1 pxerom_variants=virtio pxerom_targets=1af41000 pxerom
 %endif
 
 for i in %supported_nics_large %unsupported_nics
