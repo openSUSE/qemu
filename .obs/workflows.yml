@@ -1,4 +1,4 @@
-pr_workflow:
+pr_factory:
   steps:
     - branch_package:
         source_project: Virtualization:Staging
@@ -9,7 +9,8 @@ pr_workflow:
     branches:
       only:
         - factory
-rebuild_workflow:
+
+rebuild_factory:
   steps:
     # Will automatically rebuild the package
     - trigger_services:
@@ -20,3 +21,27 @@ rebuild_workflow:
     branches:
       only:
         - factory
+
+pr_staging_tdx:
+  steps:
+    - branch_package:
+        source_project: Virtualization:Staging:TDX
+        source_package: qemu
+        target_project: Virtualization:Staging:TDX:PRs
+  filters:
+    event: pull_request
+    branches:
+      only:
+        - v8.2.6-tdx
+
+rebuild_staging_tdx:
+  steps:
+    # Will automatically rebuild the package
+    - trigger_services:
+        project: Virtualization:Staging:TDX
+        package: qemu
+  filters:
+    event: push
+    branches:
+      only:
+        - v8.2.6-tdx
