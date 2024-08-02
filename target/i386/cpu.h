@@ -2034,6 +2034,9 @@ struct ArchCPU {
     /* Compatibility bits for old machine types: */
     bool enable_cpuid_0xb;
 
+    /* Force to enable cpuid 0x1f */
+    bool enable_cpuid_0x1f;
+
     /* Enable auto level-increase for all CPUID leaves */
     bool full_cpuid_auto_level;
 
@@ -2326,6 +2329,12 @@ static inline uint32_t host_cpu_phys_bits(void)
     return 40; // TCG_PHYS_ADDR_BITS
 }
 #endif
+
+static inline bool x86_has_cpuid_0x1f(X86CPU *cpu)
+{
+    return cpu->enable_cpuid_0x1f ||
+           x86_has_extended_topo(cpu->env.avail_cpu_topo);
+}
 
 /* helper.c */
 void x86_cpu_set_a20(X86CPU *cpu, int a20_state);
