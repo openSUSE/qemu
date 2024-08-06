@@ -155,6 +155,10 @@ void qmp_nbd_server_start(SocketAddressLegacy *addr,
 {
     SocketAddress *addr_flat = socket_address_flatten(addr);
 
+    if (!has_max_connections) {
+        max_connections = NBD_DEFAULT_MAX_CONNECTIONS;
+    }
+
     nbd_server_start(addr_flat, tls_creds, max_connections, errp);
     qapi_free_SocketAddress(addr_flat);
 }
