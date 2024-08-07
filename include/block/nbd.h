@@ -24,6 +24,12 @@
 #include "io/channel-socket.h"
 #include "crypto/tlscreds.h"
 
+/*
+ * NBD_DEFAULT_HANDSHAKE_MAX_SECS: Number of seconds in which client must
+ * succeed at NBD_OPT_GO before being forcefully dropped as too slow.
+ */
+#define NBD_DEFAULT_HANDSHAKE_MAX_SECS 10
+
 /* Handshake phase structs - this struct is passed on the wire */
 
 struct NBDOption {
@@ -311,9 +317,12 @@ void nbd_export_set_description(NBDExport *exp, const char *description);
 void nbd_export_close_all(void);
 
 void nbd_client_new(QIOChannelSocket *sioc,
+                    uint32_t handshake_max_secs,
                     QCryptoTLSCreds *tlscreds,
                     const char *tlsaclname,
-                    void (*close_fn)(NBDClient *, bool));
+                    void (*close_fn)(NBDClient *, bool),
+                    void *owner);
+void *nbd_client_owner(NBDClient *client);
 void nbd_client_get(NBDClient *client);
 void nbd_client_put(NBDClient *client);
 
