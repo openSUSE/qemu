@@ -357,6 +357,9 @@ struct PCIDevice {
 
     /* ID of standby device in net_failover pair */
     char *failover_pair_id;
+
+    /* Maximum DMA bounce buffer size used for indirect memory map requests */
+    uint32_t max_bounce_buffer_size;
 };
 
 void pci_register_bar(PCIDevice *pci_dev, int region_num,
