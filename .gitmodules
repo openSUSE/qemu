@@ -1,12 +1,12 @@
 [submodule "roms/seabios"]
 	path = roms/seabios
-	url = https://github.com/openSUSE/qemu-seabios.git
+	url = https://gitlab.suse.de/virtualization/qemu-seabios.git
 [submodule "roms/SLOF"]
 	path = roms/SLOF
-	url = https://github.com/openSUSE/qemu-SLOF.git
+	url = https://gitlab.suse.de/virtualization/qemu-SLOF.git
 [submodule "roms/ipxe"]
 	path = roms/ipxe
-	url = https://github.com/openSUSE/qemu-ipxe.git
+	url = https://gitlab.suse.de/virtualization/qemu-ipxe.git
 [submodule "roms/openbios"]
 	path = roms/openbios
 	url = https://gitlab.com/qemu-project/openbios.git
@@ -18,7 +18,7 @@
 	url = https://gitlab.com/qemu-project/u-boot.git
 [submodule "roms/skiboot"]
 	path = roms/skiboot
-	url = https://github.com/openSUSE/qemu-skiboot.git
+	url = https://gitlab.suse.de/virtualization/qemu-skiboot.git
 [submodule "roms/QemuMacDrivers"]
 	path = roms/QemuMacDrivers
 	url = https://gitlab.com/qemu-project/QemuMacDrivers.git
@@ -36,7 +36,7 @@
 	url = 	https://gitlab.com/qemu-project/opensbi.git
 [submodule "roms/qboot"]
 	path = roms/qboot
-	url = https://github.com/openSUSE/qemu-qboot.git
+	url = https://gitlab.suse.de/virtualization/qemu-qboot.git
 [submodule "roms/vbootrom"]
 	path = roms/vbootrom
 	url = https://gitlab.com/qemu-project/vbootrom.git
