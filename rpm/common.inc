@@ -46,6 +46,12 @@
 %bcond_with xdp
 %endif
 
+%ifarch %ix86 x86_64
+%bcond_without vmsr_helper
+%else
+%define vmsr_helper 0
+%endif
+
 # Make it possible to build without spice (for SLE/Leap Micro)
 %bcond_without spice
 
