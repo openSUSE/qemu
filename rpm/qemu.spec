@@ -1016,6 +1016,15 @@ done
 # End of "if build_x86_firmware"
 %endif
 
+%if 0%{with vmsr_helper}
+echo ""
+# Upstream provides services for qemu-vmsr-helper. So far, we've not needed
+# them, so let's continue not to ship them for now. If that changes, just
+# uncomment these lines (and the ones in the %file vmsr-helper section)
+#install -m 0644 contrib/systemd/qemu-vmsr-helper.service %{buildroot}%{_unitdir}
+#install -m 0644 contrib/systemd/qemu-vmsr-helper.socket %{buildroot}%{_unitdir}
+%endif
+
 %suse_update_desktop_file qemu
 
 # Common install steps for qemu and qemu-linux-user
@@ -1696,6 +1705,20 @@ This package provides a helper utility for SCSI persistent reservations.
 %_bindir/qemu-pr-helper
 %_mandir/man8/qemu-pr-helper.8.gz
 
+%if 0%{with vmsr_helper}
+%package vmsr-helper
+Summary:        QEMU virtual RAPL MSR helper
+Group:          System/Emulators/PC
+
+%description vmsr-helper
+This package provides a helper utility for letting VMs access the RAPL (Running Average Power Limit) MSR.
+
+%files vmsr-helper
+%_bindir/qemu-vmsr-helper
+#%{_unitdir}/qemu-vmsr-helper.service
+#%{_unitdir}/qemu-vmsr-helper.socket
+%endif
+
 %package tools
 Summary:        Tools for QEMU
 Group:          System/Emulators/PC
@@ -1703,6 +1726,9 @@ Requires(pre):  permissions
 Requires:       qemu-img
 Requires:       qemu-pr-helper
 Requires:       group(kvm)
+%if 0%{with vmsr_helper}
+Requires:       qemu-vmsr-helper
+%endif
 %if %{has_virtiofsd}
 Requires:       virtiofsd
 %endif
