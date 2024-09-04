@@ -1016,6 +1016,12 @@ done
 # End of "if build_x86_firmware"
 %endif
 
+# Upstream provides services for qemu-pr-helper. So far, we've not needed
+# them, so let's continue not to ship them for now. If that changes, just
+# uncomment these lines (and the ones in the %file pr-helper section)
+#install -m 0644 contrib/systemd/qemu-pr-helper.service %{buildroot}%{_unitdir}
+#install -m 0644 contrib/systemd/qemu-pr-helper.socket %{buildroot}%{_unitdir}
+
 %if 0%{with vmsr_helper}
 echo ""
 # Upstream provides services for qemu-vmsr-helper. So far, we've not needed
@@ -1703,6 +1709,8 @@ This package provides a helper utility for SCSI persistent reservations.
 
 %files pr-helper
 %_bindir/qemu-pr-helper
+#%{_unitdir}/qemu-pr-helper.service
+#%{_unitdir}/qemu-pr-helper.socket
 %_mandir/man8/qemu-pr-helper.8.gz
 
 %if 0%{with vmsr_helper}
