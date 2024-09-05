@@ -53,7 +53,7 @@
 
 %ifarch %ix86 x86_64 ppc ppc64 ppc64le s390x armv7hl aarch64 riscv64
 %define kvm_available 1
-%define with_uring 1
+%bcond_without uring
 %define liburing_min_version 1.0
 %endif
 
@@ -62,11 +62,11 @@
 %endif
 
 %ifarch x86_64 aarch64 ppc64le s390x
-%define with_rbd 1
+%bcond_without rbd
 %endif
 
 %ifarch x86_64 ppc64le
-%define with_daxctl 1
+%bcond_without daxctl
 %endif
 
 # enforce pxe rom sizes for migration compatability from SLE 11 SP3 forward
@@ -127,20 +127,20 @@ BuildRequires:  libnuma-devel
 %if 0%{with canokey}
 BuildRequires:  canokey-qemu-devel
 %endif
-%if 0%{?with_daxctl}
+%if 0%{with daxctl}
 BuildRequires:  pkgconfig(libndctl)
 %endif
 %if %{kvm_available}
 BuildRequires:  pkgconfig(udev)
 %endif
-%if 0%{?with_rbd}
+%if 0%{with rbd}
 BuildRequires:  librbd-devel
 %endif
 %if 0%{with spice}
 BuildRequires:  pkgconfig(spice-protocol) >= 0.12.3
 BuildRequires:  pkgconfig(spice-server) >= 0.12.5
 %endif
-%if 0%{?with_uring}
+%if 0%{with uring}
 BuildRequires:  pkgconfig(liburing) >= %liburing_min_version
 %endif
 %if 0%{with xdp}
@@ -252,7 +252,7 @@ Recommends:     qemu-ksm = %{version}
 Recommends:     qemu-tools
 Recommends:     qemu-ui-curses
 ## Packages we will SUGGEST
-%if 0%{?with_rbd}
+%if 0%{with rbd}
 Suggests:       qemu-block-rbd
 %endif
 Suggests:       qemu-accel-qtest
@@ -688,31 +688,31 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 %if 0%{with canokey}
 	--enable-canokey \
 %endif
-%if %{kvm_available}
+%if 0%{kvm_available}
 	--enable-kvm \
 %endif
-%if 0%{?with_daxctl}
+%if 0%{with daxctl}
 	--enable-libdaxctl \
 %endif
-%if 0%{?with_uring}
+%if 0%{with uring}
         --enable-linux-io-uring \
 %endif
 %if "%{_lto_cflags}" != "%{nil}"
 	--enable-lto \
 %endif
-%if %{with malloc_trim}
+%if 0%{with malloc_trim}
 	--enable-malloc-trim \
 %endif
-%if %{with system_membarrier}
+%if 0%{with system_membarrier}
 	--enable-membarrier \
 %endif
 %ifnarch %arm s390x
 	--enable-numa \
 %endif
-%if 0%{?with_rbd}
+%if 0%{with rbd}
 	--enable-rbd \
 %endif
-%if %{has_rutabaga_gfx}
+%if 0%{has_rutabaga_gfx}
 	--enable-rutabaga-gfx \
 %endif
 	--enable-alsa \
@@ -1742,7 +1742,7 @@ Requires:       virtiofsd
 %endif
 Recommends:     multipath-tools
 Recommends:     qemu-block-curl
-%if 0%{?with_rbd}
+%if 0%{with rbd}
 Recommends:     qemu-block-rbd
 %endif
 
@@ -1914,7 +1914,7 @@ This package provides QTest accelerator for testing QEMU.
 %_libdir/%name/accel-qtest-xtensa.so
 %_libdir/%name/accel-qtest-xtensaeb.so
 
-%if 0%{?with_rbd}
+%if 0%{with rbd}
 %package block-rbd
 Summary:        Rados Block Device (Ceph) support for QEMU
 Group:          System/Emulators/PC
