@@ -652,6 +652,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-usb-redir \
 	--enable-vde \
 	--enable-vdi \
+	--enable-vhdx \
 	--enable-vhost-crypto \
 	--enable-vhost-kernel \
 	--enable-vhost-net \
@@ -663,6 +664,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-vnc \
 	--enable-vnc-jpeg \
 	--enable-vnc-sasl \
+	--enable-vpc \
 	--enable-vte \
 	--enable-vvfat \
 	--enable-werror \
