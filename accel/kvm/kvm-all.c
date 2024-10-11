@@ -2526,12 +2526,6 @@ static int kvm_init(MachineState *ms)
         s->nr_slots = 32;
     }
 
-    s->nr_as = kvm_check_extension(s, KVM_CAP_MULTI_ADDRESS_SPACE);
-    if (s->nr_as <= 1) {
-        s->nr_as = 1;
-    }
-    s->as = g_new0(struct KVMAs, s->nr_as);
-
     if (object_property_find(OBJECT(current_machine), "kvm-type")) {
         g_autofree char *kvm_type = object_property_get_str(OBJECT(current_machine),
                                                             "kvm-type",
@@ -2579,6 +2573,12 @@ static int kvm_init(MachineState *ms)
     }
 
     s->vmfd = ret;
+
+    s->nr_as = kvm_vm_check_extension(s, KVM_CAP_MULTI_ADDRESS_SPACE);
+    if (s->nr_as <= 1) {
+        s->nr_as = 1;
+    }
+    s->as = g_new0(struct KVMAs, s->nr_as);
 
     /* check the vcpu limits */
     soft_vcpus_limit = kvm_recommended_vcpus(s);
