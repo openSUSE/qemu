@@ -262,7 +262,6 @@ Suggests:       qemu-block-iscsi
 Suggests:       qemu-block-ssh
 Suggests:       qemu-chardev-baum
 Suggests:       qemu-extra
-Suggests:       qemu-lang
 Suggests:       qemu-microvm
 Suggests:       qemu-skiboot
 Suggests:       qemu-vhost-user-gpu
@@ -313,6 +312,8 @@ Suggests:       qemu-extra
 %{generic_qemu_description}
 
 This package acts as an umbrella package to the other QEMU sub-packages.
+
+%lang_package
 
 %files
 %if %{kvm_available}
@@ -1323,15 +1324,6 @@ popular QEMU packages which are dedicated to a single architecture.)
 %_datadir/%name/petalogix-s3adsp1800.dtb
 %_datadir/%name/QEMU,cgthree.bin
 %_datadir/%name/QEMU,tcx.bin
-
-%package lang
-Summary:        Translations for QEMU
-Group:          System/Emulators/PC
-
-%description lang
-This package contains a few language translations, particularly for the
-graphical user interface components that come with QEMU. The bulk of strings
-in QEMU are not localized.
 
 %files lang -f %blddir/%name.lang
 
