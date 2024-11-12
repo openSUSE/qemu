@@ -6893,11 +6893,32 @@ int bdrv_activate(BlockDriverState *bs, Error **errp)
             return ret;
         }
 
+        /*
+         * bdrv_invalidate_cache() calls bdrv_co_invalidate_cache(),
+         * which for qcow2 results in a partial clearing of the
+         * BDRVQcow2State structure. Before that structure has been
+         * completely repopulated, qcow2_do_open() will yield to wait
+         * for I/O while reading the qcow header, which allows a
+         * concurrent QMP query-block command to be dispatched on the
+         * same context. As a result of query-block,
+         * qcow2_get_specific_info() is executed and sees the partial
+         * BDRVQcow2State, leading to an assert. Block the query-info
+         * operation during this window. Note this needs to be done at
+         * this level because the invalidation functions run in
+         * coroutines and the op_block code is GS.
+         */
+        Error *blocker = NULL;
+        error_setg(&blocker, "invalidating cached metadata");
+        bdrv_op_block(bs, BLOCK_OP_TYPE_INFO, blocker);
+
         ret = bdrv_invalidate_cache(bs, errp);
         if (ret < 0) {
             bs->open_flags |= BDRV_O_INACTIVE;
             return ret;
         }
+
+        bdrv_op_unblock(bs, BLOCK_OP_TYPE_INFO, blocker);
+        g_free(blocker);
 
         FOR_EACH_DIRTY_BITMAP(bs, bm) {
             bdrv_dirty_bitmap_skip_store(bm, false);
