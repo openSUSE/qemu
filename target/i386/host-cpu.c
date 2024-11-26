@@ -14,6 +14,41 @@
 #include "qemu/error-report.h"
 #include "sysemu/sysemu.h"
 
+/* Note: Only safe for use on x86(-64) hosts */
+#ifdef __x86_64__
+uint32_t host_cpu_phys_bits(void)
+{
+    uint32_t eax;
+    uint32_t host_phys_bits;
+
+    host_cpuid(0x80000000, 0, &eax, NULL, NULL, NULL);
+    if (eax >= 0x80000008) {
+        host_cpuid(0x80000008, 0, &eax, NULL, NULL, NULL);
+        /*
+         * Note: According to AMD doc 25481 rev 2.34 they have a field
+         * at 23:16 that can specify a maximum physical address bits for
+         * the guest that can override this value; but I've not seen
+         * anything with that set.
+         */
+        host_phys_bits = eax & 0xff;
+    } else {
+        /*
+         * It's an odd 64 bit machine that doesn't have the leaf for
+         * physical address bits; fall back to 36 that's most older
+         * Intel.
+         */
+        host_phys_bits = 36;
+    }
+
+    return host_phys_bits;
+}
+#else
+uint32_t host_cpu_phys_bits(void)
+{
+    return 40; // TCG_PHYS_ADDR_BITS
+}
+#endif
+
 static void host_cpu_enable_cpu_pm(X86CPU *cpu)
 {
     CPUX86State *env = &cpu->env;

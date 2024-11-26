@@ -23,6 +23,7 @@
 #include "qemu/qemu-print.h"
 #include "qemu/hw-version.h"
 #include "cpu.h"
+#include "host-cpu.h"
 #include "tcg/helper-tcg.h"
 #include "sysemu/reset.h"
 #include "sysemu/hvf.h"
