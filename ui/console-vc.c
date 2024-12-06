@@ -958,9 +958,10 @@ static void vc_chr_set_echo(Chardev *chr, bool echo)
     drv->console->echo = echo;
 }
 
-void qemu_text_console_update_size(QemuTextConsole *c)
+void qemu_text_console_select(QemuTextConsole *c)
 {
     dpy_text_resize(QEMU_CONSOLE(c), c->width, c->height);
+    qemu_text_console_update_cursor();
 }
 
 static void vc_chr_open(Chardev *chr,
