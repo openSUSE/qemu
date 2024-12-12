@@ -107,7 +107,9 @@
     { "qemu64-" TYPE_X86_CPU, "model-id", "QEMU Virtual CPU version " v, },\
     { "athlon-" TYPE_X86_CPU, "model-id", "QEMU Virtual CPU version " v, },
 
-GlobalProperty pc_compat_7_0[] = {};
+GlobalProperty pc_compat_7_0[] = {
+    { TYPE_INTEL_IOMMU_DEVICE, "aw-bits", "39" },
+};
 const size_t pc_compat_7_0_len = G_N_ELEMENTS(pc_compat_7_0);
 
 GlobalProperty pc_compat_6_2[] = {
