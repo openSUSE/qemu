@@ -83,6 +83,7 @@ GlobalProperty pc_compat_8_1[] = {
     { TYPE_X86_CPU, "x-amd-topoext-features-only", "false" },
     { TYPE_X86_CPU, "guest-phys-bits", "0" },
     { "sev-guest", "legacy-vm-type", "on" },
+    { TYPE_INTEL_IOMMU_DEVICE, "aw-bits", "39" },
 };
 const size_t pc_compat_8_1_len = G_N_ELEMENTS(pc_compat_8_1);
 
