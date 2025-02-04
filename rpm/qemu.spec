@@ -1304,7 +1304,7 @@ a virtfs helper, ivshmem, disk utilities and scripts for various purposes.
 %_mandir/man8/qemu-nbd.8.gz
 %_mandir/man8/qemu-pr-helper.8.gz
 %dir %_sysconfdir/%name
-%config %_sysconfdir/%name/bridge.conf
+%config(noreplace) %_sysconfdir/%name/bridge.conf
 
 %package ivshmem-tools
 Summary:        Inter-VM Shared Memory Tools for QEMU
