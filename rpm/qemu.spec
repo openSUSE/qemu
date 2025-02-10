@@ -88,7 +88,7 @@ URL:            https://www.qemu.org/
 Summary:        Machine emulator and virtualizer
 License:        BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
 Group:          System/Emulators/PC
-Version:        9.2.0
+Version:        9.2.1
 Release:        0
 Source0:        qemu-%{version}.tar.xz
 Source1:        common.inc
@@ -855,6 +855,7 @@ unlink %{buildroot}%_datadir/%name/firmware/60-edk2-arm.json
 unlink %{buildroot}%_datadir/%name/firmware/60-edk2-i386.json
 unlink %{buildroot}%_datadir/%name/firmware/60-edk2-x86_64.json
 unlink %{buildroot}%_datadir/%name/firmware/60-edk2-loongarch64.json
+unlink %{buildroot}%_datadir/%name/firmware/60-edk2-riscv64.json
 unlink %{buildroot}%_datadir/%name/edk2-aarch64-code.fd
 unlink %{buildroot}%_datadir/%name/edk2-arm-code.fd
 unlink %{buildroot}%_datadir/%name/edk2-arm-vars.fd
