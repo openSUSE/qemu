@@ -2607,11 +2607,13 @@ static coroutine_fn void nbd_co_client_start(void *opaque)
         if (local_err) {
             error_report_err(local_err);
         }
+        timer_del(handshake_timer);
         timer_free(handshake_timer);
         client_close(client, false);
         return;
     }
 
+    timer_del(handshake_timer);
     timer_free(handshake_timer);
     nbd_client_receive_next_request(client);
 }
