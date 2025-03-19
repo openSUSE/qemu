@@ -2040,14 +2040,6 @@ int kvm_arch_init_vcpu(CPUState *cs)
     int r;
     Error *local_err = NULL;
 
-    if (current_machine->cgs) {
-        r = x86_confidential_guest_check_features(
-                X86_CONFIDENTIAL_GUEST(current_machine->cgs), cs);
-        if (r < 0) {
-            return r;
-        }
-    }
-
     memset(&cpuid_data, 0, sizeof(cpuid_data));
 
     cpuid_i = 0;
@@ -5365,52 +5357,7 @@ static bool host_supports_vmx(void)
     return ecx & CPUID_EXT_VMX;
 }
 
-/*
- * Currently the handling here only supports use of KVM_HC_MAP_GPA_RANGE
- * to service guest-initiated memory attribute update requests so that
- * KVM_SET_MEMORY_ATTRIBUTES can update whether or not a page should be
- * backed by the private memory pool provided by guest_memfd, and as such
- * is only applicable to guest_memfd-backed guests (e.g. SNP/TDX).
- *
- * Other other use-cases for KVM_HC_MAP_GPA_RANGE, such as for SEV live
- * migration, are not implemented here currently.
- *
- * For the guest_memfd use-case, these exits will generally be synthesized
- * by KVM based on platform-specific hypercalls, like GHCB requests in the
- * case of SEV-SNP, and not issued directly within the guest though the
- * KVM_HC_MAP_GPA_RANGE hypercall. So in this case, KVM_HC_MAP_GPA_RANGE is
- * not actually advertised to guests via the KVM CPUID feature bit, as
- * opposed to SEV live migration where it would be. Since it is unlikely the
- * SEV live migration use-case would be useful for guest-memfd backed guests,
- * because private/shared page tracking is already provided through other
- * means, these 2 use-cases should be treated as being mutually-exclusive.
- */
-static int kvm_handle_hc_map_gpa_range(struct kvm_run *run)
-{
-    uint64_t gpa, size, attributes;
-
-    if (!machine_require_guest_memfd(current_machine))
-        return -EINVAL;
-
-    gpa = run->hypercall.args[0];
-    size = run->hypercall.args[1] * TARGET_PAGE_SIZE;
-    attributes = run->hypercall.args[2];
-
-    trace_kvm_hc_map_gpa_range(gpa, size, attributes, run->hypercall.flags);
-
-    return kvm_convert_memory(gpa, size, attributes & KVM_MAP_GPA_RANGE_ENCRYPTED);
-}
-
-static int kvm_handle_hypercall(struct kvm_run *run)
-{
-    if (run->hypercall.nr == KVM_HC_MAP_GPA_RANGE)
-        return kvm_handle_hc_map_gpa_range(run);
-
-    return -EINVAL;
-}
-
 #define VMX_INVALID_GUEST_STATE 0x80000021
-
 int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
 {
     X86CPU *cpu = X86_CPU(cs);
@@ -5504,18 +5451,13 @@ int kvm_arch_handle_exit(CPUState *cs, struct kvm_run *run)
         ret = kvm_xen_handle_exit(cpu, &run->xen);
         break;
 #endif
-    case KVM_EXIT_HYPERCALL:
-        ret = kvm_handle_hypercall(run);
-        break;
-    case KVM_EXIT_SYSTEM_EVENT:
-        switch (run->system_event.type) {
-        case KVM_SYSTEM_EVENT_TDX_FATAL:
-            ret = tdx_handle_report_fatal_error(cpu, run);
-            break;
-        default:
-            ret = -1;
-            break;
-        }
+    case KVM_EXIT_TDX:
+	if (!is_tdx_vm()) {
+	    error_report("KVM: get KVM_EXIT_TDX for a non-TDX VM.");
+	    ret = -1;
+	    break;
+	}
+	ret = tdx_handle_exit(cpu, &run->tdx);
         break;
     default:
         fprintf(stderr, "KVM: unknown exit reason %d\n", run->exit_reason);

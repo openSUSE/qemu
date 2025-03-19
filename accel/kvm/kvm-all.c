@@ -3022,47 +3022,60 @@ int kvm_convert_memory(hwaddr start, hwaddr size, bool to_private)
     section = memory_region_find(get_system_memory(), start, size);
     mr = section.mr;
     if (!mr) {
+        if (!to_private) {
+        return 0;
+    }
         return -1;
     }
 
-    if (!memory_region_has_guest_memfd(mr)) {
-        error_report("Converting non guest_memfd backed memory region "
-                     "(0x%"HWADDR_PRIx" ,+ 0x%"HWADDR_PRIx") to %s",
-                     start, size, to_private ? "private" : "shared");
-        goto out_unref;
-    }
-
-    if (to_private) {
-        ret = kvm_set_memory_attributes_private(start, size);
-    } else {
-        ret = kvm_set_memory_attributes_shared(start, size);
-    }
-    if (ret) {
-        goto out_unref;
-    }
-
-    addr = memory_region_get_ram_ptr(mr) + section.offset_within_region;
-    rb = qemu_ram_block_from_host(addr, false, &offset);
-
-    if (to_private) {
-        if (rb->page_size != qemu_real_host_page_size()) {
-            /*
-             * shared memory is backed by hugetlb, which is supposed to be
-             * pre-allocated and doesn't need to be discarded
-             */
-            goto out_unref;
+    if (memory_region_has_guest_memfd(mr)) {
+        if (to_private) {
+            ret = kvm_set_memory_attributes_private(start, size);
+        } else {
+            ret = kvm_set_memory_attributes_shared(start, size);
         }
-        ret = ram_block_discard_is_disabled()
-              ? 0
-              : ram_block_discard_range(rb, offset, size);
+
+        if (ret) {
+            memory_region_unref(section.mr);
+            return ret;
+        }
+
+        addr = memory_region_get_ram_ptr(mr) + section.offset_within_region;
+        rb = qemu_ram_block_from_host(addr, false, &offset);
+
+        if (to_private) {
+            if (rb->page_size != qemu_real_host_page_size()) {
+                /*
+                * shared memory is back'ed by  hugetlb, which is supposed to be
+                * pre-allocated and doesn't need to be discarded
+                */
+                return 0;
+            } else {
+                ret = ram_block_discard_range(rb, offset, size);
+            }
+        } else {
+            ret = ram_block_discard_guest_memfd_range(rb, offset, size);
+        }
     } else {
-        ret = ram_block_discard_is_disabled()
-              ? 0
-              : ram_block_discard_guest_memfd_range(rb, offset, size);
+        /*
+         * Because vMMIO region must be shared, guest TD may convert vMMIO
+         * region to shared explicitly.  Don't complain such case.  See
+         * memory_region_type() for checking if the region is MMIO region.
+         */
+        if (!to_private &&
+            !memory_region_is_ram(mr) &&
+            !memory_region_is_ram_device(mr) &&
+            !memory_region_is_rom(mr) &&
+            !memory_region_is_romd(mr)) {
+                    ret = 0;
+        } else {
+            error_report("Convert non guest_memfd backed memory region "
+                        "(0x%"HWADDR_PRIx" ,+ 0x%"HWADDR_PRIx") to %s",
+                        start, size, to_private ? "private" : "shared");
+        }
     }
 
-out_unref:
-    memory_region_unref(mr);
+    memory_region_unref(section.mr);
     return ret;
 }
 

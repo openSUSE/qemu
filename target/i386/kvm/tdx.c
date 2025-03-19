@@ -81,9 +81,8 @@ static int tdx_ioctl_internal(enum tdx_ioctl_level level, void *state,
         [KVM_TDX_CAPABILITIES] = "KVM_TDX_CAPABILITIES",
         [KVM_TDX_INIT_VM] = "KVM_TDX_INIT_VM",
         [KVM_TDX_INIT_VCPU] = "KVM_TDX_INIT_VCPU",
-        [KVM_TDX_INIT_MEM_REGION] = "KVM_TDX_INIT_MEM_REGION",
+        [KVM_TDX_EXTEND_MEMORY] = "KVM_TDX_EXTEND_MEMORY",
         [KVM_TDX_FINALIZE_VM] = "KVM_TDX_FINALIZE_VM",
-        [KVM_TDX_GET_CPUID] = "KVM_TDX_GET_CPUID",
     };
 
     tdx_cmd.id = cmd_id;
@@ -134,7 +133,7 @@ static int get_tdx_capabilities(Error **errp)
         size = sizeof(struct kvm_tdx_capabilities) +
                       nr_cpuid_configs * sizeof(struct kvm_cpuid_entry2);
         caps = g_malloc0(size);
-        caps->cpuid.nent = nr_cpuid_configs;
+        caps->nr_cpuid_configs = nr_cpuid_configs;
 
         r = tdx_vm_ioctl(KVM_TDX_CAPABILITIES, 0, caps, &local_err);
         if (r == -E2BIG) {
@@ -300,7 +299,6 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
     TdxFirmware *tdvf = &tdx_guest->tdvf;
     TdxFirmwareEntry *entry;
     RAMBlock *ram_block;
-    Error *local_err = NULL;
     int r;
 
     tdx_init_ram_entries();
@@ -331,27 +329,34 @@ static void tdx_finalize_vm(Notifier *notifier, void *unused)
     tdx_post_init_vcpus();
 
     for_each_tdx_fw_entry(tdvf, entry) {
-        struct kvm_tdx_init_mem_region region;
-        uint32_t flags;
-
-        region = (struct kvm_tdx_init_mem_region) {
-            .source_addr = (uint64_t)entry->mem_ptr,
-            .gpa = entry->address,
+        struct kvm_memory_mapping mapping = {
+            .base_gfn = entry->address >> 12,
             .nr_pages = entry->size >> 12,
+            .source = (__u64)entry->mem_ptr,
         };
 
-        flags = entry->attributes & TDVF_SECTION_ATTRIBUTES_MR_EXTEND ?
-                KVM_TDX_MEASURE_MEMORY_REGION : 0;
-
         do {
-            error_free(local_err);
-            local_err = NULL;
-            r = tdx_vcpu_ioctl(first_cpu, KVM_TDX_INIT_MEM_REGION, flags,
-                               &region, &local_err);
+            r = kvm_vcpu_ioctl(first_cpu, KVM_MEMORY_MAPPING, &mapping);
         } while (r == -EAGAIN || r == -EINTR);
+
         if (r < 0) {
-            error_report_err(local_err);
-            exit(1);
+             error_report("KVM_MEMORY_MAPPING failed %s", strerror(-r));
+             exit(1);
+        }
+
+        if (entry->attributes & TDVF_SECTION_ATTRIBUTES_MR_EXTEND) {
+            mapping = (struct kvm_memory_mapping) {
+                .base_gfn = entry->address >> 12,
+                .nr_pages = entry->size >> 12,
+            };
+
+            do {
+                r = tdx_vm_ioctl(KVM_TDX_EXTEND_MEMORY, 0, &mapping, &error_fatal);
+            } while (r == -EAGAIN);
+            if (r < 0) {
+                error_report("KVM_TDX_EXTEND_MEMORY failed %s", strerror(-r));
+                exit(1);
+            }
         }
 
         if (entry->type == TDVF_SECTION_TYPE_TD_HOB ||
@@ -608,7 +613,7 @@ static void tdx_mask_cpuid_by_attrs(uint32_t feature, uint32_t index,
                                     int reg, uint32_t *value)
 {
     TdxAttrsMap *map;
-    uint64_t unavail = 0;
+    uint64_t unavail = 0, attr;
     int i;
 
     for (i = 0; i < ARRAY_SIZE(tdx_attrs_maps); i++) {
@@ -619,7 +624,8 @@ static void tdx_mask_cpuid_by_attrs(uint32_t feature, uint32_t index,
             continue;
         }
 
-        if (!((1ULL << map->attr_index) & tdx_caps->supported_attrs)) {
+        attr = 1ULL << map->attr_index;
+        if (!(attr & tdx_caps->attrs_fixed0) && !(attr & tdx_caps->attrs_fixed1)) {
             unavail |= map->feat_mask;
         }
     }
@@ -634,13 +640,14 @@ static void tdx_mask_cpuid_by_xfam(uint32_t feature, uint32_t index,
 {
     const FeatureWordInfo *f;
     const ExtSaveArea *esa;
-    uint64_t unavail = 0;
+    uint64_t unavail = 0, xfam;
     int i;
 
     assert(tdx_caps);
 
     for (i = 0; i < ARRAY_SIZE(x86_ext_save_areas); i++) {
-        if ((1ULL << i) & tdx_caps->supported_xfam) {
+        xfam = 1ULL << i;
+        if ((xfam & tdx_caps->xfam_fixed0) | (xfam & tdx_caps->xfam_fixed1)) {
             continue;
         }
 
@@ -669,9 +676,6 @@ static uint32_t tdx_adjust_cpuid_features(X86ConfidentialGuest *cg,
                                           uint32_t feature, uint32_t index,
                                           int reg, uint32_t value)
 {
-    struct kvm_cpuid_entry2 *e, *e1;
-    uint32_t fixed0, fixed1;
-
     switch (feature) {
     case 0x7:
         if (index == 0 && reg == R_EBX) {
@@ -701,161 +705,18 @@ static uint32_t tdx_adjust_cpuid_features(X86ConfidentialGuest *cg,
     tdx_mask_cpuid_by_attrs(feature, index, reg, &value);
     tdx_mask_cpuid_by_xfam(feature, index, reg, &value);
 
-    e = cpuid_find_entry(&tdx_caps->cpuid, feature, index);
-    if (e) {
-        e1 = cpuid_find_entry(&tdx_configurable_bits.cpuid, feature, index);
-        if (e1) {
-            uint32_t kvm_configurable = cpuid_entry_get_reg(e, reg);
-            uint32_t tdx_module_configurable = cpuid_entry_get_reg(e1, reg);
-            for (int i = 0; i < 32; i++) {
-                uint32_t f = 1U << i;
-                if (f & tdx_module_configurable && !(f & kvm_configurable)) {
-                    value &= ~f;
-                }
-            }
-        }
-    }
-
-    e = cpuid_find_entry(&tdx_fixed0_bits.cpuid, feature, index);
-    if (e) {
-        fixed0 = cpuid_entry_get_reg(e, reg);
-        value &= ~fixed0;
-    }
-
-    e = cpuid_find_entry(&tdx_fixed1_bits.cpuid, feature, index);
-    if (e) {
-        fixed1 = cpuid_entry_get_reg(e, reg);
-        value |= fixed1;
-    }
-
     return value;
-}
-
-static struct kvm_cpuid2 *tdx_fetch_cpuid(CPUState *cpu)
-{
-    struct kvm_cpuid2 *fetch_cpuid;
-    int size = KVM_MAX_CPUID_ENTRIES;
-    Error *local_err = NULL;
-    int r;
-
-    do {
-        error_free(local_err);
-        local_err = NULL;
-
-        fetch_cpuid = g_malloc0(sizeof(*fetch_cpuid) +
-                                sizeof(struct kvm_cpuid_entry2) * size);
-        fetch_cpuid->nent = size;
-        r = tdx_vcpu_ioctl(cpu, KVM_TDX_GET_CPUID, 0, fetch_cpuid, &local_err);
-        if (r == -E2BIG) {
-            g_free(fetch_cpuid);
-            size = fetch_cpuid->nent;
-        }
-    } while (r == -E2BIG);
-
-    if (r < 0) {
-        error_report_err(local_err);
-        return NULL;
-    }
-
-    return fetch_cpuid;
-}
-
-static int tdx_check_features(X86ConfidentialGuest *cg, CPUState *cs)
-{
-    uint64_t actual, requested, unavailable, forced_on;
-    g_autofree struct kvm_cpuid2 *fetch_cpuid;
-    const char *forced_on_prefix = NULL;
-    const char *unav_prefix = NULL;
-    struct kvm_cpuid_entry2 *entry;
-    X86CPU *cpu = X86_CPU(cs);
-    CPUX86State *env = &cpu->env;
-    FeatureWordInfo *wi;
-    FeatureWord w;
-    bool mismatch = false;
-
-    fetch_cpuid = tdx_fetch_cpuid(cs);
-    if (!fetch_cpuid) {
-        return -1;
-    }
-
-    if (cpu->check_cpuid || cpu->enforce_cpuid) {
-        unav_prefix = "TDX doesn't support requested feature";
-        forced_on_prefix = "TDX forcibly sets the feature";
-    }
-
-    for (w = 0; w < FEATURE_WORDS; w++) {
-        wi = &feature_word_info[w];
-        actual = 0;
-
-        switch (wi->type) {
-        case CPUID_FEATURE_WORD:
-            entry = cpuid_find_entry(fetch_cpuid, wi->cpuid.eax, wi->cpuid.ecx);
-            if (!entry) {
-                /*
-                 * If KVM doesn't report it means it's totally configurable
-                 * by QEMU
-                 */
-                continue;
-            }
-
-            actual = cpuid_entry_get_reg(entry, wi->cpuid.reg);
-            break;
-        case MSR_FEATURE_WORD:
-            /*
-             * TODO:
-             * validate MSR features when KVM has interface report them.
-             */
-            continue;
-        }
-
-        /* Fixup for special cases */
-        switch (w) {
-        case FEAT_8000_0001_EDX:
-            /*
-             * Intel enumerates SYSCALL bit as 1 only when processor in 64-bit
-             * mode and before vcpu running it's not in 64-bit mode.
-             */
-            actual |= CPUID_EXT2_SYSCALL;
-            break;
-        default:
-            break;
-        }
-
-        requested = env->features[w];
-        unavailable = requested & ~actual;
-        mark_unavailable_features(cpu, w, unavailable, unav_prefix);
-        if (unavailable) {
-            mismatch = true;
-        }
-
-        forced_on = actual & ~requested;
-        mark_forced_on_features(cpu, w, forced_on, forced_on_prefix);
-        if (forced_on) {
-            mismatch = true;
-        }
-    }
-
-    if (cpu->enforce_cpuid && mismatch) {
-        return -1;
-    }
-
-    if (cpu->phys_bits != host_cpu_phys_bits()) {
-        error_report("TDX requires guest CPU physical bits (%u) "
-                     "to match host CPU physical bits (%u)",
-                     cpu->phys_bits, host_cpu_phys_bits());
-        exit(1);
-    }
-
-    return 0;
 }
 
 static int tdx_validate_attributes(TdxGuest *tdx, Error **errp)
 {
-    if ((tdx->attributes & ~tdx_caps->supported_attrs)) {
-        error_setg(errp, "Invalid attributes 0x%lx for TDX VM "
-                   "(KVM supported: 0x%llx)", tdx->attributes,
-                   tdx_caps->supported_attrs);
-        return -1;
+    if (((tdx->attributes & tdx_caps->attrs_fixed0) | tdx_caps->attrs_fixed1) !=
+        tdx->attributes) {
+            error_setg(errp, "Invalid attributes 0x%lx for TDX VM "
+                       "(fixed0 0x%llx, fixed1 0x%llx)",
+                       tdx->attributes, tdx_caps->attrs_fixed0,
+                       tdx_caps->attrs_fixed1);
+            return -1;
     }
 
     if (tdx->attributes & ~TDX_SUPPORTED_TD_ATTRS) {
@@ -880,52 +741,13 @@ static int setup_td_guest_attributes(X86CPU *x86cpu, Error **errp)
 
 static int setup_td_xfam(X86CPU *x86cpu, Error **errp)
 {
-    CPUX86State *env = &x86cpu->env;
-    uint64_t xfam;
-
-    xfam = env->features[FEAT_XSAVE_XCR0_LO] |
-           env->features[FEAT_XSAVE_XCR0_HI] |
-           env->features[FEAT_XSAVE_XSS_LO] |
-           env->features[FEAT_XSAVE_XSS_HI];
-
-    if (xfam & ~tdx_caps->supported_xfam) {
-        error_setg(errp, "Invalid XFAM 0x%lx for TDX VM (supported: 0x%llx))",
-                   xfam, tdx_caps->supported_xfam);
-        return -1;
-    }
-
-    tdx_guest->xfam = xfam;
+    tdx_guest->xfam = 0;
     return 0;
-}
-
-static void tdx_filter_cpuid(struct kvm_cpuid2 *cpuids)
-{
-    int i, dest_cnt = 0;
-    struct kvm_cpuid_entry2 *src, *dest, *conf;
-
-    for (i = 0; i < cpuids->nent; i++) {
-        src = cpuids->entries + i;
-        conf = cpuid_find_entry(&tdx_caps->cpuid, src->function, src->index);
-        if (!conf) {
-            continue;
-        }
-        dest = cpuids->entries + dest_cnt;
-
-        dest->function = src->function;
-        dest->index = src->index;
-        dest->flags = src->flags;
-        dest->eax = src->eax & conf->eax;
-        dest->ebx = src->ebx & conf->ebx;
-        dest->ecx = src->ecx & conf->ecx;
-        dest->edx = src->edx & conf->edx;
-
-        dest_cnt++;
-    }
-    cpuids->nent = dest_cnt++;
 }
 
 int tdx_pre_create_vcpu(CPUState *cpu, Error **errp)
 {
+    MachineState *ms = MACHINE(qdev_get_machine());
     X86CPU *x86cpu = X86_CPU(cpu);
     CPUX86State *env = &x86cpu->env;
     g_autofree struct kvm_tdx_init_vm *init_vm = NULL;
@@ -942,18 +764,6 @@ int tdx_pre_create_vcpu(CPUState *cpu, Error **errp)
     init_vm = g_malloc0(sizeof(struct kvm_tdx_init_vm) +
                         sizeof(struct kvm_cpuid_entry2) * KVM_MAX_CPUID_ENTRIES);
 
-    if (!kvm_check_extension(kvm_state, KVM_CAP_X86_APIC_BUS_CYCLES_NS)) {
-        error_setg(errp, "KVM doesn't support KVM_CAP_X86_APIC_BUS_CYCLES_NS");
-        return -EOPNOTSUPP;
-    }
-
-    r = kvm_vm_enable_cap(kvm_state, KVM_CAP_X86_APIC_BUS_CYCLES_NS,
-                          0, TDX_APIC_BUS_CYCLES_NS);
-    if (r < 0) {
-        error_setg_errno(errp, -r,
-                         "Unable to set core crystal clock frequency to 25MHz");
-        return r;
-    }
 
     if (env->tsc_khz && (env->tsc_khz < TDX_MIN_TSC_FREQUENCY_KHZ ||
                          env->tsc_khz > TDX_MAX_TSC_FREQUENCY_KHZ)) {
@@ -967,6 +777,12 @@ int tdx_pre_create_vcpu(CPUState *cpu, Error **errp)
         error_setg(errp, "Invalid TSC %ld KHz, it must be multiple of 25MHz",
                    env->tsc_khz);
         return -EINVAL;
+    }
+
+    r = kvm_vm_enable_cap(kvm_state, KVM_CAP_MAX_VCPUS, 0, ms->smp.cpus);
+    if (r < 0) {
+        error_setg(errp, "Unable to set MAX VCPUS to %d", ms->smp.cpus);
+        return r;
     }
 
     /* it's safe even env->tsc_khz is 0. KVM uses host's tsc_khz in this case */
@@ -1018,10 +834,8 @@ int tdx_pre_create_vcpu(CPUState *cpu, Error **errp)
     }
 
     init_vm->cpuid.nent = kvm_x86_build_cpuid(env, init_vm->cpuid.entries, 0);
-    tdx_filter_cpuid(&init_vm->cpuid);
 
     init_vm->attributes = tdx_guest->attributes;
-    init_vm->xfam = tdx_guest->xfam;
 
     /*
      * KVM_TDX_INIT_VM gets -EAGAIN when KVM side SEAMCALL(TDH_MNG_CREATE)
@@ -1069,30 +883,43 @@ static void tdx_panicked_on_fatal_error(X86CPU *cpu, uint64_t error_code,
     qemu_system_guest_panicked(panic_info);
 }
 
-int tdx_handle_report_fatal_error(X86CPU *cpu, struct kvm_run *run)
+static int tdx_handle_report_fatal_error(X86CPU *cpu,
+                                         struct kvm_tdx_vmcall *vmcall)
 {
-    uint64_t error_code = run->system_event.data[0];
+    uint64_t error_code = vmcall->in_r12;
     char *message = NULL;
     uint64_t gpa = -1ull;
 
     if (error_code & 0xffff) {
-        error_report("TDX: REPORT_FATAL_ERROR: invalid error code: 0x%lx",
-                     error_code);
+        error_report("TDX: REPORT_FATAL_ERROR: invalid error code: "
+                     "0x%lx\n", error_code);
         return -1;
     }
 
-    /* It has optional message */
-    if (run->system_event.data[2]) {
-#define TDX_FATAL_MESSAGE_MAX        64
-        message = g_malloc0(TDX_FATAL_MESSAGE_MAX + 1);
+    /* it has optional message */
+    if (vmcall->in_r14) {
+        uint64_t * tmp;
 
-        memcpy(message, &run->system_event.data[2], TDX_FATAL_MESSAGE_MAX);
-        message[TDX_FATAL_MESSAGE_MAX] = '\0';
+#define GUEST_PANIC_INFO_TDX_MESSAGE_MAX        64
+        message = g_malloc0(GUEST_PANIC_INFO_TDX_MESSAGE_MAX + 1);
+
+        tmp = (uint64_t *)message;
+        /* The order is defined in TDX GHCI spec */
+        *(tmp++) = cpu_to_le64(vmcall->in_r14);
+        *(tmp++) = cpu_to_le64(vmcall->in_r15);
+        *(tmp++) = cpu_to_le64(vmcall->in_rbx);
+        *(tmp++) = cpu_to_le64(vmcall->in_rdi);
+        *(tmp++) = cpu_to_le64(vmcall->in_rsi);
+        *(tmp++) = cpu_to_le64(vmcall->in_r8);
+        *(tmp++) = cpu_to_le64(vmcall->in_r9);
+        *(tmp++) = cpu_to_le64(vmcall->in_rdx);
+        message[GUEST_PANIC_INFO_TDX_MESSAGE_MAX] = '\0';
+        assert((char *)tmp == message + GUEST_PANIC_INFO_TDX_MESSAGE_MAX);
     }
 
 #define TDX_REPORT_FATAL_ERROR_GPA_VALID    BIT_ULL(63)
     if (error_code & TDX_REPORT_FATAL_ERROR_GPA_VALID) {
-        gpa = run->system_event.data[1];
+        gpa = vmcall->in_r13;
     }
 
     tdx_panicked_on_fatal_error(cpu, error_code, message, gpa);
@@ -1209,5 +1036,96 @@ static void tdx_guest_class_init(ObjectClass *oc, void *data)
     x86_klass->kvm_type = tdx_kvm_type;
     x86_klass->cpu_instance_init = tdx_cpu_instance_init;
     x86_klass->adjust_cpuid_features = tdx_adjust_cpuid_features;
-    x86_klass->check_features = tdx_check_features;
+    x86_klass->check_features = NULL;
+}
+
+static hwaddr tdx_shared_bit(X86CPU *cpu)
+{
+    return (cpu->phys_bits > 48) ? BIT_ULL(51) : BIT_ULL(47);
+}
+
+/* 64MB at most in one call. What value is appropriate? */
+#define TDX_MAP_GPA_MAX_LEN     (64 * 1024 * 1024)
+
+static int tdx_handle_map_gpa(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall)
+{
+    hwaddr shared_bit = tdx_shared_bit(cpu);
+    hwaddr gpa = vmcall->in_r12 & ~shared_bit;
+    bool private = !(vmcall->in_r12 & shared_bit);
+    hwaddr size = vmcall->in_r13;
+    bool retry = false;
+    int ret = 0;
+
+    vmcall->status_code = TDG_VP_VMCALL_INVALID_OPERAND;
+
+    if (!QEMU_IS_ALIGNED(gpa, 4096) || !QEMU_IS_ALIGNED(size, 4096)) {
+        vmcall->status_code = TDG_VP_VMCALL_ALIGN_ERROR;
+        return 0;
+    }
+
+    /* Overflow case. */
+    if (gpa + size < gpa) {
+        return 0;
+    }
+    if (gpa >= (1ULL << cpu->phys_bits) ||
+        gpa + size >= (1ULL << cpu->phys_bits)) {
+        return 0;
+    }
+
+    if (size > TDX_MAP_GPA_MAX_LEN) {
+        retry = true;
+        size = TDX_MAP_GPA_MAX_LEN;
+    }
+
+    if (size > 0) {
+        ret = kvm_convert_memory(gpa, size, private);
+    }
+
+    if (!ret) {
+        if (retry) {
+            vmcall->status_code = TDG_VP_VMCALL_RETRY;
+            vmcall->out_r11 = gpa + size;
+            if (!private) {
+                vmcall->out_r11 |= shared_bit;
+            }
+        } else {
+            vmcall->status_code = TDG_VP_VMCALL_SUCCESS;
+        }
+    }
+
+    return 0;
+}
+
+static int tdx_handle_vmcall(X86CPU *cpu, struct kvm_tdx_vmcall *vmcall)
+{
+    vmcall->status_code = TDG_VP_VMCALL_INVALID_OPERAND;
+
+    /* For now handle only TDG.VP.VMCALL leaf defined in TDX GHCI */
+    if (vmcall->type != 0) {
+        error_report("Unknown TDG.VP.VMCALL type 0x%llx subfunction 0x%llx",
+                     vmcall->type, vmcall->subfunction);
+        return -1;
+    }
+
+    switch (vmcall->subfunction) {
+    case TDG_VP_VMCALL_MAP_GPA:
+        return tdx_handle_map_gpa(cpu, vmcall);
+    case TDG_VP_VMCALL_REPORT_FATAL_ERROR:
+        return  tdx_handle_report_fatal_error(cpu, vmcall);
+    default:
+        error_report("Unknown TDG.VP.VMCALL type 0x%llx subfunction 0x%llx",
+                     vmcall->type, vmcall->subfunction);
+        return -1;
+    }
+}
+
+int tdx_handle_exit(X86CPU *cpu, struct kvm_tdx_exit *tdx_exit)
+{
+    switch (tdx_exit->type) {
+    case KVM_EXIT_TDX_VMCALL:
+        return tdx_handle_vmcall(cpu, &tdx_exit->u.vmcall);
+    default:
+        error_report("unknown tdx exit type 0x%x", tdx_exit->type);
+        return -1;
+    }
 }
