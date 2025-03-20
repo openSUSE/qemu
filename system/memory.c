@@ -2107,83 +2107,93 @@ int memory_region_iommu_num_indexes(IOMMUMemoryRegion *iommu_mr)
     return imrc->num_indexes(iommu_mr);
 }
 
-RamDiscardManager *memory_region_get_ram_discard_manager(MemoryRegion *mr)
+GenericStateManager *memory_region_get_generic_state_manager(MemoryRegion *mr)
 {
     if (!memory_region_is_ram(mr)) {
         return NULL;
     }
-    return mr->rdm;
+    return mr->gsm;
 }
 
-int memory_region_set_ram_discard_manager(MemoryRegion *mr,
-                                          RamDiscardManager *rdm)
+int memory_region_set_generic_state_manager(MemoryRegion *mr,
+                                            GenericStateManager *gsm)
 {
     g_assert(memory_region_is_ram(mr));
-    if (mr->rdm && rdm) {
+    if (mr->gsm && gsm) {
         return -EBUSY;
     }
 
-    mr->rdm = rdm;
+    mr->gsm = gsm;
     return 0;
 }
 
-uint64_t ram_discard_manager_get_min_granularity(const RamDiscardManager *rdm,
-                                                 const MemoryRegion *mr)
+bool memory_region_has_ram_discard_manager(MemoryRegion *mr)
 {
-    RamDiscardManagerClass *rdmc = RAM_DISCARD_MANAGER_GET_CLASS(rdm);
+    if (!memory_region_is_ram(mr) ||
+        !object_dynamic_cast(OBJECT(mr->gsm), TYPE_RAM_DISCARD_MANAGER)) {
+        return false;
+    }
 
-    g_assert(rdmc->get_min_granularity);
-    return rdmc->get_min_granularity(rdm, mr);
+    return true;
 }
 
-bool ram_discard_manager_is_populated(const RamDiscardManager *rdm,
-                                      const MemoryRegionSection *section)
+uint64_t generic_state_manager_get_min_granularity(const GenericStateManager *gsm,
+                                                   const MemoryRegion *mr)
 {
-    RamDiscardManagerClass *rdmc = RAM_DISCARD_MANAGER_GET_CLASS(rdm);
+    GenericStateManagerClass *gsmc = GENERIC_STATE_MANAGER_GET_CLASS(gsm);
 
-    g_assert(rdmc->is_populated);
-    return rdmc->is_populated(rdm, section);
+    g_assert(gsmc->get_min_granularity);
+    return gsmc->get_min_granularity(gsm, mr);
 }
 
-int ram_discard_manager_replay_populated(const RamDiscardManager *rdm,
-                                         MemoryRegionSection *section,
-                                         ReplayStateChange replay_fn,
-                                         void *opaque)
+bool generic_state_manager_is_state_set(const GenericStateManager *gsm,
+                                        const MemoryRegionSection *section)
 {
-    RamDiscardManagerClass *rdmc = RAM_DISCARD_MANAGER_GET_CLASS(rdm);
+    GenericStateManagerClass *gsmc = GENERIC_STATE_MANAGER_GET_CLASS(gsm);
 
-    g_assert(rdmc->replay_populated);
-    return rdmc->replay_populated(rdm, section, replay_fn, opaque);
+    g_assert(gsmc->is_state_set);
+    return gsmc->is_state_set(gsm, section);
 }
 
-int ram_discard_manager_replay_discarded(const RamDiscardManager *rdm,
-                                         MemoryRegionSection *section,
-                                         ReplayStateChange replay_fn,
-                                         void *opaque)
+int generic_state_manager_replay_on_state_set(const GenericStateManager *gsm,
+                                              MemoryRegionSection *section,
+                                              ReplayStateChange replay_fn,
+                                              void *opaque)
 {
-    RamDiscardManagerClass *rdmc = RAM_DISCARD_MANAGER_GET_CLASS(rdm);
+    GenericStateManagerClass *gsmc = GENERIC_STATE_MANAGER_GET_CLASS(gsm);
 
-    g_assert(rdmc->replay_discarded);
-    return rdmc->replay_discarded(rdm, section, replay_fn, opaque);
+    g_assert(gsmc->replay_on_state_set);
+    return gsmc->replay_on_state_set(gsm, section, replay_fn, opaque);
 }
 
-void ram_discard_manager_register_listener(RamDiscardManager *rdm,
-                                           RamDiscardListener *rdl,
-                                           MemoryRegionSection *section)
+int generic_state_manager_replay_on_state_clear(const GenericStateManager *gsm,
+                                                MemoryRegionSection *section,
+                                                ReplayStateChange replay_fn,
+                                                void *opaque)
 {
-    RamDiscardManagerClass *rdmc = RAM_DISCARD_MANAGER_GET_CLASS(rdm);
+    GenericStateManagerClass *gsmc = GENERIC_STATE_MANAGER_GET_CLASS(gsm);
 
-    g_assert(rdmc->register_listener);
-    rdmc->register_listener(rdm, rdl, section);
+    g_assert(gsmc->replay_on_state_clear);
+    return gsmc->replay_on_state_clear(gsm, section, replay_fn, opaque);
 }
 
-void ram_discard_manager_unregister_listener(RamDiscardManager *rdm,
-                                             RamDiscardListener *rdl)
+void generic_state_manager_register_listener(GenericStateManager *gsm,
+                                             StateChangeListener *scl,
+                                             MemoryRegionSection *section)
 {
-    RamDiscardManagerClass *rdmc = RAM_DISCARD_MANAGER_GET_CLASS(rdm);
+    GenericStateManagerClass *gsmc = GENERIC_STATE_MANAGER_GET_CLASS(gsm);
 
-    g_assert(rdmc->unregister_listener);
-    rdmc->unregister_listener(rdm, rdl);
+    g_assert(gsmc->register_listener);
+    gsmc->register_listener(gsm, scl, section);
+}
+
+void generic_state_manager_unregister_listener(GenericStateManager *gsm,
+                                               StateChangeListener *scl)
+{
+    GenericStateManagerClass *gsmc = GENERIC_STATE_MANAGER_GET_CLASS(gsm);
+
+    g_assert(gsmc->unregister_listener);
+    gsmc->unregister_listener(gsm, scl);
 }
 
 /* Called with rcu_read_lock held.  */
@@ -2210,7 +2220,7 @@ bool memory_get_xlat_addr(IOMMUTLBEntry *iotlb, void **vaddr,
         error_setg(errp, "iommu map to non memory area %" HWADDR_PRIx "", xlat);
         return false;
     } else if (memory_region_has_ram_discard_manager(mr)) {
-        RamDiscardManager *rdm = memory_region_get_ram_discard_manager(mr);
+        GenericStateManager *gsm = memory_region_get_generic_state_manager(mr);
         MemoryRegionSection tmp = {
             .mr = mr,
             .offset_within_region = xlat,
@@ -2225,7 +2235,7 @@ bool memory_get_xlat_addr(IOMMUTLBEntry *iotlb, void **vaddr,
          * Disallow that. vmstate priorities make sure any RamDiscardManager
          * were already restored before IOMMUs are restored.
          */
-        if (!ram_discard_manager_is_populated(rdm, &tmp)) {
+        if (!generic_state_manager_is_state_set(gsm, &tmp)) {
             error_setg(errp, "iommu map to discarded memory (e.g., unplugged"
                          " via virtio-mem): %" HWADDR_PRIx "",
                          iotlb->translated_addr);
@@ -3814,8 +3824,15 @@ static const TypeInfo iommu_memory_region_info = {
     .abstract           = true,
 };
 
-static const TypeInfo ram_discard_manager_info = {
+static const TypeInfo generic_state_manager_info = {
     .parent             = TYPE_INTERFACE,
+    .name               = TYPE_GENERIC_STATE_MANAGER,
+    .class_size         = sizeof(GenericStateManagerClass),
+    .abstract           = true,
+};
+
+static const TypeInfo ram_discard_manager_info = {
+    .parent             = TYPE_GENERIC_STATE_MANAGER,
     .name               = TYPE_RAM_DISCARD_MANAGER,
     .class_size         = sizeof(RamDiscardManagerClass),
 };
@@ -3824,6 +3841,7 @@ static void memory_register_types(void)
 {
     type_register_static(&memory_region_info);
     type_register_static(&iommu_memory_region_info);
+    type_register_static(&generic_state_manager_info);
     type_register_static(&ram_discard_manager_info);
 }
 

@@ -43,6 +43,12 @@ typedef struct IOMMUMemoryRegionClass IOMMUMemoryRegionClass;
 DECLARE_OBJ_CHECKERS(IOMMUMemoryRegion, IOMMUMemoryRegionClass,
                      IOMMU_MEMORY_REGION, TYPE_IOMMU_MEMORY_REGION)
 
+#define TYPE_GENERIC_STATE_MANAGER "generic-state-manager"
+typedef struct GenericStateManagerClass GenericStateManagerClass;
+typedef struct GenericStateManager GenericStateManager;
+DECLARE_OBJ_CHECKERS(GenericStateManager, GenericStateManagerClass,
+                     GENERIC_STATE_MANAGER, TYPE_GENERIC_STATE_MANAGER)
+
 #define TYPE_RAM_DISCARD_MANAGER "ram-discard-manager"
 typedef struct RamDiscardManagerClass RamDiscardManagerClass;
 typedef struct RamDiscardManager RamDiscardManager;
@@ -506,43 +512,190 @@ struct IOMMUMemoryRegionClass {
     int (*num_indexes)(IOMMUMemoryRegion *iommu);
 };
 
-typedef struct RamDiscardListener RamDiscardListener;
-typedef int (*NotifyRamPopulate)(RamDiscardListener *rdl,
-                                 MemoryRegionSection *section);
-typedef void (*NotifyRamDiscard)(RamDiscardListener *rdl,
+typedef int (*ReplayStateChange)(MemoryRegionSection *section, void *opaque);
+
+typedef struct StateChangeListener StateChangeListener;
+typedef int (*NotifyStateSet)(StateChangeListener *scl,
+                              MemoryRegionSection *section);
+typedef void (*NotifyStateClear)(StateChangeListener *scl,
                                  MemoryRegionSection *section);
 
-struct RamDiscardListener {
+struct StateChangeListener {
     /*
-     * @notify_populate:
+     * @notify_to_state_set:
      *
-     * Notification that previously discarded memory is about to get populated.
-     * Listeners are able to object. If any listener objects, already
-     * successfully notified listeners are notified about a discard again.
+     * Notification that previously state clear part is about to be set.
      *
-     * @rdl: the #RamDiscardListener getting notified
-     * @section: the #MemoryRegionSection to get populated. The section
+     * @scl: the #StateChangeListener getting notified
+     * @section: the #MemoryRegionSection to be state-set. The section
      *           is aligned within the memory region to the minimum granularity
      *           unless it would exceed the registered section.
      *
      * Returns 0 on success. If the notification is rejected by the listener,
      * an error is returned.
      */
-    NotifyRamPopulate notify_populate;
+    NotifyStateSet notify_to_state_set;
 
     /*
-     * @notify_discard:
+     * @notify_to_state_clear:
      *
-     * Notification that previously populated memory was discarded successfully
-     * and listeners should drop all references to such memory and prevent
-     * new population (e.g., unmap).
+     * Notification that previously state set part is about to be cleared
      *
-     * @rdl: the #RamDiscardListener getting notified
-     * @section: the #MemoryRegionSection to get populated. The section
+     * @scl: the #StateChangeListener getting notified
+     * @section: the #MemoryRegionSection to be state-cleared. The section
      *           is aligned within the memory region to the minimum granularity
      *           unless it would exceed the registered section.
+     *
+     * Returns 0 on success. If the notification is rejected by the listener,
+     * an error is returned.
      */
-    NotifyRamDiscard notify_discard;
+    NotifyStateClear notify_to_state_clear;
+
+    MemoryRegionSection *section;
+};
+
+/*
+ * GenericStateManagerClass:
+ *
+ * A #GenericStateManager is a common interface used to manage the state of
+ * a #MemoryRegion. The managed states is a pair of opposite states, such as
+ * populated and discarded, or private and shared. It is abstract as set and
+ * clear in below callbacks, and the actual state is managed by the
+ * implementation.
+ *
+ */
+struct GenericStateManagerClass {
+    /* private */
+    InterfaceClass parent_class;
+
+    /* public */
+
+    /**
+     * @get_min_granularity:
+     *
+     * Get the minimum granularity in which listeners will get notified
+     * about changes within the #MemoryRegion via the #GenericStateManager.
+     *
+     * @gsm: the #GenericStateManager
+     * @mr: the #MemoryRegion
+     *
+     * Returns the minimum granularity.
+     */
+    uint64_t (*get_min_granularity)(const GenericStateManager *gsm,
+                                    const MemoryRegion *mr);
+
+    /**
+     * @is_state_set:
+     *
+     * Check whether the given #MemoryRegionSection state is set.
+     * via the #GenericStateManager.
+     *
+     * @gsm: the #GenericStateManager
+     * @section: the #MemoryRegionSection
+     *
+     * Returns whether the given range is completely set.
+     */
+    bool (*is_state_set)(const GenericStateManager *gsm,
+                         const MemoryRegionSection *section);
+
+    /**
+     * @replay_on_state_set:
+     *
+     * Call the #ReplayStateChange callback for all state set parts within the
+     * #MemoryRegionSection via the #GenericStateManager.
+     *
+     * In case any call fails, no further calls are made.
+     *
+     * @gsm: the #GenericStateManager
+     * @section: the #MemoryRegionSection
+     * @replay_fn: the #ReplayStateChange callback
+     * @opaque: pointer to forward to the callback
+     *
+     * Returns 0 on success, or a negative error if any notification failed.
+     */
+    int (*replay_on_state_set)(const GenericStateManager *gsm,
+                               MemoryRegionSection *section,
+                               ReplayStateChange replay_fn, void *opaque);
+
+    /**
+     * @replay_on_state_clear:
+     *
+     * Call the #ReplayStateChange callback for all state clear parts within the
+     * #MemoryRegionSection via the #GenericStateManager.
+     *
+     * In case any call fails, no further calls are made.
+     *
+     * @gsm: the #GenericStateManager
+     * @section: the #MemoryRegionSection
+     * @replay_fn: the #ReplayStateChange callback
+     * @opaque: pointer to forward to the callback
+     *
+     * Returns 0 on success, or a negative error if any notification failed.
+     */
+    int (*replay_on_state_clear)(const GenericStateManager *gsm,
+                                 MemoryRegionSection *section,
+                                 ReplayStateChange replay_fn, void *opaque);
+
+    /**
+     * @register_listener:
+     *
+     * Register a #StateChangeListener for the given #MemoryRegionSection and
+     * immediately notify the #StateChangeListener about all state-set parts
+     * within the #MemoryRegionSection via the #GenericStateManager.
+     *
+     * In case any notification fails, no further notifications are triggered
+     * and an error is logged.
+     *
+     * @rdm: the #GenericStateManager
+     * @rdl: the #StateChangeListener
+     * @section: the #MemoryRegionSection
+     */
+    void (*register_listener)(GenericStateManager *gsm,
+                              StateChangeListener *scl,
+                              MemoryRegionSection *section);
+
+    /**
+     * @unregister_listener:
+     *
+     * Unregister a previously registered #StateChangeListener via the
+     * #GenericStateManager after notifying the #StateChangeListener about all
+     * state-set parts becoming state-cleared within the registered
+     * #MemoryRegionSection.
+     *
+     * @rdm: the #GenericStateManager
+     * @rdl: the #StateChangeListener
+     */
+    void (*unregister_listener)(GenericStateManager *gsm,
+                                StateChangeListener *scl);
+};
+
+uint64_t generic_state_manager_get_min_granularity(const GenericStateManager *gsm,
+                                                   const MemoryRegion *mr);
+
+bool generic_state_manager_is_state_set(const GenericStateManager *gsm,
+                                        const MemoryRegionSection *section);
+
+int generic_state_manager_replay_on_state_set(const GenericStateManager *gsm,
+                                           MemoryRegionSection *section,
+                                           ReplayStateChange replay_fn,
+                                           void *opaque);
+
+int generic_state_manager_replay_on_state_clear(const GenericStateManager *gsm,
+                                                MemoryRegionSection *section,
+                                                ReplayStateChange replay_fn,
+                                                void *opaque);
+
+void generic_state_manager_register_listener(GenericStateManager *gsm,
+                                             StateChangeListener *scl,
+                                             MemoryRegionSection *section);
+
+void generic_state_manager_unregister_listener(GenericStateManager *gsm,
+                                               StateChangeListener *scl);
+
+typedef struct RamDiscardListener RamDiscardListener;
+
+struct RamDiscardListener {
+    struct StateChangeListener scl;
 
     /*
      * @double_discard_supported:
@@ -552,21 +705,18 @@ struct RamDiscardListener {
      */
     bool double_discard_supported;
 
-    MemoryRegionSection *section;
     QLIST_ENTRY(RamDiscardListener) next;
 };
 
 static inline void ram_discard_listener_init(RamDiscardListener *rdl,
-                                             NotifyRamPopulate populate_fn,
-                                             NotifyRamDiscard discard_fn,
+                                             NotifyStateSet populate_fn,
+                                             NotifyStateClear discard_fn,
                                              bool double_discard_supported)
 {
-    rdl->notify_populate = populate_fn;
-    rdl->notify_discard = discard_fn;
+    rdl->scl.notify_to_state_set = populate_fn;
+    rdl->scl.notify_to_state_clear = discard_fn;
     rdl->double_discard_supported = double_discard_supported;
 }
-
-typedef int (*ReplayStateChange)(MemoryRegionSection *section, void *opaque);
 
 /*
  * RamDiscardManagerClass:
@@ -604,130 +754,8 @@ typedef int (*ReplayStateChange)(MemoryRegionSection *section, void *opaque);
  */
 struct RamDiscardManagerClass {
     /* private */
-    InterfaceClass parent_class;
-
-    /* public */
-
-    /**
-     * @get_min_granularity:
-     *
-     * Get the minimum granularity in which listeners will get notified
-     * about changes within the #MemoryRegion via the #RamDiscardManager.
-     *
-     * @rdm: the #RamDiscardManager
-     * @mr: the #MemoryRegion
-     *
-     * Returns the minimum granularity.
-     */
-    uint64_t (*get_min_granularity)(const RamDiscardManager *rdm,
-                                    const MemoryRegion *mr);
-
-    /**
-     * @is_populated:
-     *
-     * Check whether the given #MemoryRegionSection is completely populated
-     * (i.e., no parts are currently discarded) via the #RamDiscardManager.
-     * There are no alignment requirements.
-     *
-     * @rdm: the #RamDiscardManager
-     * @section: the #MemoryRegionSection
-     *
-     * Returns whether the given range is completely populated.
-     */
-    bool (*is_populated)(const RamDiscardManager *rdm,
-                         const MemoryRegionSection *section);
-
-    /**
-     * @replay_populated:
-     *
-     * Call the #ReplayStateChange callback for all populated parts within the
-     * #MemoryRegionSection via the #RamDiscardManager.
-     *
-     * In case any call fails, no further calls are made.
-     *
-     * @rdm: the #RamDiscardManager
-     * @section: the #MemoryRegionSection
-     * @replay_fn: the #ReplayStateChange callback
-     * @opaque: pointer to forward to the callback
-     *
-     * Returns 0 on success, or a negative error if any notification failed.
-     */
-    int (*replay_populated)(const RamDiscardManager *rdm,
-                            MemoryRegionSection *section,
-                            ReplayStateChange replay_fn, void *opaque);
-
-    /**
-     * @replay_discarded:
-     *
-     * Call the #ReplayStateChange callback for all discarded parts within the
-     * #MemoryRegionSection via the #RamDiscardManager.
-     *
-     * @rdm: the #RamDiscardManager
-     * @section: the #MemoryRegionSection
-     * @replay_fn: the #ReplayStateChange callback
-     * @opaque: pointer to forward to the callback
-     *
-     * Returns 0 on success, or a negative error if any notification failed.
-     */
-    int (*replay_discarded)(const RamDiscardManager *rdm,
-                            MemoryRegionSection *section,
-                            ReplayStateChange replay_fn, void *opaque);
-
-    /**
-     * @register_listener:
-     *
-     * Register a #RamDiscardListener for the given #MemoryRegionSection and
-     * immediately notify the #RamDiscardListener about all populated parts
-     * within the #MemoryRegionSection via the #RamDiscardManager.
-     *
-     * In case any notification fails, no further notifications are triggered
-     * and an error is logged.
-     *
-     * @rdm: the #RamDiscardManager
-     * @rdl: the #RamDiscardListener
-     * @section: the #MemoryRegionSection
-     */
-    void (*register_listener)(RamDiscardManager *rdm,
-                              RamDiscardListener *rdl,
-                              MemoryRegionSection *section);
-
-    /**
-     * @unregister_listener:
-     *
-     * Unregister a previously registered #RamDiscardListener via the
-     * #RamDiscardManager after notifying the #RamDiscardListener about all
-     * populated parts becoming unpopulated within the registered
-     * #MemoryRegionSection.
-     *
-     * @rdm: the #RamDiscardManager
-     * @rdl: the #RamDiscardListener
-     */
-    void (*unregister_listener)(RamDiscardManager *rdm,
-                                RamDiscardListener *rdl);
+    GenericStateManagerClass parent_class;
 };
-
-uint64_t ram_discard_manager_get_min_granularity(const RamDiscardManager *rdm,
-                                                 const MemoryRegion *mr);
-
-bool ram_discard_manager_is_populated(const RamDiscardManager *rdm,
-                                      const MemoryRegionSection *section);
-
-int ram_discard_manager_replay_populated(const RamDiscardManager *rdm,
-                                         MemoryRegionSection *section,
-                                         ReplayStateChange replay_fn,
-                                         void *opaque);
-
-int ram_discard_manager_replay_discarded(const RamDiscardManager *rdm,
-                                         MemoryRegionSection *section,
-                                         ReplayStateChange replay_fn,
-                                         void *opaque);
-
-void ram_discard_manager_register_listener(RamDiscardManager *rdm,
-                                           RamDiscardListener *rdl,
-                                           MemoryRegionSection *section);
-
-void ram_discard_manager_unregister_listener(RamDiscardManager *rdm,
-                                             RamDiscardListener *rdl);
 
 /**
  * memory_get_xlat_addr: Extract addresses from a TLB entry
@@ -795,7 +823,7 @@ struct MemoryRegion {
     const char *name;
     unsigned ioeventfd_nb;
     MemoryRegionIoeventfd *ioeventfds;
-    RamDiscardManager *rdm; /* Only for RAM */
+    GenericStateManager *gsm; /* Only for RAM */
 
     /* For devices designed to perform re-entrant IO into their own IO MRs */
     bool disable_reentrancy_guard;
@@ -2462,14 +2490,28 @@ bool memory_region_present(MemoryRegion *container, hwaddr addr);
 bool memory_region_is_mapped(MemoryRegion *mr);
 
 /**
- * memory_region_get_ram_discard_manager: get the #RamDiscardManager for a
+ * memory_region_get_generic_state_manager: get the #GenericStateManager for a
  * #MemoryRegion
  *
- * The #RamDiscardManager cannot change while a memory region is mapped.
+ * The #GenericStateManager cannot change while a memory region is mapped.
  *
  * @mr: the #MemoryRegion
  */
-RamDiscardManager *memory_region_get_ram_discard_manager(MemoryRegion *mr);
+GenericStateManager *memory_region_get_generic_state_manager(MemoryRegion *mr);
+
+/**
+ * memory_region_set_generic_state_manager: set the #GenericStateManager for a
+ * #MemoryRegion
+ *
+ * This function must not be called for a mapped #MemoryRegion, a #MemoryRegion
+ * that does not cover RAM, or a #MemoryRegion that already has a
+ * #GenericStateManager assigned. Return 0 if the gsm is set successfully.
+ *
+ * @mr: the #MemoryRegion
+ * @gsm: #GenericStateManager to set
+ */
+int memory_region_set_generic_state_manager(MemoryRegion *mr,
+                                            GenericStateManager *gsm);
 
 /**
  * memory_region_has_ram_discard_manager: check whether a #MemoryRegion has a
@@ -2477,24 +2519,7 @@ RamDiscardManager *memory_region_get_ram_discard_manager(MemoryRegion *mr);
  *
  * @mr: the #MemoryRegion
  */
-static inline bool memory_region_has_ram_discard_manager(MemoryRegion *mr)
-{
-    return !!memory_region_get_ram_discard_manager(mr);
-}
-
-/**
- * memory_region_set_ram_discard_manager: set the #RamDiscardManager for a
- * #MemoryRegion
- *
- * This function must not be called for a mapped #MemoryRegion, a #MemoryRegion
- * that does not cover RAM, or a #MemoryRegion that already has a
- * #RamDiscardManager assigned. Return 0 if the rdm is set successfully.
- *
- * @mr: the #MemoryRegion
- * @rdm: #RamDiscardManager to set
- */
-int memory_region_set_ram_discard_manager(MemoryRegion *mr,
-                                          RamDiscardManager *rdm);
+bool memory_region_has_ram_discard_manager(MemoryRegion *mr);
 
 /**
  * memory_region_find: translate an address/size relative to a

@@ -857,14 +857,14 @@ static uint64_t ramblock_dirty_bitmap_clear_discarded_pages(RAMBlock *rb)
     uint64_t cleared_bits = 0;
 
     if (rb->mr && rb->bmap && memory_region_has_ram_discard_manager(rb->mr)) {
-        RamDiscardManager *rdm = memory_region_get_ram_discard_manager(rb->mr);
+        GenericStateManager *gsm = memory_region_get_generic_state_manager(rb->mr);
         MemoryRegionSection section = {
             .mr = rb->mr,
             .offset_within_region = 0,
             .size = int128_make64(qemu_ram_get_used_length(rb)),
         };
 
-        ram_discard_manager_replay_discarded(rdm, &section,
+        generic_state_manager_replay_on_state_clear(gsm, &section,
                                              dirty_bitmap_clear_section,
                                              &cleared_bits);
     }
@@ -880,14 +880,14 @@ static uint64_t ramblock_dirty_bitmap_clear_discarded_pages(RAMBlock *rb)
 bool ramblock_page_is_discarded(RAMBlock *rb, ram_addr_t start)
 {
     if (rb->mr && memory_region_has_ram_discard_manager(rb->mr)) {
-        RamDiscardManager *rdm = memory_region_get_ram_discard_manager(rb->mr);
+        GenericStateManager *gsm = memory_region_get_generic_state_manager(rb->mr);
         MemoryRegionSection section = {
             .mr = rb->mr,
             .offset_within_region = start,
             .size = int128_make64(qemu_ram_pagesize(rb)),
         };
 
-        return !ram_discard_manager_is_populated(rdm, &section);
+        return !generic_state_manager_is_state_set(gsm, &section);
     }
     return false;
 }
@@ -1545,14 +1545,14 @@ static void ram_block_populate_read(RAMBlock *rb)
      * Note: The result is only stable while migrating (precopy/postcopy).
      */
     if (rb->mr && memory_region_has_ram_discard_manager(rb->mr)) {
-        RamDiscardManager *rdm = memory_region_get_ram_discard_manager(rb->mr);
+        GenericStateManager *gsm = memory_region_get_generic_state_manager(rb->mr);
         MemoryRegionSection section = {
             .mr = rb->mr,
             .offset_within_region = 0,
             .size = rb->mr->size,
         };
 
-        ram_discard_manager_replay_populated(rdm, &section,
+        generic_state_manager_replay_on_state_set(gsm, &section,
                                              populate_read_section, NULL);
     } else {
         populate_read_range(rb, 0, rb->used_length);
@@ -1604,14 +1604,14 @@ static int ram_block_uffd_protect(RAMBlock *rb, int uffd_fd)
 
     /* See ram_block_populate_read() */
     if (rb->mr && memory_region_has_ram_discard_manager(rb->mr)) {
-        RamDiscardManager *rdm = memory_region_get_ram_discard_manager(rb->mr);
+        GenericStateManager *gsm = memory_region_get_generic_state_manager(rb->mr);
         MemoryRegionSection section = {
             .mr = rb->mr,
             .offset_within_region = 0,
             .size = rb->mr->size,
         };
 
-        return ram_discard_manager_replay_populated(rdm, &section,
+        return generic_state_manager_replay_on_state_set(gsm, &section,
                                                     uffd_protect_section,
                                                     (void *)(uintptr_t)uffd_fd);
     }

@@ -335,9 +335,10 @@ out:
     rcu_read_unlock();
 }
 
-static void vfio_ram_discard_notify_discard(RamDiscardListener *rdl,
+static void vfio_ram_discard_notify_discard(StateChangeListener *scl,
                                             MemoryRegionSection *section)
 {
+    RamDiscardListener *rdl = container_of(scl, RamDiscardListener, scl);
     VFIORamDiscardListener *vrdl = container_of(rdl, VFIORamDiscardListener,
                                                 listener);
     VFIOContainerBase *bcontainer = vrdl->bcontainer;
@@ -353,9 +354,10 @@ static void vfio_ram_discard_notify_discard(RamDiscardListener *rdl,
     }
 }
 
-static int vfio_ram_discard_notify_populate(RamDiscardListener *rdl,
+static int vfio_ram_discard_notify_populate(StateChangeListener *scl,
                                             MemoryRegionSection *section)
 {
+    RamDiscardListener *rdl = container_of(scl, RamDiscardListener, scl);
     VFIORamDiscardListener *vrdl = container_of(rdl, VFIORamDiscardListener,
                                                 listener);
     VFIOContainerBase *bcontainer = vrdl->bcontainer;
@@ -381,7 +383,7 @@ static int vfio_ram_discard_notify_populate(RamDiscardListener *rdl,
                                      vaddr, section->readonly);
         if (ret) {
             /* Rollback */
-            vfio_ram_discard_notify_discard(rdl, section);
+            vfio_ram_discard_notify_discard(scl, section);
             return ret;
         }
     }
@@ -391,8 +393,9 @@ static int vfio_ram_discard_notify_populate(RamDiscardListener *rdl,
 static void vfio_register_ram_discard_listener(VFIOContainerBase *bcontainer,
                                                MemoryRegionSection *section)
 {
-    RamDiscardManager *rdm = memory_region_get_ram_discard_manager(section->mr);
+    GenericStateManager *gsm = memory_region_get_generic_state_manager(section->mr);
     VFIORamDiscardListener *vrdl;
+    RamDiscardListener *rdl;
 
     /* Ignore some corner cases not relevant in practice. */
     g_assert(QEMU_IS_ALIGNED(section->offset_within_region, TARGET_PAGE_SIZE));
@@ -405,17 +408,18 @@ static void vfio_register_ram_discard_listener(VFIOContainerBase *bcontainer,
     vrdl->mr = section->mr;
     vrdl->offset_within_address_space = section->offset_within_address_space;
     vrdl->size = int128_get64(section->size);
-    vrdl->granularity = ram_discard_manager_get_min_granularity(rdm,
-                                                                section->mr);
+    vrdl->granularity = generic_state_manager_get_min_granularity(gsm,
+                                                                  section->mr);
 
     g_assert(vrdl->granularity && is_power_of_2(vrdl->granularity));
     g_assert(bcontainer->pgsizes &&
              vrdl->granularity >= 1ULL << ctz64(bcontainer->pgsizes));
 
-    ram_discard_listener_init(&vrdl->listener,
+    rdl = &vrdl->listener;
+    ram_discard_listener_init(rdl,
                               vfio_ram_discard_notify_populate,
                               vfio_ram_discard_notify_discard, true);
-    ram_discard_manager_register_listener(rdm, &vrdl->listener, section);
+    generic_state_manager_register_listener(gsm, &rdl->scl, section);
     QLIST_INSERT_HEAD(&bcontainer->vrdl_list, vrdl, next);
 
     /*
@@ -465,8 +469,9 @@ static void vfio_register_ram_discard_listener(VFIOContainerBase *bcontainer,
 static void vfio_unregister_ram_discard_listener(VFIOContainerBase *bcontainer,
                                                  MemoryRegionSection *section)
 {
-    RamDiscardManager *rdm = memory_region_get_ram_discard_manager(section->mr);
+    GenericStateManager *gsm = memory_region_get_generic_state_manager(section->mr);
     VFIORamDiscardListener *vrdl = NULL;
+    RamDiscardListener *rdl;
 
     QLIST_FOREACH(vrdl, &bcontainer->vrdl_list, next) {
         if (vrdl->mr == section->mr &&
@@ -480,7 +485,8 @@ static void vfio_unregister_ram_discard_listener(VFIOContainerBase *bcontainer,
         hw_error("vfio: Trying to unregister missing RAM discard listener");
     }
 
-    ram_discard_manager_unregister_listener(rdm, &vrdl->listener);
+    rdl = &vrdl->listener;
+    generic_state_manager_unregister_listener(gsm, &rdl->scl);
     QLIST_REMOVE(vrdl, next);
     g_free(vrdl);
 }
@@ -1265,7 +1271,7 @@ static int
 vfio_sync_ram_discard_listener_dirty_bitmap(VFIOContainerBase *bcontainer,
                                             MemoryRegionSection *section)
 {
-    RamDiscardManager *rdm = memory_region_get_ram_discard_manager(section->mr);
+    GenericStateManager *gsm = memory_region_get_generic_state_manager(section->mr);
     VFIORamDiscardListener *vrdl = NULL;
 
     QLIST_FOREACH(vrdl, &bcontainer->vrdl_list, next) {
@@ -1284,7 +1290,7 @@ vfio_sync_ram_discard_listener_dirty_bitmap(VFIOContainerBase *bcontainer,
      * We only want/can synchronize the bitmap for actually mapped parts -
      * which correspond to populated parts. Replay all populated parts.
      */
-    return ram_discard_manager_replay_populated(rdm, section,
+    return generic_state_manager_replay_on_state_set(gsm, section,
                                               vfio_ram_discard_get_dirty_bitmap,
                                                 &vrdl);
 }
