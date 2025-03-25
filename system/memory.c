@@ -2137,6 +2137,16 @@ bool memory_region_has_ram_discard_manager(MemoryRegion *mr)
     return true;
 }
 
+bool memory_region_has_private_shared_manager(MemoryRegion *mr)
+{
+    if (!memory_region_is_ram(mr) ||
+        !object_dynamic_cast(OBJECT(mr->gsm), TYPE_PRIVATE_SHARED_MANAGER)) {
+        return false;
+    }
+
+    return true;
+}
+
 uint64_t generic_state_manager_get_min_granularity(const GenericStateManager *gsm,
                                                    const MemoryRegion *mr)
 {
@@ -3837,12 +3847,19 @@ static const TypeInfo ram_discard_manager_info = {
     .class_size         = sizeof(RamDiscardManagerClass),
 };
 
+static const TypeInfo private_shared_manager_info = {
+    .parent             = TYPE_GENERIC_STATE_MANAGER,
+    .name               = TYPE_PRIVATE_SHARED_MANAGER,
+    .class_size         = sizeof(PrivateSharedManagerClass),
+};
+
 static void memory_register_types(void)
 {
     type_register_static(&memory_region_info);
     type_register_static(&iommu_memory_region_info);
     type_register_static(&generic_state_manager_info);
     type_register_static(&ram_discard_manager_info);
+    type_register_static(&private_shared_manager_info);
 }
 
 type_init(memory_register_types)

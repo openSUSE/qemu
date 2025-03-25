@@ -55,6 +55,12 @@ typedef struct RamDiscardManager RamDiscardManager;
 DECLARE_OBJ_CHECKERS(RamDiscardManager, RamDiscardManagerClass,
                      RAM_DISCARD_MANAGER, TYPE_RAM_DISCARD_MANAGER);
 
+#define TYPE_PRIVATE_SHARED_MANAGER "private-shared-manager"
+typedef struct PrivateSharedManagerClass PrivateSharedManagerClass;
+typedef struct PrivateSharedManager PrivateSharedManager;
+DECLARE_OBJ_CHECKERS(PrivateSharedManager, PrivateSharedManagerClass,
+                     PRIVATE_SHARED_MANAGER, TYPE_PRIVATE_SHARED_MANAGER)
+
 #ifdef CONFIG_FUZZ
 void fuzz_dma_read_cb(size_t addr,
                       size_t len,
@@ -692,6 +698,14 @@ void generic_state_manager_register_listener(GenericStateManager *gsm,
 void generic_state_manager_unregister_listener(GenericStateManager *gsm,
                                                StateChangeListener *scl);
 
+static inline void state_change_listener_init(StateChangeListener *scl,
+                                              NotifyStateSet state_set_fn,
+                                              NotifyStateClear state_clear_fn)
+{
+    scl->notify_to_state_set = state_set_fn;
+    scl->notify_to_state_clear = state_clear_fn;
+}
+
 typedef struct RamDiscardListener RamDiscardListener;
 
 struct RamDiscardListener {
@@ -713,8 +727,7 @@ static inline void ram_discard_listener_init(RamDiscardListener *rdl,
                                              NotifyStateClear discard_fn,
                                              bool double_discard_supported)
 {
-    rdl->scl.notify_to_state_set = populate_fn;
-    rdl->scl.notify_to_state_clear = discard_fn;
+    state_change_listener_init(&rdl->scl, populate_fn, discard_fn);
     rdl->double_discard_supported = double_discard_supported;
 }
 
@@ -756,6 +769,25 @@ struct RamDiscardManagerClass {
     /* private */
     GenericStateManagerClass parent_class;
 };
+
+typedef struct PrivateSharedListener PrivateSharedListener;
+struct PrivateSharedListener {
+    struct StateChangeListener scl;
+
+    QLIST_ENTRY(PrivateSharedListener) next;
+};
+
+struct PrivateSharedManagerClass {
+    /* private */
+    GenericStateManagerClass parent_class;
+};
+
+static inline void private_shared_listener_init(PrivateSharedListener *psl,
+                                                NotifyStateSet populate_fn,
+                                                NotifyStateClear discard_fn)
+{
+    state_change_listener_init(&psl->scl, populate_fn, discard_fn);
+}
 
 /**
  * memory_get_xlat_addr: Extract addresses from a TLB entry
@@ -2520,6 +2552,14 @@ int memory_region_set_generic_state_manager(MemoryRegion *mr,
  * @mr: the #MemoryRegion
  */
 bool memory_region_has_ram_discard_manager(MemoryRegion *mr);
+
+/**
+ * memory_region_has_private_shared_manager: check whether a #MemoryRegion has a
+ * #PrivateSharedManager assigned
+ *
+ * @mr: the #MemoryRegion
+ */
+bool memory_region_has_private_shared_manager(MemoryRegion *mr);
 
 /**
  * memory_region_find: translate an address/size relative to a
