@@ -135,6 +135,7 @@ static void vfio_container_instance_init(Object *obj)
     bcontainer->iova_ranges = NULL;
     QLIST_INIT(&bcontainer->giommu_list);
     QLIST_INIT(&bcontainer->vrdl_list);
+    QLIST_INIT(&bcontainer->vpsl_list);
 }
 
 static const TypeInfo types[] = {

@@ -335,13 +335,9 @@ out:
     rcu_read_unlock();
 }
 
-static void vfio_ram_discard_notify_discard(StateChangeListener *scl,
-                                            MemoryRegionSection *section)
+static void vfio_state_change_notify_to_state_clear(VFIOContainerBase *bcontainer,
+                                                    MemoryRegionSection *section)
 {
-    RamDiscardListener *rdl = container_of(scl, RamDiscardListener, scl);
-    VFIORamDiscardListener *vrdl = container_of(rdl, VFIORamDiscardListener,
-                                                listener);
-    VFIOContainerBase *bcontainer = vrdl->bcontainer;
     const hwaddr size = int128_get64(section->size);
     const hwaddr iova = section->offset_within_address_space;
     int ret;
@@ -354,13 +350,28 @@ static void vfio_ram_discard_notify_discard(StateChangeListener *scl,
     }
 }
 
-static int vfio_ram_discard_notify_populate(StateChangeListener *scl,
+static void vfio_ram_discard_notify_discard(StateChangeListener *scl,
                                             MemoryRegionSection *section)
 {
     RamDiscardListener *rdl = container_of(scl, RamDiscardListener, scl);
     VFIORamDiscardListener *vrdl = container_of(rdl, VFIORamDiscardListener,
                                                 listener);
-    VFIOContainerBase *bcontainer = vrdl->bcontainer;
+    vfio_state_change_notify_to_state_clear(vrdl->bcontainer, section);
+}
+
+static void vfio_private_shared_notify_to_private(StateChangeListener *scl,
+                                                  MemoryRegionSection *section)
+{
+    PrivateSharedListener *psl = container_of(scl, PrivateSharedListener, scl);
+    VFIOPrivateSharedListener *vpsl = container_of(psl, VFIOPrivateSharedListener,
+                                                   listener);
+    vfio_state_change_notify_to_state_clear(vpsl->bcontainer, section);
+}
+
+static int vfio_state_change_notify_to_state_set(VFIOContainerBase *bcontainer,
+                                                 MemoryRegionSection *section,
+                                                 uint64_t granularity)
+{
     const hwaddr end = section->offset_within_region +
                        int128_get64(section->size);
     hwaddr start, next, iova;
@@ -372,7 +383,7 @@ static int vfio_ram_discard_notify_populate(StateChangeListener *scl,
      * unmap in minimum granularity later.
      */
     for (start = section->offset_within_region; start < end; start = next) {
-        next = ROUND_UP(start + 1, vrdl->granularity);
+        next = ROUND_UP(start + 1, granularity);
         next = MIN(next, end);
 
         iova = start - section->offset_within_region +
@@ -383,11 +394,31 @@ static int vfio_ram_discard_notify_populate(StateChangeListener *scl,
                                      vaddr, section->readonly);
         if (ret) {
             /* Rollback */
-            vfio_ram_discard_notify_discard(scl, section);
+            vfio_state_change_notify_to_state_clear(bcontainer, section);
             return ret;
         }
     }
     return 0;
+}
+
+static int vfio_ram_discard_notify_populate(StateChangeListener *scl,
+                                            MemoryRegionSection *section)
+{
+    RamDiscardListener *rdl = container_of(scl, RamDiscardListener, scl);
+    VFIORamDiscardListener *vrdl = container_of(rdl, VFIORamDiscardListener,
+                                                listener);
+    return vfio_state_change_notify_to_state_set(vrdl->bcontainer, section,
+                                                 vrdl->granularity);
+}
+
+static int vfio_private_shared_notify_to_shared(StateChangeListener *scl,
+                                                MemoryRegionSection *section)
+{
+    PrivateSharedListener *psl = container_of(scl, PrivateSharedListener, scl);
+    VFIOPrivateSharedListener *vpsl = container_of(psl, VFIOPrivateSharedListener,
+                                                   listener);
+    return vfio_state_change_notify_to_state_set(vpsl->bcontainer, section,
+                                                 vpsl->granularity);
 }
 
 static void vfio_register_ram_discard_listener(VFIOContainerBase *bcontainer,
@@ -466,6 +497,27 @@ static void vfio_register_ram_discard_listener(VFIOContainerBase *bcontainer,
     }
 }
 
+static void vfio_register_private_shared_listener(VFIOContainerBase *bcontainer,
+                                                  MemoryRegionSection *section)
+{
+    GenericStateManager *gsm = memory_region_get_generic_state_manager(section->mr);
+    VFIOPrivateSharedListener *vpsl;
+    PrivateSharedListener *psl;
+
+    vpsl = g_new0(VFIOPrivateSharedListener, 1);
+    vpsl->bcontainer = bcontainer;
+    vpsl->mr = section->mr;
+    vpsl->offset_within_address_space = section->offset_within_address_space;
+    vpsl->granularity = generic_state_manager_get_min_granularity(gsm,
+                                                                  section->mr);
+
+    psl = &vpsl->listener;
+    private_shared_listener_init(psl, vfio_private_shared_notify_to_shared,
+                                 vfio_private_shared_notify_to_private);
+    generic_state_manager_register_listener(gsm, &psl->scl, section);
+    QLIST_INSERT_HEAD(&bcontainer->vpsl_list, vpsl, next);
+}
+
 static void vfio_unregister_ram_discard_listener(VFIOContainerBase *bcontainer,
                                                  MemoryRegionSection *section)
 {
@@ -489,6 +541,31 @@ static void vfio_unregister_ram_discard_listener(VFIOContainerBase *bcontainer,
     generic_state_manager_unregister_listener(gsm, &rdl->scl);
     QLIST_REMOVE(vrdl, next);
     g_free(vrdl);
+}
+
+static void vfio_unregister_private_shared_listener(VFIOContainerBase *bcontainer,
+                                                    MemoryRegionSection *section)
+{
+    GenericStateManager *gsm = memory_region_get_generic_state_manager(section->mr);
+    VFIOPrivateSharedListener *vpsl = NULL;
+    PrivateSharedListener *psl;
+
+    QLIST_FOREACH(vpsl, &bcontainer->vpsl_list, next) {
+        if (vpsl->mr == section->mr &&
+            vpsl->offset_within_address_space ==
+            section->offset_within_address_space) {
+            break;
+        }
+    }
+
+    if (!vpsl) {
+        hw_error("vfio: Trying to unregister missing RAM discard listener");
+    }
+
+    psl = &vpsl->listener;
+    generic_state_manager_unregister_listener(gsm, &psl->scl);
+    QLIST_REMOVE(vpsl, next);
+    g_free(vpsl);
 }
 
 static bool vfio_known_safe_misalignment(MemoryRegionSection *section)
@@ -644,6 +721,9 @@ static void vfio_listener_region_add(MemoryListener *listener,
     if (memory_region_has_ram_discard_manager(section->mr)) {
         vfio_register_ram_discard_listener(bcontainer, section);
         return;
+    } else if (memory_region_has_private_shared_manager(section->mr)) {
+        vfio_register_private_shared_listener(bcontainer, section);
+        return;
     }
 
     vaddr = memory_region_get_ram_ptr(section->mr) +
@@ -762,6 +842,10 @@ static void vfio_listener_region_del(MemoryListener *listener,
         try_unmap = !((iova & pgmask) || (int128_get64(llsize) & pgmask));
     } else if (memory_region_has_ram_discard_manager(section->mr)) {
         vfio_unregister_ram_discard_listener(bcontainer, section);
+        /* Unregistering will trigger an unmap. */
+        try_unmap = false;
+    } else if (memory_region_has_private_shared_manager(section->mr)) {
+        vfio_unregister_private_shared_listener(bcontainer, section);
         /* Unregistering will trigger an unmap. */
         try_unmap = false;
     }

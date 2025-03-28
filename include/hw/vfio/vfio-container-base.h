@@ -47,6 +47,7 @@ typedef struct VFIOContainerBase {
     bool dirty_pages_started; /* Protected by BQL */
     QLIST_HEAD(, VFIOGuestIOMMU) giommu_list;
     QLIST_HEAD(, VFIORamDiscardListener) vrdl_list;
+    QLIST_HEAD(, VFIOPrivateSharedListener) vpsl_list;
     QLIST_ENTRY(VFIOContainerBase) next;
     QLIST_HEAD(, VFIODevice) device_list;
     GList *iova_ranges;
@@ -70,6 +71,15 @@ typedef struct VFIORamDiscardListener {
     RamDiscardListener listener;
     QLIST_ENTRY(VFIORamDiscardListener) next;
 } VFIORamDiscardListener;
+
+typedef struct VFIOPrivateSharedListener {
+    VFIOContainerBase *bcontainer;
+    MemoryRegion *mr;
+    hwaddr offset_within_address_space;
+    uint64_t granularity;
+    PrivateSharedListener listener;
+    QLIST_ENTRY(VFIOPrivateSharedListener) next;
+} VFIOPrivateSharedListener;
 
 int vfio_container_dma_map(VFIOContainerBase *bcontainer,
                            hwaddr iova, ram_addr_t size,
