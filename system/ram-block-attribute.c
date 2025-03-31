@@ -259,6 +259,7 @@ static void ram_block_attribute_notify_to_private(RamBlockAttribute *attr,
                                                   uint64_t offset, uint64_t size)
 {
     PrivateSharedListener *psl;
+    int ret;
 
     QLIST_FOREACH(psl, &attr->psl_list, next) {
         StateChangeListener *scl = &psl->scl;
@@ -267,7 +268,12 @@ static void ram_block_attribute_notify_to_private(RamBlockAttribute *attr,
         if (!memory_region_section_intersect_range(&tmp, offset, size)) {
             continue;
         }
-        scl->notify_to_state_clear(scl, &tmp);
+        /*
+         * No undo operation for the state_clear() callback failure at present.
+         * Expect the state_clear() callback always succeed.
+         */
+        ret = scl->notify_to_state_clear(scl, &tmp);
+        g_assert(!ret);
     }
 }
 
@@ -275,7 +281,7 @@ static int ram_block_attribute_notify_to_shared(RamBlockAttribute *attr,
                                                 uint64_t offset, uint64_t size)
 {
     PrivateSharedListener *psl, *psl2;
-    int ret = 0;
+    int ret = 0, ret2 = 0;
 
     QLIST_FOREACH(psl, &attr->psl_list, next) {
         StateChangeListener *scl = &psl->scl;
@@ -302,7 +308,12 @@ static int ram_block_attribute_notify_to_shared(RamBlockAttribute *attr,
             if (!memory_region_section_intersect_range(&tmp, offset, size)) {
                 continue;
             }
-            scl2->notify_to_state_clear(scl2, &tmp);
+            /*
+             * No undo operation for the state_clear() callback failure at present.
+             * Expect the state_clear() callback always succeed.
+             */
+            ret2 = scl2->notify_to_state_clear(scl2, &tmp);
+            g_assert(!ret2);
         }
     }
     return ret;

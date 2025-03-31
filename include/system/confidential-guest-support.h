@@ -23,12 +23,20 @@
 #endif
 
 #include "qom/object.h"
+#include "exec/memory.h"
 
 #define TYPE_CONFIDENTIAL_GUEST_SUPPORT "confidential-guest-support"
 OBJECT_DECLARE_TYPE(ConfidentialGuestSupport,
                     ConfidentialGuestSupportClass,
                     CONFIDENTIAL_GUEST_SUPPORT)
 
+typedef struct CVMPrivateSharedListener {
+    MemoryRegion *mr;
+    hwaddr offset_within_address_space;
+    uint64_t granularity;
+    PrivateSharedListener listener;
+    QLIST_ENTRY(CVMPrivateSharedListener) next;
+} CVMPrivateSharedListener;
 
 struct ConfidentialGuestSupport {
     Object parent;
@@ -37,6 +45,8 @@ struct ConfidentialGuestSupport {
      * True if the machine should use guest_memfd for RAM.
      */
     bool require_guest_memfd;
+
+    QLIST_HEAD(, CVMPrivateSharedListener) cvm_private_shared_list;
 
     /*
      * ready: flag set by CGS initialization code once it's ready to

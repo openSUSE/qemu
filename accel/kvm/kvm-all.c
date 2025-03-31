@@ -48,6 +48,7 @@
 #include "kvm-cpus.h"
 #include "system/dirtylimit.h"
 #include "qemu/range.h"
+#include "system/confidential-guest-support.h"
 
 #include "hw/boards.h"
 #include "system/stats.h"
@@ -1691,28 +1692,91 @@ static int kvm_dirty_ring_init(KVMState *s)
     return 0;
 }
 
+static int kvm_private_shared_notify(StateChangeListener *scl,
+                                     MemoryRegionSection *section,
+                                     bool to_private)
+{
+    hwaddr start = section->offset_within_address_space;
+    hwaddr size = section->size;
+
+    if (to_private) {
+        return kvm_set_memory_attributes_private(start, size);
+    } else {
+        return kvm_set_memory_attributes_shared(start, size);
+    }
+}
+
+static int kvm_private_shared_notify_to_shared(StateChangeListener *scl,
+                                               MemoryRegionSection *section)
+{
+    return kvm_private_shared_notify(scl, section, false);
+}
+
+static int kvm_private_shared_notify_to_private(StateChangeListener *scl,
+                                                MemoryRegionSection *section)
+{
+    return kvm_private_shared_notify(scl, section, true);
+}
+
 static void kvm_region_add(MemoryListener *listener,
                            MemoryRegionSection *section)
 {
     KVMMemoryListener *kml = container_of(listener, KVMMemoryListener, listener);
+    ConfidentialGuestSupport *cgs = MACHINE(qdev_get_machine())->cgs;
+    GenericStateManager *gsm = memory_region_get_generic_state_manager(section->mr);
     KVMMemoryUpdate *update;
+    CVMPrivateSharedListener *cpsl;
+    PrivateSharedListener *psl;
+
 
     update = g_new0(KVMMemoryUpdate, 1);
     update->section = *section;
 
     QSIMPLEQ_INSERT_TAIL(&kml->transaction_add, update, next);
+
+    if (!memory_region_has_guest_memfd(section->mr) || !gsm) {
+        return;
+    }
+
+    cpsl = g_new0(CVMPrivateSharedListener, 1);
+    cpsl->mr = section->mr;
+    cpsl->offset_within_address_space = section->offset_within_address_space;
+    cpsl->granularity = generic_state_manager_get_min_granularity(gsm, section->mr);
+    psl = &cpsl->listener;
+    QLIST_INSERT_HEAD(&cgs->cvm_private_shared_list, cpsl, next);
+    private_shared_listener_init(psl, kvm_private_shared_notify_to_shared,
+                                 kvm_private_shared_notify_to_private);
+    generic_state_manager_register_listener(gsm, &psl->scl, section);
 }
 
 static void kvm_region_del(MemoryListener *listener,
                            MemoryRegionSection *section)
 {
     KVMMemoryListener *kml = container_of(listener, KVMMemoryListener, listener);
+    ConfidentialGuestSupport *cgs = MACHINE(qdev_get_machine())->cgs;
+    GenericStateManager *gsm = memory_region_get_generic_state_manager(section->mr);
     KVMMemoryUpdate *update;
+    CVMPrivateSharedListener *cpsl;
+    PrivateSharedListener *psl;
 
     update = g_new0(KVMMemoryUpdate, 1);
     update->section = *section;
 
     QSIMPLEQ_INSERT_TAIL(&kml->transaction_del, update, next);
+    if (!memory_region_has_guest_memfd(section->mr) || !gsm) {
+        return;
+    }
+
+    QLIST_FOREACH(cpsl, &cgs->cvm_private_shared_list, next) {
+        if (cpsl->mr == section->mr &&
+            cpsl->offset_within_address_space == section->offset_within_address_space) {
+            psl = &cpsl->listener;
+            generic_state_manager_unregister_listener(gsm, &psl->scl);
+            QLIST_REMOVE(cpsl, next);
+            g_free(cpsl);
+            break;
+        }
+    }
 }
 
 static void kvm_region_commit(MemoryListener *listener)
@@ -3073,15 +3137,6 @@ int kvm_convert_memory(hwaddr start, hwaddr size, bool to_private)
                         "(0x%"HWADDR_PRIx" ,+ 0x%"HWADDR_PRIx") to %s",
                         start, size, to_private ? "private" : "shared");
         }
-        goto out_unref;
-    }
-
-    if (to_private) {
-        ret = kvm_set_memory_attributes_private(start, size);
-    } else {
-        ret = kvm_set_memory_attributes_shared(start, size);
-    }
-    if (ret) {
         goto out_unref;
     }
 
