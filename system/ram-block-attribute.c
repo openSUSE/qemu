@@ -66,8 +66,7 @@ static int ram_block_attribute_notify_discard_cb(MemoryRegionSection *section,
 {
     RamDiscardListener *rdl = arg;
 
-    rdl->notify_discard(rdl, section);
-    return 0;
+    return rdl->notify_discard(rdl, section);
 }
 
 static int

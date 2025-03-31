@@ -518,8 +518,8 @@ struct IOMMUMemoryRegionClass {
 typedef struct RamDiscardListener RamDiscardListener;
 typedef int (*NotifyRamPopulate)(RamDiscardListener *rdl,
                                  MemoryRegionSection *section);
-typedef void (*NotifyRamDiscard)(RamDiscardListener *rdl,
-                                 MemoryRegionSection *section);
+typedef int (*NotifyRamDiscard)(RamDiscardListener *rdl,
+                                MemoryRegionSection *section);
 
 struct RamDiscardListener {
     /*

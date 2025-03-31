@@ -190,8 +190,8 @@ out:
     rcu_read_unlock();
 }
 
-static void vfio_ram_discard_notify_discard(RamDiscardListener *rdl,
-                                            MemoryRegionSection *section)
+static int vfio_ram_discard_notify_discard(RamDiscardListener *rdl,
+                                           MemoryRegionSection *section)
 {
     VFIORamDiscardListener *vrdl = container_of(rdl, VFIORamDiscardListener,
                                                 listener);
@@ -206,6 +206,8 @@ static void vfio_ram_discard_notify_discard(RamDiscardListener *rdl,
         error_report("%s: vfio_container_dma_unmap() failed: %s", __func__,
                      strerror(-ret));
     }
+
+    return ret;
 }
 
 static int vfio_ram_discard_notify_populate(RamDiscardListener *rdl,
