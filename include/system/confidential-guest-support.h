@@ -19,12 +19,19 @@
 #define QEMU_CONFIDENTIAL_GUEST_SUPPORT_H
 
 #include "qom/object.h"
+#include "system/memory.h"
 
 #define TYPE_CONFIDENTIAL_GUEST_SUPPORT "confidential-guest-support"
 OBJECT_DECLARE_TYPE(ConfidentialGuestSupport,
                     ConfidentialGuestSupportClass,
                     CONFIDENTIAL_GUEST_SUPPORT)
 
+typedef struct CGSRamDiscardListener {
+    MemoryRegion *mr;
+    hwaddr offset_within_address_space;
+    RamDiscardListener listener;
+    QLIST_ENTRY(CGSRamDiscardListener) next;
+} CGSRamDiscardListener;
 
 struct ConfidentialGuestSupport {
     Object parent;
@@ -33,6 +40,8 @@ struct ConfidentialGuestSupport {
      * True if the machine should use guest_memfd for RAM.
      */
     bool require_guest_memfd;
+
+    QLIST_HEAD(, CGSRamDiscardListener) cgs_rdl_list;
 
     /*
      * ready: flag set by CGS initialization code once it's ready to

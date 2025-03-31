@@ -274,11 +274,12 @@ static bool ram_block_attribute_is_valid_range(RamBlockAttribute *attr,
     return true;
 }
 
-static void ram_block_attribute_notify_to_discard(RamBlockAttribute *attr,
-                                                  uint64_t offset,
-                                                  uint64_t size)
+static int ram_block_attribute_notify_to_discard(RamBlockAttribute *attr,
+                                                 uint64_t offset,
+                                                 uint64_t size)
 {
     RamDiscardListener *rdl;
+    int ret = 0;
 
     QLIST_FOREACH(rdl, &attr->rdl_list, next) {
         MemoryRegionSection tmp = *rdl->section;
@@ -286,8 +287,13 @@ static void ram_block_attribute_notify_to_discard(RamBlockAttribute *attr,
         if (!memory_region_section_intersect_range(&tmp, offset, size)) {
             continue;
         }
-        rdl->notify_discard(rdl, &tmp);
+        ret = rdl->notify_discard(rdl, &tmp);
+        if (ret) {
+            break;
+        }
     }
+
+    return ret;
 }
 
 static int
@@ -377,7 +383,7 @@ int ram_block_attribute_state_change(RamBlockAttribute *attr, uint64_t offset,
 
     if (to_private) {
         bitmap_clear(attr->bitmap, first_bit, nbits);
-        ram_block_attribute_notify_to_discard(attr, offset, size);
+        ret = ram_block_attribute_notify_to_discard(attr, offset, size);
     } else {
         bitmap_set(attr->bitmap, first_bit, nbits);
         ret = ram_block_attribute_notify_to_populated(attr, offset, size);

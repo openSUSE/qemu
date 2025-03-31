@@ -49,6 +49,7 @@
 #include "kvm-cpus.h"
 #include "system/dirtylimit.h"
 #include "qemu/range.h"
+#include "system/confidential-guest-support.h"
 
 #include "hw/boards.h"
 #include "system/stats.h"
@@ -1689,28 +1690,90 @@ static int kvm_dirty_ring_init(KVMState *s)
     return 0;
 }
 
+static int kvm_private_shared_notify(RamDiscardListener *rdl,
+                                     MemoryRegionSection *section,
+                                     bool to_private)
+{
+    hwaddr start = section->offset_within_address_space;
+    hwaddr size = section->size;
+
+    if (to_private) {
+        return kvm_set_memory_attributes_private(start, size);
+    } else {
+        return kvm_set_memory_attributes_shared(start, size);
+    }
+}
+
+static int kvm_ram_discard_notify_to_shared(RamDiscardListener *rdl,
+                                            MemoryRegionSection *section)
+{
+    return kvm_private_shared_notify(rdl, section, false);
+}
+
+static int kvm_ram_discard_notify_to_private(RamDiscardListener *rdl,
+                                             MemoryRegionSection *section)
+{
+    return kvm_private_shared_notify(rdl, section, true);
+}
+
 static void kvm_region_add(MemoryListener *listener,
                            MemoryRegionSection *section)
 {
     KVMMemoryListener *kml = container_of(listener, KVMMemoryListener, listener);
+    ConfidentialGuestSupport *cgs = MACHINE(qdev_get_machine())->cgs;
+    RamDiscardManager *rdm = memory_region_get_ram_discard_manager(section->mr);
     KVMMemoryUpdate *update;
+    CGSRamDiscardListener *crdl;
+    RamDiscardListener *rdl;
+
 
     update = g_new0(KVMMemoryUpdate, 1);
     update->section = *section;
 
     QSIMPLEQ_INSERT_TAIL(&kml->transaction_add, update, next);
+
+    if (!memory_region_has_guest_memfd(section->mr) || !rdm) {
+        return;
+    }
+
+    crdl = g_new0(CGSRamDiscardListener, 1);
+    crdl->mr = section->mr;
+    crdl->offset_within_address_space = section->offset_within_address_space;
+    rdl = &crdl->listener;
+    QLIST_INSERT_HEAD(&cgs->cgs_rdl_list, crdl, next);
+    ram_discard_listener_init(rdl, kvm_ram_discard_notify_to_shared,
+                              kvm_ram_discard_notify_to_private, true);
+    ram_discard_manager_register_listener(rdm, rdl, section);
 }
 
 static void kvm_region_del(MemoryListener *listener,
                            MemoryRegionSection *section)
 {
     KVMMemoryListener *kml = container_of(listener, KVMMemoryListener, listener);
+    ConfidentialGuestSupport *cgs = MACHINE(qdev_get_machine())->cgs;
+    RamDiscardManager *rdm = memory_region_get_ram_discard_manager(section->mr);
     KVMMemoryUpdate *update;
+    CGSRamDiscardListener *crdl;
+    RamDiscardListener *rdl;
 
     update = g_new0(KVMMemoryUpdate, 1);
     update->section = *section;
 
     QSIMPLEQ_INSERT_TAIL(&kml->transaction_del, update, next);
+    if (!memory_region_has_guest_memfd(section->mr) || !rdm) {
+        return;
+    }
+
+    QLIST_FOREACH(crdl, &cgs->cgs_rdl_list, next) {
+        if (crdl->mr == section->mr &&
+            crdl->offset_within_address_space == section->offset_within_address_space) {
+            rdl = &crdl->listener;
+            ram_discard_manager_unregister_listener(rdm, rdl);
+            QLIST_REMOVE(crdl, next);
+            g_free(crdl);
+            break;
+        }
+    }
 }
 
 static void kvm_region_commit(MemoryListener *listener)
@@ -3074,15 +3137,6 @@ int kvm_convert_memory(hwaddr start, hwaddr size, bool to_private)
                         "(0x%"HWADDR_PRIx" ,+ 0x%"HWADDR_PRIx") to %s",
                         start, size, to_private ? "private" : "shared");
         }
-        goto out_unref;
-    }
-
-    if (to_private) {
-        ret = kvm_set_memory_attributes_private(start, size);
-    } else {
-        ret = kvm_set_memory_attributes_shared(start, size);
-    }
-    if (ret) {
         goto out_unref;
     }
 
