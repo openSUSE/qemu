@@ -335,8 +335,8 @@ out:
     rcu_read_unlock();
 }
 
-static void vfio_state_change_notify_to_state_clear(VFIOContainerBase *bcontainer,
-                                                    MemoryRegionSection *section)
+static int vfio_state_change_notify_to_state_clear(VFIOContainerBase *bcontainer,
+                                                   MemoryRegionSection *section)
 {
     const hwaddr size = int128_get64(section->size);
     const hwaddr iova = section->offset_within_address_space;
@@ -348,24 +348,26 @@ static void vfio_state_change_notify_to_state_clear(VFIOContainerBase *bcontaine
         error_report("%s: vfio_container_dma_unmap() failed: %s", __func__,
                      strerror(-ret));
     }
+
+    return ret;
 }
 
-static void vfio_ram_discard_notify_discard(StateChangeListener *scl,
-                                            MemoryRegionSection *section)
+static int vfio_ram_discard_notify_discard(StateChangeListener *scl,
+                                           MemoryRegionSection *section)
 {
     RamDiscardListener *rdl = container_of(scl, RamDiscardListener, scl);
     VFIORamDiscardListener *vrdl = container_of(rdl, VFIORamDiscardListener,
                                                 listener);
-    vfio_state_change_notify_to_state_clear(vrdl->bcontainer, section);
+    return vfio_state_change_notify_to_state_clear(vrdl->bcontainer, section);
 }
 
-static void vfio_private_shared_notify_to_private(StateChangeListener *scl,
-                                                  MemoryRegionSection *section)
+static int vfio_private_shared_notify_to_private(StateChangeListener *scl,
+                                                 MemoryRegionSection *section)
 {
     PrivateSharedListener *psl = container_of(scl, PrivateSharedListener, scl);
     VFIOPrivateSharedListener *vpsl = container_of(psl, VFIOPrivateSharedListener,
                                                    listener);
-    vfio_state_change_notify_to_state_clear(vpsl->bcontainer, section);
+    return vfio_state_change_notify_to_state_clear(vpsl->bcontainer, section);
 }
 
 static int vfio_state_change_notify_to_state_set(VFIOContainerBase *bcontainer,
