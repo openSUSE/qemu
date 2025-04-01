@@ -231,6 +231,11 @@ Requires:       (qemu-guest-agent = %{version} if qemu-guest-agent)
 %ifarch s390x
 Recommends:     qemu-hw-s390x-virtio-gpu-ccw
 %else
+%ifarch arm
+Requires:       qemu-hw-display-virtio-gpu-pci
+%else
+Recommends:     qemu-hw-display-virtio-gpu-pci
+%endif
 Recommends:     qemu-hw-display-qxl
 Recommends:     qemu-hw-display-virtio-gpu
 Recommends:     qemu-hw-display-virtio-gpu-pci
@@ -1219,8 +1224,8 @@ This package provides i386 and x86_64 emulation.
 Summary:        Machine emulator and virtualizer for Power architectures
 Group:          System/Emulators/PC
 Requires:       %name = %{version}
+Requires:       qemu-ipxe
 Requires:       qemu-SLOF
-Recommends:     qemu-ipxe
 Recommends:     qemu-vgabios
 
 %description ppc
@@ -1262,8 +1267,8 @@ This package provides s390x emulation.
 Summary:        Machine emulator and virtualizer for ARM architectures
 Group:          System/Emulators/PC
 Requires:       %name = %{version}
+Requires:       qemu-ipxe
 Recommends:     ovmf
-Recommends:     qemu-ipxe
 Recommends:     qemu-uefi-aarch64
 Recommends:     qemu-vgabios
 
