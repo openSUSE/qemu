@@ -770,11 +770,24 @@ struct RamDiscardManagerClass {
     GenericStateManagerClass parent_class;
 };
 
+#define PRIVATE_SHARED_LISTENER_PRIORITY_MIN       0
+#define PRIVATE_SHARED_LISTENER_PRIORITY_COMMON    10
+
 typedef struct PrivateSharedListener PrivateSharedListener;
 struct PrivateSharedListener {
     struct StateChangeListener scl;
 
-    QLIST_ENTRY(PrivateSharedListener) next;
+    /*
+     * @priority:
+     *
+     * Govern the order in which ram discard listeners are invoked. Lower priorities
+     * are invoked earlier.
+     * The listener priority can help to undo the effects of previous listeners in
+     * a reverse order in case of a failure callback.
+     */
+    int priority;
+
+    QTAILQ_ENTRY(PrivateSharedListener) next;
 };
 
 struct PrivateSharedManagerClass {
@@ -787,9 +800,11 @@ struct PrivateSharedManagerClass {
 
 static inline void private_shared_listener_init(PrivateSharedListener *psl,
                                                 NotifyStateSet populate_fn,
-                                                NotifyStateClear discard_fn)
+                                                NotifyStateClear discard_fn,
+                                                int priority)
 {
     state_change_listener_init(&psl->scl, populate_fn, discard_fn);
+    psl->priority = priority;
 }
 
 int private_shared_manager_state_change(PrivateSharedManager *mgr,

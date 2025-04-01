@@ -105,7 +105,7 @@ struct RamBlockAttribute {
     unsigned shared_bitmap_size;
     unsigned long *shared_bitmap;
 
-    QLIST_HEAD(, PrivateSharedListener) psl_list;
+    QTAILQ_HEAD(, PrivateSharedListener) psl_list;
 };
 
 struct RamBlockAttributeClass {

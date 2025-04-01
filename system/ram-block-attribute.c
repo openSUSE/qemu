@@ -158,12 +158,23 @@ static void ram_block_attribute_psm_register_listener(GenericStateManager *gsm,
 {
     RamBlockAttribute *attr = RAM_BLOCK_ATTRIBUTE(gsm);
     PrivateSharedListener *psl = container_of(scl, PrivateSharedListener, scl);
+    PrivateSharedListener *other = NULL;
     int ret;
 
     g_assert(section->mr == attr->mr);
     scl->section = memory_region_section_new_copy(section);
 
-    QLIST_INSERT_HEAD(&attr->psl_list, psl, next);
+    if (QTAILQ_EMPTY(&attr->psl_list) ||
+        psl->priority >= QTAILQ_LAST(&attr->psl_list)->priority) {
+        QTAILQ_INSERT_TAIL(&attr->psl_list, psl, next);
+    } else {
+        QTAILQ_FOREACH(other, &attr->psl_list, next) {
+            if (psl->priority < other->priority) {
+                break;
+            }
+        }
+        QTAILQ_INSERT_BEFORE(other, psl, next);
+    }
 
     ret = ram_block_attribute_for_each_shared_section(attr, section, scl,
                                                       ram_block_attribute_notify_shared_cb);
@@ -192,7 +203,7 @@ static void ram_block_attribute_psm_unregister_listener(GenericStateManager *gsm
 
     memory_region_section_free_copy(scl->section);
     scl->section = NULL;
-    QLIST_REMOVE(psl, next);
+    QTAILQ_REMOVE(&attr->psl_list, psl, next);
 }
 
 typedef struct RamBlockAttributeReplayData {
@@ -261,7 +272,7 @@ static void ram_block_attribute_notify_to_private(RamBlockAttribute *attr,
     PrivateSharedListener *psl;
     int ret;
 
-    QLIST_FOREACH(psl, &attr->psl_list, next) {
+    QTAILQ_FOREACH_REVERSE(psl, &attr->psl_list, next) {
         StateChangeListener *scl = &psl->scl;
         MemoryRegionSection tmp = *scl->section;
 
@@ -283,7 +294,7 @@ static int ram_block_attribute_notify_to_shared(RamBlockAttribute *attr,
     PrivateSharedListener *psl, *psl2;
     int ret = 0, ret2 = 0;
 
-    QLIST_FOREACH(psl, &attr->psl_list, next) {
+    QTAILQ_FOREACH(psl, &attr->psl_list, next) {
         StateChangeListener *scl = &psl->scl;
         MemoryRegionSection tmp = *scl->section;
 
@@ -298,7 +309,7 @@ static int ram_block_attribute_notify_to_shared(RamBlockAttribute *attr,
 
     if (ret) {
         /* Notify all already-notified listeners. */
-        QLIST_FOREACH(psl2, &attr->psl_list, next) {
+        QTAILQ_FOREACH(psl2, &attr->psl_list, next) {
             StateChangeListener *scl2 = &psl2->scl;
             MemoryRegionSection tmp = *scl2->section;
 
@@ -462,7 +473,7 @@ static void ram_block_attribute_init(Object *obj)
 {
     RamBlockAttribute *attr = RAM_BLOCK_ATTRIBUTE(obj);
 
-    QLIST_INIT(&attr->psl_list);
+    QTAILQ_INIT(&attr->psl_list);
 }
 
 static void ram_block_attribute_finalize(Object *obj)

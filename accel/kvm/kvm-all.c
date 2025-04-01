@@ -1745,7 +1745,8 @@ static void kvm_region_add(MemoryListener *listener,
     psl = &cpsl->listener;
     QLIST_INSERT_HEAD(&cgs->cvm_private_shared_list, cpsl, next);
     private_shared_listener_init(psl, kvm_private_shared_notify_to_shared,
-                                 kvm_private_shared_notify_to_private);
+                                 kvm_private_shared_notify_to_private,
+                                 PRIVATE_SHARED_LISTENER_PRIORITY_MIN);
     generic_state_manager_register_listener(gsm, &psl->scl, section);
 }
 

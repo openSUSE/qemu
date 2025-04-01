@@ -515,7 +515,8 @@ static void vfio_register_private_shared_listener(VFIOContainerBase *bcontainer,
 
     psl = &vpsl->listener;
     private_shared_listener_init(psl, vfio_private_shared_notify_to_shared,
-                                 vfio_private_shared_notify_to_private);
+                                 vfio_private_shared_notify_to_private,
+                                 PRIVATE_SHARED_LISTENER_PRIORITY_COMMON);
     generic_state_manager_register_listener(gsm, &psl->scl, section);
     QLIST_INSERT_HEAD(&bcontainer->vpsl_list, vpsl, next);
 }
