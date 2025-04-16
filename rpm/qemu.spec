@@ -32,7 +32,7 @@
 # firmwares as we can (e.g., both x86 and PPC firmwares on aarch64) so they'll
 # be available in as many ports as possible (as noarch packages).
 
-%ifarch x86_64 aarch64
+%ifarch x86_64 aarch64 riscv64
 %define build_ppc_firmware 1
 # Currently, opensbi does not cross build cleanly on 15.3 and 15.4
 %if ! 0%{?sle_version}
@@ -46,9 +46,6 @@
 %define build_opensbi_firmware 1
 %endif
 # FIXME: Try to enable cross building of x86 firmwares here on PPC
-%endif
-%ifarch riscv64
-%define build_opensbi_firmware 1
 %endif
 
 %ifarch x86_64 ppc ppc64 ppc64le s390x aarch64 riscv64
