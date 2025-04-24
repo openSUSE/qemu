@@ -211,6 +211,7 @@ cd %blddir
 ./qemu-%{qemu_arch} %_bindir/ls > /dev/null
 %endif
 
+echo "######## Soft Float tests ########"
 %make_build check-softfloat
 
 %changelog

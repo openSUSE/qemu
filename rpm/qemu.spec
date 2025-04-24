@@ -960,6 +960,12 @@ echo 'int main (void) { return 0; }' > %{srcdir}/tests/unit/test-seccomp.c
 echo 'int main (void) { return 0; }' > %{srcdir}/tests/unit/test-crypto-secret.c
 %endif
 
+
+# Quick sanity check, as it'll give easier to debug failures
+# than we see with 'make check'
+./qemu-system-%{qemu_arch} -help
+./qemu-img -help
+
 # Compile the QOM test binary first, so that ...
 %make_build tests/qtest/qom-test
 # ... make comes in fresh and has lots of address space (needed for 32bit, bsc#957379)
@@ -969,16 +975,43 @@ echo 'int main (void) { return 0; }' > %{srcdir}/tests/unit/test-crypto-secret.c
 %make_build check-build
 # Let's now run the 'make check' component individually, so we have
 # more control on the options (like -j, etc)
+
+%define timeout_multiplier 1
+# Particularly slow arch-es (on OBS) may benefit from this
+%ifarch riscv64
+%define timeout_multiplier 3
+%endif
+
+echo "######## unit tests ########"
 %make_build check-unit
+
+echo "######## QAPI schema tests ########"
 %make_build check-qapi-schema
+
+echo "######## DecodeTree tests ########"
+%make_build check-decodetree
+
+echo "######## Soft Float tests ########"
 %make_build check-softfloat
+
+%if %{with chkqtests} && !0%{?qemu_user_space_build}
+echo "######## QTest tests ########"
+# Run qtests sequentially, as it's too unreliable, when run in OBS, if parallelized
+make -O V=1 VERBOSE=1 -j1 check-qtest TIMEOUT_MULTIPLIER=%{timeout_multiplier}
+%endif
+
 # This would be `make_build check-block`. But iotests are not reliable
 # if ran in parallel in OBS, so let's be slow for now.
-make -O V=1 VERBOSE=1 -j1 check-block
-%if %{with chkqtests} && !0%{?qemu_user_space_build}
-# Run qtests sequentially, as it's too unreliable, when run in OBS, if parallelized
-make -O V=1 VERBOSE=1 -j1 check-qtest
+echo "######## Block I/O tests ########"
+make -O V=1 VERBOSE=1 -j1 check-block TIMEOUT_MULTIPLIER=%{timeout_multiplier}
+
+echo "######## Functional tests ########"
+# NB: ppc64le hosts often fail one or more functional tests...
+%ifnarch ppc64le
+# 'check-func-quick' instead of 'check-functional' to avoid asset download
+%make_build check-func-quick TIMEOUT_MULTIPLIER=%{timeout_multiplier}
 %endif
+
 # Last step will be to run a full check-report, but we will
 # enable this at a later point
 #make -O V=1 VERBOSE=1 -j1 check-report.junit.xml
