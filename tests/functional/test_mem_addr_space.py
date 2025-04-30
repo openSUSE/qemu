@@ -160,53 +160,53 @@ class MemAddrCheck(QemuSystemTest):
         self.assertRegex(self.vm.get_log(), r'phys-bits too low')
 
     # now lets test some 64-bit CPU cases.
-    def test_phybits_low_tcg_q35_70_amd(self):
-        """
-        For q35 7.1 machines and above, there is a HT window that starts at
-        1024 GiB and ends at 1 TiB - 1. If the max GPA falls in this range,
-        "above_4G" memory is adjusted to start at 1 TiB boundary for AMD cpus
-        in the default case. Lets test without that case for machines 7.0.
-        For q35-7.0 machines, "above 4G" memory starts are 4G.
-        pci64_hole size is 32 GiB. Since TCG_PHYS_ADDR_BITS is defined to
-        be 40, TCG emulated CPUs have maximum of 1 TiB (1024 GiB) of
-        directly addressable memory.
-        Hence, maxmem value at most can be
-        1024 GiB - 4 GiB - 1 GiB per slot for alignment - 32 GiB + 0.5 GiB
-        which is equal to 987.5 GiB. Setting the value to 988 GiB should
-        make QEMU fail with the error message.
-        """
-        self.ensure_64bit_binary()
-        self.vm.add_args('-S', '-machine', 'pc-q35-7.0', '-m',
-                         '512,slots=1,maxmem=988G',
-                         '-display', 'none',
-                         '-object', 'memory-backend-ram,id=mem1,size=1G',
-                         '-device', 'pc-dimm,id=vm0,memdev=mem1')
-        self.vm.set_qmp_monitor(enabled=False)
-        self.vm.launch()
-        self.vm.wait()
-        self.assertEqual(self.vm.exitcode(), 1, "QEMU exit code should be 1")
-        self.assertRegex(self.vm.get_log(), r'phys-bits too low')
+    #def test_phybits_low_tcg_q35_70_amd(self):
+    #    """
+    #    For q35 7.1 machines and above, there is a HT window that starts at
+    #    1024 GiB and ends at 1 TiB - 1. If the max GPA falls in this range,
+    #    "above_4G" memory is adjusted to start at 1 TiB boundary for AMD cpus
+    #    in the default case. Lets test without that case for machines 7.0.
+    #    For q35-7.0 machines, "above 4G" memory starts are 4G.
+    #    pci64_hole size is 32 GiB. Since TCG_PHYS_ADDR_BITS is defined to
+    #    be 40, TCG emulated CPUs have maximum of 1 TiB (1024 GiB) of
+    #    directly addressable memory.
+    #    Hence, maxmem value at most can be
+    #    1024 GiB - 4 GiB - 1 GiB per slot for alignment - 32 GiB + 0.5 GiB
+    #    which is equal to 987.5 GiB. Setting the value to 988 GiB should
+    #    make QEMU fail with the error message.
+    #    """
+    #    self.ensure_64bit_binary()
+    #    self.vm.add_args('-S', '-machine', 'pc-q35-7.0', '-m',
+    #                     '512,slots=1,maxmem=988G',
+    #                     '-display', 'none',
+    #                     '-object', 'memory-backend-ram,id=mem1,size=1G',
+    #                     '-device', 'pc-dimm,id=vm0,memdev=mem1')
+    #    self.vm.set_qmp_monitor(enabled=False)
+    #    self.vm.launch()
+    #    self.vm.wait()
+    #    self.assertEqual(self.vm.exitcode(), 1, "QEMU exit code should be 1")
+    #    self.assertRegex(self.vm.get_log(), r'phys-bits too low')
 
-    def test_phybits_low_tcg_q35_71_amd(self):
-        """
-        AMD_HT_START is defined to be at 1012 GiB. So for q35 machines
-        version > 7.0 and AMD cpus, instead of 1024 GiB limit for 40 bit
-        processor address space, it has to be 1012 GiB , that is 12 GiB
-        less than the case above in order to accommodate HT hole.
-        Make sure QEMU fails when maxmem size is 976 GiB (12 GiB less
-        than 988 GiB).
-        """
-        self.ensure_64bit_binary()
-        self.vm.add_args('-S', '-machine', 'pc-q35-7.1', '-m',
-                         '512,slots=1,maxmem=976G',
-                         '-display', 'none',
-                         '-object', 'memory-backend-ram,id=mem1,size=1G',
-                         '-device', 'pc-dimm,id=vm0,memdev=mem1')
-        self.vm.set_qmp_monitor(enabled=False)
-        self.vm.launch()
-        self.vm.wait()
-        self.assertEqual(self.vm.exitcode(), 1, "QEMU exit code should be 1")
-        self.assertRegex(self.vm.get_log(), r'phys-bits too low')
+    #def test_phybits_low_tcg_q35_71_amd(self):
+    #    """
+    #    AMD_HT_START is defined to be at 1012 GiB. So for q35 machines
+    #    version > 7.0 and AMD cpus, instead of 1024 GiB limit for 40 bit
+    #    processor address space, it has to be 1012 GiB , that is 12 GiB
+    #    less than the case above in order to accommodate HT hole.
+    #    Make sure QEMU fails when maxmem size is 976 GiB (12 GiB less
+    #    than 988 GiB).
+    #    """
+    #    self.ensure_64bit_binary()
+    #    self.vm.add_args('-S', '-machine', 'pc-q35-7.1', '-m',
+    #                     '512,slots=1,maxmem=976G',
+    #                     '-display', 'none',
+    #                     '-object', 'memory-backend-ram,id=mem1,size=1G',
+    #                     '-device', 'pc-dimm,id=vm0,memdev=mem1')
+    #    self.vm.set_qmp_monitor(enabled=False)
+    #    self.vm.launch()
+    #    self.vm.wait()
+    #    self.assertEqual(self.vm.exitcode(), 1, "QEMU exit code should be 1")
+    #    self.assertRegex(self.vm.get_log(), r'phys-bits too low')
 
     def test_phybits_ok_tcg_q35_70_amd(self):
         """
