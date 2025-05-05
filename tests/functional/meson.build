@@ -60,6 +60,7 @@ test_timeouts = {
   'virtio_balloon': 120,
   'x86_64_kvm_xen' : 180,
   'x86_64_replay' : 480,
+  'hppa_seabios' : 120,
 }
 
 tests_generic_system = [
