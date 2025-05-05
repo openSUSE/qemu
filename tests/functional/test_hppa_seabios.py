@@ -11,7 +11,6 @@ from qemu_test import wait_for_console_pattern
 
 class HppaSeabios(QemuSystemTest):
 
-    timeout = 5
     MACH_BITS = {'B160L': 32, 'C3700': 64}
 
     def boot_seabios(self):
