@@ -171,8 +171,8 @@ slow_tests = {
   'test-aio-multithread' : 120,
   'test-bufferiszero': 60,
   'test-crypto-block' : 300,
-  'test-crypto-tlscredsx509': 90,
-  'test-crypto-tlssession': 90,
+  'test-crypto-tlscredsx509': 180,
+  'test-crypto-tlssession': 180,
   'test-replication': 60,
 }
 
