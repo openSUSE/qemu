@@ -879,6 +879,13 @@ static int tdx_check_features(X86ConfidentialGuest *cg, CPUState *cs)
         return -EINVAL;
     }
 
+    if (cpu->phys_bits != host_cpu_phys_bits()) {
+        error_report("TDX requires guest CPU physical bits (%u) "
+                     "to match host CPU physical bits (%u)",
+                     cpu->phys_bits, host_cpu_phys_bits());
+        return -EINVAL;
+    }
+
     return 0;
 }
 
