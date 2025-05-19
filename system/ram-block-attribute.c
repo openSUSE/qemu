@@ -289,7 +289,12 @@ static int ram_block_attribute_notify_to_discard(RamBlockAttribute *attr,
         }
         ret = rdl->notify_discard(rdl, &tmp);
         if (ret) {
-            break;
+            /*
+             * The current to_private listeners (VFIO dma_unmap and
+             * KVM set_attribute_private) are non-failing operations.
+             * TODO: add rollback operations if it is allowed to fail.
+             */
+            g_assert(ret);
         }
     }
 
@@ -300,7 +305,7 @@ static int
 ram_block_attribute_notify_to_populated(RamBlockAttribute *attr,
                                         uint64_t offset, uint64_t size)
 {
-    RamDiscardListener *rdl;
+    RamDiscardListener *rdl, *rdl2;
     int ret = 0;
 
     QLIST_FOREACH(rdl, &attr->rdl_list, next) {
@@ -315,6 +320,20 @@ ram_block_attribute_notify_to_populated(RamBlockAttribute *attr,
         }
     }
 
+    if (ret) {
+        /* Notify all already-notified listeners. */
+        QLIST_FOREACH(rdl2, &attr->rdl_list, next) {
+            MemoryRegionSection tmp = *rdl2->section;
+
+            if (rdl == rdl2) {
+                break;
+            }
+            if (!memory_region_section_intersect_range(&tmp, offset, size)) {
+                continue;
+            }
+            rdl2->notify_discard(rdl2, &tmp);
+        }
+    }
     return ret;
 }
 
@@ -353,6 +372,9 @@ int ram_block_attribute_state_change(RamBlockAttribute *attr, uint64_t offset,
     const int block_size = ram_block_attribute_get_block_size(attr);
     const unsigned long first_bit = offset / block_size;
     const unsigned long nbits = size / block_size;
+    const uint64_t end = offset + size;
+    unsigned long bit;
+    uint64_t cur;
     int ret = 0;
 
     if (!ram_block_attribute_is_valid_range(attr, offset, size)) {
@@ -361,32 +383,74 @@ int ram_block_attribute_state_change(RamBlockAttribute *attr, uint64_t offset,
         return -1;
     }
 
-    /* Already discard/populated */
-    if ((ram_block_attribute_is_range_discard(attr, offset, size) &&
-         to_private) ||
-        (ram_block_attribute_is_range_populated(attr, offset, size) &&
-         !to_private)) {
-        return 0;
-    }
-
-    /* Unexpected mixture */
-    if ((!ram_block_attribute_is_range_populated(attr, offset, size) &&
-         to_private) ||
-        (!ram_block_attribute_is_range_discard(attr, offset, size) &&
-         !to_private)) {
-        error_report("%s, the range is not all in the desired state: "
-                     "(offset 0x%lx, size 0x%lx), %s",
-                     __func__, offset, size,
-                     to_private ? "private" : "shared");
-        return -1;
-    }
-
     if (to_private) {
-        bitmap_clear(attr->bitmap, first_bit, nbits);
-        ret = ram_block_attribute_notify_to_discard(attr, offset, size);
+        if (ram_block_attribute_is_range_discard(attr, offset, size)) {
+            /* Already private */
+        } else if (!ram_block_attribute_is_range_populated(attr, offset,
+                                                           size)) {
+            /* Unexpected mixture: process individual blocks */
+            for (cur = offset; cur < end; cur += block_size) {
+                bit = cur / block_size;
+                if (!test_bit(bit, attr->bitmap)) {
+                    continue;
+                }
+                clear_bit(bit, attr->bitmap);
+                ram_block_attribute_notify_to_discard(attr, cur, block_size);
+            }
+        } else {
+            /* Completely shared */
+            bitmap_clear(attr->bitmap, first_bit, nbits);
+            ram_block_attribute_notify_to_discard(attr, offset, size);
+        }
     } else {
-        bitmap_set(attr->bitmap, first_bit, nbits);
-        ret = ram_block_attribute_notify_to_populated(attr, offset, size);
+        if (ram_block_attribute_is_range_populated(attr, offset, size)) {
+            /* Already shared */
+        } else if (!ram_block_attribute_is_range_discard(attr, offset, size)) {
+            /* Unexpected mixture: process individual blocks */
+            unsigned long *modified_bitmap = bitmap_new(nbits);
+
+            for (cur = offset; cur < end; cur += block_size) {
+                bit = cur / block_size;
+                if (test_bit(bit, attr->bitmap)) {
+                    continue;
+                }
+                set_bit(bit, attr->bitmap);
+                ret = ram_block_attribute_notify_to_populated(attr, cur,
+                                                           block_size);
+                if (!ret) {
+                    set_bit(bit - first_bit, modified_bitmap);
+                    continue;
+                }
+                clear_bit(bit, attr->bitmap);
+                break;
+            }
+
+            if (ret) {
+                /*
+                 * Very unexpected: something went wrong. Revert to the old
+                 * state, marking only the blocks as private that we converted
+                 * to shared.
+                 */
+                for (cur = offset; cur < end; cur += block_size) {
+                    bit = cur / block_size;
+                    if (!test_bit(bit - first_bit, modified_bitmap)) {
+                        continue;
+                    }
+                    assert(test_bit(bit, attr->bitmap));
+                    clear_bit(bit, attr->bitmap);
+                    ram_block_attribute_notify_to_discard(attr, cur,
+                                                          block_size);
+                }
+            }
+            g_free(modified_bitmap);
+        } else {
+            /* Complete private */
+            bitmap_set(attr->bitmap, first_bit, nbits);
+            ret = ram_block_attribute_notify_to_populated(attr, offset, size);
+            if (ret) {
+                bitmap_clear(attr->bitmap, first_bit, nbits);
+            }
+        }
     }
 
     return ret;
