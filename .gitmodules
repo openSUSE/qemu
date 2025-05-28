@@ -33,7 +33,7 @@
 	url = https://gitlab.com/qemu-project/edk2.git
 [submodule "roms/opensbi"]
 	path = roms/opensbi
-	url = 	https://gitlab.com/qemu-project/opensbi.git
+	url = https://github.com/openSUSE/qemu-opensbi.git
 [submodule "roms/qboot"]
 	path = roms/qboot
 	url = https://github.com/openSUSE/qemu-qboot.git
