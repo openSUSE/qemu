@@ -32,7 +32,7 @@
 	url = https://gitlab.com/qemu-project/u-boot-sam460ex.git
 [submodule "roms/edk2"]
 	path = roms/edk2
-	url = https://gitlab.com/qemu-project/edk2.git
+	url = https://github.com/openSUSE/qemu-edk2.git
 [submodule "roms/opensbi"]
 	path = roms/opensbi
 	url = 	https://gitlab.com/qemu-project/opensbi.git
