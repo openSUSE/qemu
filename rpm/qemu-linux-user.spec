@@ -309,7 +309,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 %if %{with malloc_trim}
 	--enable-malloc-trim \
 %endif
-%if "%{_lto_cflags}" != "%{nil}"
+%if 0%{?suse_version} > 150600 &&  "%{_lto_cflags}" != "%{nil}"
 	--enable-lto \
 %endif
 	--disable-install-blobs \
