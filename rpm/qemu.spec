@@ -242,7 +242,7 @@ Requires:       user(qemu)
 Requires:       (qemu-guest-agent = %{version} if qemu-guest-agent)
 ## Packages we will RECOMMEND
 %ifarch s390x
-Requires:     qemu-hw-s390x-virtio-gpu-ccw
+Recommends:     qemu-hw-s390x-virtio-gpu-ccw
 %else
 %ifarch arm
 Requires:       qemu-hw-display-virtio-gpu-pci
