@@ -107,6 +107,12 @@ syscall layer occurs on the native hardware and operating system.
 %_sbindir/qemu-binfmt-conf.sh
 %_prefix/lib/binfmt.d/qemu-*.conf
 
+%post
+/usr/bin/systemctl try-restart systemd-binfmt.service >/dev/null 2>&1 || :
+
+%postun
+/usr/bin/systemctl try-restart systemd-binfmt.service >/dev/null 2>&1 || :
+
 %prep
 %autosetup -n qemu-%{version} -p1
 
