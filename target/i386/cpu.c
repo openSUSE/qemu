@@ -8319,9 +8319,6 @@ void x86_cpu_expand_features(X86CPU *cpu, Error **errp)
     }
 
     if (!cpu->enable_pmu) {
-        mark_unavailable_features(cpu, FEAT_1_ECX,
-                                  env->user_features[FEAT_1_ECX] & CPUID_EXT_PDCM,
-                                  "This feature is not available due to PMU being disabled");
         env->features[FEAT_1_ECX] &= ~CPUID_EXT_PDCM;
     }
 
