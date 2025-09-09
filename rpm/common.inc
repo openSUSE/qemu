@@ -52,6 +52,17 @@
 %define vmsr_helper 0
 %endif
 
+# We don't have igvm packages and dependencies for now, but let's be prepared
+%bcond_with igvm
+
+# We don't have the headers for passt right now, but let's be prepared
+%bcond_with passt
+
+# XXX
+%ifarch x86_64
+%bcond_with valgrind
+%endif
+
 # Make it possible to build without spice (for SLE/Leap Micro)
 %bcond_without spice
 
@@ -113,8 +124,6 @@ virtualization.
  --disable-asan			\\\
  --disable-attr			\\\
  --disable-auth-pam		\\\
- --disable-avx2			\\\
- --disable-avx512bw		\\\
  --disable-blkio		\\\
  --disable-block-drv-whitelist-in-tools	\\\
  --disable-bochs		\\\
@@ -159,6 +168,7 @@ virtualization.
  --disable-hv-balloon		\\\
  --disable-hvf			\\\
  --disable-iconv		\\\
+ --disable-igvm			\\\
  --disable-jack			\\\
  --disable-kvm			\\\
  --disable-l2tpv3		\\\
@@ -193,6 +203,7 @@ virtualization.
  --disable-oss 			\\\
  --disable-pa 			\\\
  --disable-parallels 		\\\
+ --disable-passt		\\\
  --disable-pie 			\\\
  --disable-pipewire 		\\\
  --disable-pixman		\\\
@@ -236,6 +247,7 @@ virtualization.
  --disable-ubsan		\\\
  --disable-usb-redir		\\\
  --disable-user			\\\
+ --disable-valgrind		\\\
  --disable-vde			\\\
  --disable-vdi			\\\
  --disable-vhdx			\\\
