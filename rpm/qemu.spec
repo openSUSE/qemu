@@ -232,6 +232,11 @@ Recommends:     kvm_stat
 %ifarch s390x
 Recommends:     qemu-hw-s390x-virtio-gpu-ccw
 %else
+%ifarch arm
+Requires:       qemu-hw-display-virtio-gpu-pci
+%else
+Recommends:     qemu-hw-display-virtio-gpu-pci
+%endif
 Recommends:     qemu-hw-display-qxl
 Recommends:     qemu-hw-display-virtio-gpu
 Recommends:     qemu-hw-display-virtio-gpu-pci
@@ -600,8 +605,8 @@ Group:          System/Emulators/PC
 Version:        %{qemuver}
 Release:        0
 Requires:       %name = %{qemuver}
+Requires:       qemu-ipxe
 Requires:       qemu-SLOF
-Recommends:     qemu-ipxe
 Recommends:     qemu-vgabios
 
 %description ppc
@@ -650,8 +655,8 @@ Group:          System/Emulators/PC
 Version:        %{qemuver}
 Release:        0
 Requires:       %name = %{qemuver}
+Requires:       qemu-ipxe
 Recommends:     ovmf
-Recommends:     qemu-ipxe
 Recommends:     qemu-uefi-aarch64
 Recommends:     qemu-vgabios
 
