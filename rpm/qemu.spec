@@ -426,7 +426,7 @@ Release:        0
 Requires:       %name = %{qemuver}
 Requires:       qemu-ipxe
 Requires:       qemu-SLOF
-Recommends:     qemu-vgabios
+Requires:       qemu-vgabios
 
 %description ppc
 %{generic_qemu_description}
