@@ -1130,6 +1130,7 @@ uint64_t x86_cpu_get_supported_feature_word(X86CPU *cpu, FeatureWord w);
 #define MSR_ARCH_CAP_PSDP_NO            (1U << 15)
 #define MSR_ARCH_CAP_FB_CLEAR           (1U << 17)
 #define MSR_ARCH_CAP_PBRSB_NO           (1U << 24)
+#define MSR_ARCH_CAP_ITS_NO             (1U << 62)
 
 #define MSR_CORE_CAP_SPLIT_LOCK_DETECT  (1U << 5)
 
