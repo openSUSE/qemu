@@ -232,7 +232,7 @@ Recommends:     kvm_stat
 %ifarch s390x
 Recommends:     qemu-hw-s390x-virtio-gpu-ccw
 %else
-%ifarch arm
+%ifarch %{arm}
 Requires:       qemu-hw-display-virtio-gpu-pci
 %else
 Recommends:     qemu-hw-display-virtio-gpu-pci
