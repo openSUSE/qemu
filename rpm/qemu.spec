@@ -237,7 +237,7 @@ Recommends:     qemu-hw-s390x-virtio-gpu-ccw
 # Due to change in where some documentation files are, if qemu-guest-agent
 # is installed, we need to make sure we update it to our version.
 Requires:       (qemu-guest-agent = %{qemuver} if qemu-guest-agent)
-%ifarch arm
+%ifarch %{arm}
 Requires:       qemu-hw-display-virtio-gpu-pci
 %else
 Recommends:     qemu-hw-display-virtio-gpu-pci
