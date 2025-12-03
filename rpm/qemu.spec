@@ -224,6 +224,10 @@ BuildRequires:  pkgconfig(lzo2)
 BuildRequires:  pkgconfig(ncurses)
 BuildRequires:  pkgconfig(openssl) >= 1.0.0
 BuildRequires:  pkgconfig(pixman-1) >= 0.21.8
+BuildRequires:  pkgconfig(sdl2)
+%if %{with_sdl_image}
+BuildRequires:  pkgconfig(SDL2_image)
+%endif
 BuildRequires:  pkgconfig(slirp) >= 4.2.0
 BuildRequires:  pkgconfig(systemd)
 BuildRequires:  pkgconfig(vdeplug)
@@ -685,6 +689,10 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-slirp-smbd \
 	--enable-smartcard \
 	--enable-snappy \
+	--enable-sdl \
+%if %{with_sdl_image}
+	--enable-sdl-image \
+%endif
 %if 0%{with spice}
 	--enable-spice \
 	--enable-spice-protocol \
@@ -1388,6 +1396,18 @@ This package contains a module for Pipewire based audio support for QEMU.
 %dir %_libdir/%name
 %_libdir/%name/audio-pipewire.so
 
+%package audio-sdl
+Summary:        SDL based audio support for QEMU
+Group:          System/Emulators/PC
+%{qemu_module_conflicts}
+
+%description audio-sdl
+This package contains a module for SDL based audio support for QEMU.
+
+%files audio-sdl
+%dir %_libdir/%name
+%_libdir/%name/audio-sdl.so
+
 %package block-curl
 Summary:        cURL block support for QEMU
 Group:          System/Emulators/PC
@@ -1633,6 +1653,18 @@ This package contains a module for doing OpenGL based UI for QEMU.
 %dir %_libdir/%name
 %_libdir/%name/ui-egl-headless.so
 %_libdir/%name/ui-opengl.so
+
+%package ui-sdl
+Summary:        SDL based UI support for QEMU
+Group:          System/Emulators/PC
+%{qemu_module_conflicts}
+
+%description ui-sdl
+This package contains a module for doing SDL based UI for QEMU.
+
+%files ui-sdl
+%dir %_libdir/%name
+%_libdir/%name/ui-sdl.so
 
 %package vhost-user-gpu
 Summary:        Vhost user mode virtio-gpu 2D/3D rendering backend for QEMU
