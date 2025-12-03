@@ -13,6 +13,8 @@
 %define force_fit_virtio_pxe_rom 1
 
 %define with_xen 0%{!?_without_xen:1}
+%define with_sdl 0%{!?_without_sdl:1}
+%define with_sdl_image 0%{!?_without_sdl_image:1}
 
 %if "%{?distribution}" == ""
 %define distro private-build
@@ -23,6 +25,7 @@
 # Items to exclude in ALP-based products
 %if 0%{?suse_version} == 1600
 %define with_xen 0
+%define with_sdl_image 0
 %endif
 
 %bcond_with system_membarrier
