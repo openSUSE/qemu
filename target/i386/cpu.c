@@ -1321,6 +1321,7 @@ FeatureWordInfo feature_word_info[FEATURE_WORDS] = {
             .ecx = 1,
             .reg = R_ECX,
         },
+        .migratable_flags = XSTATE_ARCH_LBR_MASK,
     },
     [FEAT_XSAVE_XSS_HI] = {
         .type = CPUID_FEATURE_WORD,
@@ -1359,7 +1360,7 @@ FeatureWordInfo feature_word_info[FEATURE_WORDS] = {
         .migratable_flags = XSTATE_FP_MASK | XSTATE_SSE_MASK |
             XSTATE_YMM_MASK | XSTATE_BNDREGS_MASK | XSTATE_BNDCSR_MASK |
             XSTATE_OPMASK_MASK | XSTATE_ZMM_Hi256_MASK | XSTATE_Hi16_ZMM_MASK |
-            XSTATE_PKRU_MASK,
+            XSTATE_PKRU_MASK | XSTATE_XTILE_CFG_MASK | XSTATE_XTILE_DATA_MASK,
     },
     [FEAT_XSAVE_XCR0_HI] = {
         .type = CPUID_FEATURE_WORD,
@@ -1986,8 +1987,13 @@ static uint64_t x86_cpu_get_migratable_flags(X86CPU *cpu, FeatureWord w)
     for (i = 0; i < 64; i++) {
         uint64_t f = 1ULL << i;
 
-        /* If the feature name is known, it is implicitly considered migratable,
-         * unless it is explicitly set in unmigratable_flags */
+        /*
+         * If the feature name is known, it is implicitly considered migratable,
+         * unless it is explicitly set in unmigratable_flags.
+         *
+         * TODO: Make the behavior of x86_cpu_enable_xsave_components() align
+         * with migratable_flags masking.
+         */
         if ((wi->migratable_flags & f) ||
             (wi->feat_names[i] && !(wi->unmigratable_flags & f))) {
             r |= f;
