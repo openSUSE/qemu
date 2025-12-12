@@ -74,6 +74,7 @@
 %endif
 
 %global have_libcbor 1
+%global have_block_gluster 0
 
 # enforce pxe rom sizes for migration compatability from SLE 11 SP3 forward
 # the following need to be > 64K
@@ -191,7 +192,9 @@ BuildRequires:  pkgconfig(alsa)
 BuildRequires:  pkgconfig(epoxy)
 BuildRequires:  pkgconfig(gbm)
 BuildRequires:  pkgconfig(glib-2.0) >= 2.56
+%if %{have_block_gluster}
 BuildRequires:  pkgconfig(glusterfs-api) >= 3
+%endif
 BuildRequires:  pkgconfig(gnutls) >= 3.5.18
 BuildRequires:  pkgconfig(gtk+-3.0) >= 3.22
 BuildRequires:  pkgconfig(jack)
@@ -275,7 +278,9 @@ Suggests:       qemu-block-rbd
 %endif
 Suggests:       qemu-accel-qtest
 Suggests:       qemu-block-dmg
+%if %{have_block_gluster}
 Suggests:       qemu-block-gluster
+%endif
 Suggests:       qemu-block-iscsi
 Suggests:       qemu-block-ssh
 Suggests:       qemu-chardev-baum
@@ -625,7 +630,9 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-gcrypt \
 	--enable-gettext \
 	--enable-gio \
+%if %{have_block_gluster}
 	--enable-glusterfs \
+%endif
 	--enable-gnutls \
 	--enable-gtk \
 	--enable-guest-agent \
@@ -1338,6 +1345,7 @@ qemu-img tool and QEMU system emulation.
 %_libdir/%name/block-dmg-bz2.so
 %_libdir/%name/block-dmg-lzfse.so
 
+%if %{have_block_gluster}
 %package block-gluster
 Summary:        GlusterFS block support for QEMU
 Group:          System/Emulators/PC
@@ -1350,6 +1358,7 @@ GlusterFS network connection from qemu-img tool and QEMU system emulation.
 %files block-gluster
 %dir %_libdir/%name
 %_libdir/%name/block-gluster.so
+%endif
 
 %package block-iscsi
 Summary:        iSCSI block support for QEMU
