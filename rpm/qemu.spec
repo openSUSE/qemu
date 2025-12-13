@@ -87,7 +87,6 @@ Source:         %{srcname}-%{srcver}.tar.xz
 Source1:        common.inc
 Source303:      README.PACKAGING
 Source1000:     qemu-rpmlintrc
-BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 %if %{build_x86_firmware}
 %ifnarch %ix86 x86_64
 # We must cross-compile on non-x86*
