@@ -88,7 +88,6 @@ Source0:        qemu-%{version}.tar.xz
 Source1:        common.inc
 Source303:      README.PACKAGING
 Source1000:     qemu-rpmlintrc
-BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 ## Packages we REQUIRE during build
 %if %{build_x86_firmware}
 %ifnarch %ix86 x86_64
