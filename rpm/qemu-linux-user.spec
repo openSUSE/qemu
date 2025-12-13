@@ -32,7 +32,6 @@ Source:         %{srcname}-%{srcver}.tar.xz
 Source1:        common.inc
 Source303:      README.PACKAGING
 Source1000:     qemu-rpmlintrc
-BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:  glib2-devel-static >= 2.56
 BuildRequires:  glibc-devel-static
 BuildRequires:  (pcre-devel-static if glib2-devel-static < 2.73 else pcre2-devel-static)
