@@ -34,7 +34,6 @@ Source1:        common.inc
 Source200:      qemu-rpmlintrc
 Source303:      README.PACKAGING
 Source1000:     qemu-rpmlintrc
-BuildRoot:      %{_tmppath}/%{name}-%{version}-build
 BuildRequires:  bison
 BuildRequires:  glib2-devel-static >= 2.56
 BuildRequires:  glibc-devel-static
