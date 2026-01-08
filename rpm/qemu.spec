@@ -89,7 +89,7 @@ URL:            https://www.qemu.org/
 Summary:        Machine emulator and virtualizer
 License:        BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
 Group:          System/Emulators/PC
-Version:        10.1.3
+Version:        10.2.0
 Release:        0
 Source0:        qemu-%{version}.tar.xz
 Source1:        common.inc
@@ -436,14 +436,7 @@ Conflicts:      qemu-tools > %{version}-%{release}
 meson subprojects packagefiles --apply berkeley-testfloat-3
 meson subprojects packagefiles --apply berkeley-softfloat-3
 
-# for the record, this set of firmware files is installed, but we don't
-# build (yet): bamboo.dtb canyonlands.dtb hppa-firmware.img hppa-firmware.img 64
-# openbios-ppc openbios-sparc32 openbios-sparc64 palcode-clipper petalogix-ml605.dtb
-# petalogix-s3adsp1800.dtb QEMU,cgthree.bin QEMU,tcx.bin qemu_vga.ndrv u-boot.e500
-# u-boot-sam460-20100605.bin opensbi-riscv32-generic-fw_dynamic.bin
-# opensbi-riscv32-generic-fw_dynamic.elfn ast27x0_bootrom.bin pcm7xx_bootrom.bin
-# vof.bin vof-nvram.bin npcm8xx_bootrom.bin pnv-pnor.bin vof.bin vof-nvram.bin
-
+# There (still) are some firmwares that are installed, but we don't build (yet).
 # Note that:
 # - default firmwares are built "by default", i.e., they're built automatically
 #   during the process of building QEMU (on each specific arch)
@@ -672,6 +665,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-lzo \
 	--enable-modules \
 	--enable-mpath \
+	--disable-mshv \
 	--enable-opengl \
 	--enable-oss \
 	--enable-pa \
@@ -1206,13 +1200,15 @@ This package provides ppc and ppc64 emulation.
 %endif
 %_datadir/%name/dtb/bamboo.dtb
 %_datadir/%name/dtb/canyonlands.dtb
+%_datadir/%name/dtb/pegasos1.dtb
+%_datadir/%name/dtb/pegasos2.dtb
 %_datadir/%name/dtb/petalogix-ml605.dtb
 %_datadir/%name/dtb/petalogix-s3adsp1800.dtb
 %_datadir/%name/openbios-ppc
 %_datadir/%name/qemu_vga.ndrv
 %_datadir/%name/pnv-pnor.bin
 %_datadir/%name/u-boot.e500
-%_datadir/%name/u-boot-sam460-20100605.bin
+%_datadir/%name/u-boot-sam460.bin
 %_datadir/%name/vof*.bin
 %doc %_docdir/qemu-ppc
 
