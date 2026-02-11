@@ -1739,9 +1739,7 @@ Summary:        Guest agent for QEMU
 Group:          System/Emulators/PC
 Requires:       group(kvm)
 Requires(post): udev
-Supplements:    modalias(acpi*:QEMU0002%3A*)
-Supplements:    modalias(pci:v00005853d00000001sv*sd*bc*sc*i*)
-Supplements:    modalias(pci:v0000FFFDd00000101sv*sd*bc*sc*i*)
+Supplements: (kernel and (modalias(acpi*:QEMU0002%3A*) or modalias(pci:v00005853d00000001sv*sd*bc*sc*i*) or modalias(pci:v0000FFFDd00000101sv*sd*bc*sc*i*)))
 %{?systemd_ordering}
 
 %description guest-agent
