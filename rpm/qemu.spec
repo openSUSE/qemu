@@ -73,6 +73,9 @@
 %bcond_without qatzip
 %endif
 
+%bcond_without passt
+%bcond_without slirp
+
 %global have_libcbor 1
 %global have_block_gluster 0
 
@@ -158,9 +161,6 @@ BuildRequires:  qatzip-devel
 %if 0%{with igvm}
 #BuildRequires: igvm devel library here
 %endif
-%if 0%{with passt}
-#BuildRequires: passt devel library here
-%endif
 %if 0%{with valgrind}
 BuildRequires: valgrind-devel
 %endif
@@ -232,7 +232,9 @@ BuildRequires:  pkgconfig(sdl2)
 BuildRequires:  pkgconfig(SDL2_image)
 %endif
 %endif
+%if 0%{with slirp}
 BuildRequires:  pkgconfig(slirp) >= 4.2.0
+%endif
 BuildRequires:  pkgconfig(systemd)
 BuildRequires:  pkgconfig(vdeplug)
 BuildRequires:  pkgconfig(virglrenderer) >= 0.4.1
@@ -249,6 +251,9 @@ BuildRequires:  xfsprogs-devel
 %if %{kvm_available}
 Requires(post): acl
 Requires(post): udev
+%endif
+%if 0%{with passt}
+Requires: passt
 %endif
 Requires(post): coreutils
 Requires:       group(kvm)
@@ -687,8 +692,10 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-replication \
 	--enable-seccomp \
 	--enable-selinux \
+%if 0%{with slirp}
 	--enable-slirp \
 	--enable-slirp-smbd \
+%endif
 	--enable-smartcard \
 	--enable-snappy \
 %if %{with_sdl}
