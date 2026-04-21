@@ -1654,10 +1654,15 @@ int migrate_init(MigrationState *s, Error **errp)
     s->threshold_size = 0;
     s->switchover_acked = false;
     s->rdma_migration = false;
+
     /*
-     * set mig_stats memory to zero for a new migration
+     * set mig_stats memory to zero for a new migration.. except the
+     * iteration counter, which we want to make sure it returns 1 for the
+     * first iteration.
      */
     memset(&mig_stats, 0, sizeof(mig_stats));
+    mig_stats.dirty_sync_count = 1;
+
     migration_reset_vfio_bytes_transferred();
 
     s->postcopy_package_loaded = false;
@@ -3247,6 +3252,20 @@ static MigIterateState migration_iteration_run(MigrationState *s)
             pending_size = must_precopy + can_postcopy;
             trace_migrate_pending_exact(pending_size, must_precopy,
                                         can_postcopy);
+
+            /*
+             * Boost dirty sync count to reflect we finished one iteration.
+             *
+             * NOTE: we need to make sure when this happens (together with the
+             * event sent below) all modules have slow-synced the pending data
+             * above. That means a write mem barrier, but qatomic_add() should be
+             * enough.
+             */
+            qatomic_add(&mig_stats.dirty_sync_count, 1);
+
+            if (migrate_events()) {
+                qapi_event_send_migration_pass(mig_stats.dirty_sync_count);
+            }
         }
 
         /* Should we switch to postcopy now? */
