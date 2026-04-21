@@ -47,7 +47,8 @@ typedef struct {
      */
     Stat64 dirty_pages_rate;
     /*
-     * Number of times we have synchronized guest bitmaps.
+     * Number of times we have synchronized guest bitmaps.  This always
+     * starts from 1 for the 1st iteration.
      */
     Stat64 dirty_sync_count;
     /*
