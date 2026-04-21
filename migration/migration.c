@@ -1701,10 +1701,15 @@ int migrate_init(MigrationState *s, Error **errp)
     s->threshold_size = 0;
     s->switchover_acked = false;
     s->rdma_migration = false;
+
     /*
-     * set mig_stats memory to zero for a new migration
+     * set mig_stats memory to zero for a new migration.. except the
+     * iteration counter, which we want to make sure it returns 1 for the
+     * first iteration.
      */
     memset(&mig_stats, 0, sizeof(mig_stats));
+    stat64_set(&mig_stats.dirty_sync_count, 1);
+
     migration_reset_vfio_bytes_transferred();
 
     return 0;
@@ -3228,6 +3233,26 @@ static MigIterateState migration_iteration_run(MigrationState *s)
         qemu_savevm_state_pending_exact(&must_precopy, &can_postcopy);
         pending_size = must_precopy + can_postcopy;
         trace_migrate_pending_exact(pending_size, must_precopy, can_postcopy);
+
+        /*
+         * Boost dirty sync count to reflect we finished one iteration.
+         *
+         * NOTE: we need to make sure when this happens (together with the
+         * event sent below) all modules have slow-synced the pending data
+         * above.  That means a write mem barrier, but qatomic_add() should be
+         * enough.
+         *
+         * It's because a mgmt could wait on the iteration event to query again
+         * on pending data for policy changes (e.g. downtime adjustments).  The
+         * ordering will make sure the query will fetch the latest results from
+         * all the modules.
+         */
+        stat64_add(&mig_stats.dirty_sync_count, 1);
+
+        if (migrate_events()) {
+            qapi_event_send_migration_pass(
+                stat64_get(&mig_stats.dirty_sync_count));
+        }
     }
 
     if ((!pending_size || pending_size < s->threshold_size) && can_switchover) {
