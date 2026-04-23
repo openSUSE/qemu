@@ -73,6 +73,12 @@
 %bcond_without qatzip
 %endif
 
+%ifarch x86_64 aarch64
+%bcond_without nitro
+%else
+%bcond_with nitro
+%endif
+
 %bcond_without passt
 %bcond_without slirp
 
@@ -92,7 +98,7 @@ URL:            https://www.qemu.org/
 Summary:        Machine emulator and virtualizer
 License:        BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
 Group:          System/Emulators/PC
-Version:        10.2.2
+Version:        11.0.0
 Release:        0
 Source0:        qemu-%{version}.tar.xz
 Source1:        common.inc
@@ -195,6 +201,9 @@ BuildRequires:  meson
 BuildRequires:  multipath-tools-devel
 BuildRequires:  ninja >= 1.7
 BuildRequires:  pam-devel
+BuildRequires:  python3-pip
+BuildRequires:  python3-setuptools
+BuildRequires:  python3-wheel
 BuildRequires:  pkgconfig
 BuildRequires:  pkgconfig(alsa)
 BuildRequires:  pkgconfig(epoxy)
@@ -447,6 +456,12 @@ Conflicts:      qemu-tools > %{version}-%{release}
 meson subprojects packagefiles --apply berkeley-testfloat-3
 meson subprojects packagefiles --apply berkeley-softfloat-3
 
+# We don't have python3-pygdbmi packaged in most OSes. But it's necessary
+# only for functests, and we don't run that target anyway (as it would
+# require network access). Let's, therefore, avoid the problem by just
+# getting rid of the dependency.
+sed -i '/pygdbmi/d' pythondeps.toml
+
 # There (still) are some firmwares that are installed, but we don't build (yet).
 # Note that:
 # - default firmwares are built "by default", i.e., they're built automatically
@@ -459,8 +474,7 @@ meson subprojects packagefiles --apply berkeley-softfloat-3
 %define riscv64_extra_firmware {opensbi-riscv64-generic-fw_dynamic.bin}
 %define s390x_default_firmware {s390-ccw.img}
 %define s390x_extra_firmware %{nil}
-%define x86_default_firmware {linuxboot.bin linuxboot_dma.bin multiboot.bin \
-multiboot_dma.bin kvmvapic.bin pvh.bin}
+%define x86_default_firmware {linuxboot_dma.bin multiboot_dma.bin kvmvapic.bin pvh.bin}
 %define x86_extra_firmware {bios.bin bios-256k.bin bios-microvm.bin qboot.rom \
 pxe-e1000.rom pxe-eepro100.rom pxe-ne2k_pci.rom pxe-pcnet.rom pxe-rtl8139.rom \
 pxe-virtio.rom vgabios-ati.bin vgabios-bochs-display.bin \
@@ -549,7 +563,6 @@ export HOSTNAME=OBS # is used in roms/SLOF/Makefile.gen (boo#1084909)
 # * debug-info
 # * fuse
 # * malloc-trim
-# * multiprocess
 # * qom-cast-debug
 # * trace-backends=dtrace
 #
@@ -631,6 +644,9 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 %endif
 %if 0%{has_rutabaga_gfx}
 	--enable-rutabaga-gfx \
+%endif
+%if 0%{with nitro}
+	--enable-nitro \
 %endif
 	--enable-alsa \
 	--enable-attr \
@@ -1007,16 +1023,7 @@ echo 'int main (void) { return 0; }' > %{srcdir}/tests/unit/test-crypto-secret.c
 # ... make comes in fresh and has lots of address space (needed for 32bit, bsc#957379)
 # FIXME: is this still a problem?
 
-# Let's build everything first
-%make_build check-build
-# Let's now run the 'make check' component individually, so we have
-# more control on the options (like -j, etc)
-
-%define timeout_multiplier 1
-# Particularly slow arch-es (on OBS) may benefit from this
-%ifarch riscv64
 %define timeout_multiplier 3
-%endif
 
 echo "######## unit tests ########"
 %make_build check-unit
@@ -1192,9 +1199,7 @@ This package provides i386 and x86_64 emulation.
 %_bindir/qemu-system-x86_64
 %endif
 %_datadir/%name/kvmvapic.bin
-%_datadir/%name/linuxboot.bin
 %_datadir/%name/linuxboot_dma.bin
-%_datadir/%name/multiboot.bin
 %_datadir/%name/multiboot_dma.bin
 %_datadir/%name/pvh.bin
 %doc %_docdir/qemu-x86
@@ -1301,7 +1306,6 @@ popular QEMU packages which are dedicated to a single architecture.)
 %_bindir/qemu-system-hppa
 %_bindir/qemu-system-loongarch64
 %_bindir/qemu-system-microblaze
-%_bindir/qemu-system-microblazeel
 %_bindir/qemu-system-mips64
 %_bindir/qemu-system-mips64el
 %_bindir/qemu-system-riscv64
@@ -1310,7 +1314,6 @@ popular QEMU packages which are dedicated to a single architecture.)
 %_bindir/qemu-system-avr
 %_bindir/qemu-system-m68k
 %_bindir/qemu-system-microblaze
-%_bindir/qemu-system-microblazeel
 %_bindir/qemu-system-mips
 %_bindir/qemu-system-mipsel
 %_bindir/qemu-system-or1k
@@ -1878,38 +1881,8 @@ This package provides QTest accelerator for testing QEMU.
 %files accel-qtest
 %dir %_datadir/%name
 %dir %_libdir/%name
-%ifnarch %ix86 armv7hl
-%_libdir/%name/accel-qtest-aarch64.so
-%_libdir/%name/accel-qtest-alpha.so
-%_libdir/%name/accel-qtest-hppa.so
-%_libdir/%name/accel-qtest-loongarch64.so
-%_libdir/%name/accel-qtest-mips64.so
-%_libdir/%name/accel-qtest-mips64el.so
-%_libdir/%name/accel-qtest-ppc64.so
-%_libdir/%name/accel-qtest-riscv64.so
-%_libdir/%name/accel-qtest-s390x.so
-%_libdir/%name/accel-qtest-sparc64.so
-%_libdir/%name/accel-qtest-x86_64.so
-%endif
+%_libdir/%name/accel-qtest.so
 
-%_libdir/%name/accel-qtest-arm.so
-%_libdir/%name/accel-qtest-avr.so
-%_libdir/%name/accel-qtest-i386.so
-%_libdir/%name/accel-qtest-m68k.so
-%_libdir/%name/accel-qtest-microblaze.so
-%_libdir/%name/accel-qtest-microblazeel.so
-%_libdir/%name/accel-qtest-mips.so
-%_libdir/%name/accel-qtest-mipsel.so
-%_libdir/%name/accel-qtest-or1k.so
-%_libdir/%name/accel-qtest-ppc.so
-%_libdir/%name/accel-qtest-riscv32.so
-%_libdir/%name/accel-qtest-rx.so
-%_libdir/%name/accel-qtest-sh4.so
-%_libdir/%name/accel-qtest-sh4eb.so
-%_libdir/%name/accel-qtest-sparc.so
-%_libdir/%name/accel-qtest-tricore.so
-%_libdir/%name/accel-qtest-xtensa.so
-%_libdir/%name/accel-qtest-xtensaeb.so
 %if 0%{with rbd}
 %package block-rbd
 Summary:        Rados Block Device (Ceph) support for QEMU
