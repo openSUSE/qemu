@@ -198,6 +198,7 @@ virtualization.
  --disable-modules 		\\\
  --disable-mpath 		\\\
  --disable-multiprocess 	\\\
+ --disable-nitro		\\\
  --disable-netmap 		\\\
  --disable-nettle 		\\\
  --disable-numa 		\\\
