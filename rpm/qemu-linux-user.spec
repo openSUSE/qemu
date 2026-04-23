@@ -27,7 +27,7 @@ URL:            https://www.qemu.org/
 Summary:        CPU emulator for user space
 License:        BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
 Group:          System/Emulators/PC
-Version:        10.2.2
+Version:        11.0.0
 Release:        0
 Source0:        qemu-%{version}.tar.xz
 Source1:        common.inc
@@ -51,6 +51,9 @@ BuildRequires:  flex
 BuildRequires:  gcc-c++
 BuildRequires:  meson
 BuildRequires:  ninja >= 1.7
+BuildRequires:  python3-pip
+BuildRequires:  python3-setuptools
+BuildRequires:  python3-wheel
 %if 0%{?suse_version} >= 1600
 BuildRequires:  python3-Sphinx
 BuildRequires:  python3-base >= 3.8
@@ -145,7 +148,6 @@ cd %blddir
 # * debug-info
 # * fuse
 # * malloc-trim
-# * multiprocess
 # * qom-cast-debug
 # * trace-backends=dtrace
 #
