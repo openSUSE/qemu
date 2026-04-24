@@ -82,6 +82,8 @@
 %bcond_without passt
 %bcond_without slirp
 
+%bcond_without fuse
+
 %global have_libcbor 1
 %global have_block_gluster 0
 
@@ -175,6 +177,9 @@ BuildRequires: valgrind-devel
 %endif
 %if %{have_libcbor}
 BuildRequires:  libcbor-devel
+%endif
+%if 0%{with fuse}
+BuildRequires:  fuse3-devel
 %endif
 %if 0%{?suse_version} >= 1600
 BuildRequires:  python3-Sphinx
@@ -564,7 +569,6 @@ export HOSTNAME=OBS # is used in roms/SLOF/Makefile.gen (boo#1084909)
 
 # TODO: Check whether we want to enable the followings:
 # * debug-info
-# * fuse
 # * malloc-trim
 # * qom-cast-debug
 # * trace-backends=dtrace
@@ -647,6 +651,10 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 %endif
 %if 0%{with nitro}
 	--enable-nitro \
+%endif
+%if 0%{with fuse}
+	--enable-fuse \
+	--enable-fuse-lseek \
 %endif
 	--enable-alsa \
 	--enable-attr \
