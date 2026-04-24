@@ -136,7 +136,7 @@ BuildRequires:  cross-ppc64-gcc%gcc_version
 %endif
 %ifarch x86_64
 BuildRequires:  gcc-32bit
-%if %{with_xen}
+%if 0%{with xen}
 BuildRequires:  xen-devel >= 4.2
 %endif
 BuildRequires:  pkgconfig(libpmem)
@@ -243,9 +243,9 @@ BuildRequires:  pkgconfig(lzo2)
 BuildRequires:  pkgconfig(ncurses)
 BuildRequires:  pkgconfig(openssl) >= 1.0.0
 BuildRequires:  pkgconfig(pixman-1) >= 0.21.8
-%if %{with_sdl}
+%if 0%{with sdl}
 BuildRequires:  pkgconfig(sdl2)
-%if %{with_sdl_image}
+%if 0%{with sdl_image}
 BuildRequires:  pkgconfig(SDL2_image)
 %endif
 %endif
@@ -599,7 +599,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--audio-drv-list=pa,pipewire,alsa,jack,oss \
 %endif
 %ifarch x86_64
-%if %{with_xen}
+%if 0%{with xen}
 	--enable-xen \
 	--enable-xen-pci-passthrough \
 %endif
@@ -722,9 +722,9 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 %endif
 	--enable-smartcard \
 	--enable-snappy \
-%if %{with_sdl}
+%if 0%{with sdl}
 	--enable-sdl \
-%if %{with_sdl_image}
+%if 0%{with sdl_image}
 	--enable-sdl-image \
 %endif
 %endif
@@ -1398,7 +1398,7 @@ This package contains a module for Pipewire based audio support for QEMU.
 %dir %_libdir/%name
 %_libdir/%name/audio-pipewire.so
 
-%if %{with_sdl}
+%if 0%{with sdl}
 %package audio-sdl
 Summary:        SDL based audio support for QEMU
 Group:          System/Emulators/PC
@@ -1660,7 +1660,7 @@ This package contains a module for doing OpenGL based UI for QEMU.
 %_libdir/%name/ui-egl-headless.so
 %_libdir/%name/ui-opengl.so
 
-%if %{with_sdl}
+%if 0%{with sdl}
 %package ui-sdl
 Summary:        SDL based UI support for QEMU
 Group:          System/Emulators/PC
