@@ -51,13 +51,13 @@
 %define build_opensbi_firmware 1
 %endif
 
-%ifarch %ix86 x86_64 ppc ppc64 ppc64le s390x armv7hl aarch64 riscv64
+%ifarch x86_64 ppc ppc64 ppc64le s390x aarch64 riscv64
 %define kvm_available 1
 %bcond_without uring
 %define liburing_min_version 1.0
 %endif
 
-%ifarch %ix86 x86_64 s390x
+%ifarch x86_64 s390x
 %define legacy_qemu_kvm 1
 %endif
 
@@ -104,9 +104,12 @@ Source0:        qemu-%{version}.tar.xz
 Source1:        common.inc
 Source303:      README.PACKAGING
 Source1000:     qemu-rpmlintrc
+# Starting from v11.0.0, 32 bit hosts are officially deprecated
+ExcludeArch:    %{ix86} %{arm}
+#ExclusiveArch: $64bit
 ## Packages we REQUIRE during build
 %if %{build_x86_firmware}
-%ifnarch %ix86 x86_64
+%ifnarch x86_64
 # We must cross-compile on non-x86*
 BuildRequires:  cross-x86_64-binutils
 BuildRequires:  cross-x86_64-gcc%gcc_version
@@ -136,7 +139,7 @@ BuildRequires:  xen-devel >= 4.2
 %endif
 BuildRequires:  pkgconfig(libpmem)
 %endif
-%ifnarch %arm s390x
+%ifnarch s390x
 BuildRequires:  libnuma-devel
 %endif
 %if 0%{with canokey}
@@ -275,7 +278,7 @@ Requires:       (qemu-guest-agent = %{version} if qemu-guest-agent)
 %ifarch s390x
 Requires:     qemu-hw-s390x-virtio-gpu-ccw
 %else
-%ifarch %{arm} %ix86 x86_64
+%ifarch x86_64
 Requires:       qemu-hw-display-virtio-gpu-pci
 %else
 Recommends:     qemu-hw-display-virtio-gpu-pci
@@ -331,7 +334,7 @@ Obsoletes:      qemu-sgabios <= 8
 Obsoletes:      qemu-ui-sdl < %{version}
 ## What we do with the main emulator depends on the architecture we're on
 %if %{kvm_available}
-%ifarch %ix86 x86_64
+%ifarch x86_64
 Requires:       qemu-x86
 %else
 Suggests:       qemu-x86
@@ -347,7 +350,7 @@ Requires(post): procps
 %else
 Suggests:       qemu-s390x
 %endif
-%ifarch %arm aarch64
+%ifarch aarch64
 Requires:       qemu-arm
 %else
 Suggests:       qemu-arm
@@ -504,7 +507,7 @@ efi-rtl8139.rom efi-virtio.rom efi-vmxnet3.rom}
 %ifarch s390x
 %define s390x_default_built_firmware %{s390x_default_firmware}
 %endif
-%ifarch %ix86 x86_64
+%ifarch x86_64
 %define x86_default_built_firmware %{x86_default_firmware}
 %endif
 
@@ -565,9 +568,6 @@ export HOSTNAME=OBS # is used in roms/SLOF/Makefile.gen (boo#1084909)
 # * malloc-trim
 # * qom-cast-debug
 # * trace-backends=dtrace
-#
-# Fedora has avx2 enabled for ix86, while we can't (I tried). Guess it's
-# because, for them, ix86 == i686 (while for us it's i586).
 
 # Let's try to stick to _FORTIFY_SOURCE=2 for now
 EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g') -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -Wno-error"
@@ -624,7 +624,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 %if 0%{with system_membarrier}
 	--enable-membarrier \
 %endif
-%ifnarch %arm s390x
+%ifnarch s390x
 	--enable-numa \
 %endif
 %if 0%{with rbd}
@@ -871,9 +871,7 @@ install -D -m 0755 %{rpmfilesdir}/qemu-supportconfig %{buildroot}/usr/lib/suppor
 install -D -m 0644 %{rpmfilesdir}/supported.arm.txt %{buildroot}%_docdir/qemu-arm/supported.txt
 install -D -m 0644 %{rpmfilesdir}/supported.ppc.txt %{buildroot}%_docdir/qemu-ppc/supported.txt
 install -D -m 0644 %{rpmfilesdir}/supported.x86.txt %{buildroot}%_docdir/qemu-x86/supported.txt
-%ifnarch %ix86 armv7hl
 install -D -m 0644 %{rpmfilesdir}/supported.s390.txt %{buildroot}%_docdir/qemu-s390x/supported.txt
-%endif
 
 %if %{legacy_qemu_kvm}
 install -D -m 0644 %{rpmfilesdir}/qemu-kvm.1.gz %{buildroot}%_mandir/man1/qemu-kvm.1.gz
@@ -890,7 +888,7 @@ rst2html --exit-status=2 %{buildroot}%_docdir/qemu-x86/supported.txt %{buildroot
 # End of "if legacy_qemu_kvm"
 %endif
 
-%ifarch aarch64 %arm %ix86 ppc ppc64 ppc64le riscv64 s390x x86_64
+%ifarch aarch64 ppc ppc64 ppc64le riscv64 s390x x86_64
 %ifarch ppc64le
 %define qemu_arch ppc64
 %endif
@@ -1050,7 +1048,7 @@ make -O V=1 VERBOSE=1 -j1 check-block TIMEOUT_MULTIPLIER=%{timeout_multiplier}
 
 echo "######## Functional tests ########"
 # NB: ppc64le and arm32 hosts often fail one or more functional tests...
-%ifnarch ppc64le %arm
+%ifnarch ppc64le
 # 'check-func-quick' instead of 'check-functional' to avoid asset download
 %make_build check-func-quick TIMEOUT_MULTIPLIER=%{timeout_multiplier}
 %endif
@@ -1195,9 +1193,7 @@ This package provides i386 and x86_64 emulation.
 
 %files x86
 %_bindir/qemu-system-i386
-%ifnarch %ix86 armv7hl
 %_bindir/qemu-system-x86_64
-%endif
 %_datadir/%name/kvmvapic.bin
 %_datadir/%name/linuxboot_dma.bin
 %_datadir/%name/multiboot_dma.bin
@@ -1219,9 +1215,7 @@ This package provides ppc and ppc64 emulation.
 
 %files ppc
 %_bindir/qemu-system-ppc
-%ifnarch %ix86 armv7hl
 %_bindir/qemu-system-ppc64
-%endif
 %_datadir/%name/dtb/bamboo.dtb
 %_datadir/%name/dtb/canyonlands.dtb
 %_datadir/%name/dtb/pegasos1.dtb
@@ -1236,7 +1230,6 @@ This package provides ppc and ppc64 emulation.
 %_datadir/%name/vof*.bin
 %doc %_docdir/qemu-ppc
 
-%ifnarch %ix86 armv7hl
 %package s390x
 Summary:        Machine emulator and virtualizer for S/390 architectures
 Group:          System/Emulators/PC
@@ -1253,7 +1246,6 @@ This package provides s390x emulation.
 %_bindir/qemu-system-s390x
 %_datadir/%name/s390-ccw.img
 %doc %_docdir/qemu-s390x
-%endif
 
 %package arm
 Summary:        Machine emulator and virtualizer for ARM architectures
@@ -1271,9 +1263,7 @@ This package provides arm emulation.
 
 %files arm
 %_bindir/qemu-system-arm
-%ifnarch %ix86 armv7hl
 %_bindir/qemu-system-aarch64
-%endif
 %_datadir/%name/ast27x0_bootrom.bin
 %_datadir/%name/npcm7xx_bootrom.bin
 %_datadir/%name/npcm8xx_bootrom.bin
@@ -1286,12 +1276,6 @@ Requires:       %name = %{version}
 Recommends:     qemu-ipxe
 Recommends:     qemu-skiboot
 Recommends:     qemu-vgabios
-%ifarch %ix86 armv7hl
-# The package is not built any longer for 32bits arch-es, but we're still
-# providing the s390-ccw.img firmware, as part of this package (for those
-# arch-es only, of course)
-Obsoletes:      qemu-s390x < %{version}
-%endif
 
 %description extra
 %{generic_qemu_description}
@@ -1301,16 +1285,13 @@ mips, sparc, and xtensa. (The term "extra" is juxtapositioned against more
 popular QEMU packages which are dedicated to a single architecture.)
 
 %files extra
-%ifnarch %ix86 armv7hl
 %_bindir/qemu-system-alpha
 %_bindir/qemu-system-hppa
 %_bindir/qemu-system-loongarch64
-%_bindir/qemu-system-microblaze
 %_bindir/qemu-system-mips64
 %_bindir/qemu-system-mips64el
 %_bindir/qemu-system-riscv64
 %_bindir/qemu-system-sparc64
-%endif
 %_bindir/qemu-system-avr
 %_bindir/qemu-system-m68k
 %_bindir/qemu-system-microblaze
@@ -1325,9 +1306,6 @@ popular QEMU packages which are dedicated to a single architecture.)
 %_bindir/qemu-system-tricore
 %_bindir/qemu-system-xtensa
 %_bindir/qemu-system-xtensaeb
-%ifarch %ix86 armv7hl
-%_datadir/%name/s390-ccw.img
-%endif
 %_datadir/%name/hppa-firmware.img
 %_datadir/%name/hppa-firmware64.img
 %_datadir/%name/openbios-sparc32
