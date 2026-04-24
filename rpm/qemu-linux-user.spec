@@ -146,7 +146,6 @@ cd %blddir
 
 # TODO: Check whether we want to enable the followings:
 # * debug-info
-# * fuse
 # * malloc-trim
 # * qom-cast-debug
 # * trace-backends=dtrace
