@@ -6,7 +6,11 @@ After=dev-virtio\x2dports-org.qemu.guest_agent.0.device
 
 [Service]
 Type=simple
-ExecStart=-/usr/bin/qemu-ga -p /dev/virtio-ports/org.qemu.guest_agent.0
+# Our config file
+EnvironmentFile=-/usr/etc/sysconfig/qemu-ga
+# Overrides from the admin (if any)
+EnvironmentFile=-/etc/sysconfig/qemu-ga
+ExecStart=-/usr/bin/qemu-ga -p /dev/virtio-ports/org.qemu.guest_agent.0 ${FILTER_RPC_ARGS}
 Restart=always
 RestartSec=0
 
