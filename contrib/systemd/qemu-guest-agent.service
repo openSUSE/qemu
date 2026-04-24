@@ -4,6 +4,10 @@ BindTo=dev-virtio\x2dports-org.qemu.guest_agent.0.device
 After=dev-virtio\x2dports-org.qemu.guest_agent.0.device
 
 [Service]
+# Our config file
+EnvironmentFile=-/usr/etc/sysconfig/qemu-ga
+# Overrides from the admin (if any)
+EnvironmentFile=-/etc/sysconfig/qemu-ga
 ExecStart=-/usr/bin/qemu-ga
 Restart=always
 RestartSec=0

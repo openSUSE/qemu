@@ -872,6 +872,7 @@ install -d -m 0755 %{buildroot}%_sysconfdir/%name/firmware
 install -D -m 0644 %{rpmfilesdir}/bridge.conf %{buildroot}%_sysconfdir/%name/bridge.conf
 install -D -m 0755 %{rpmfilesdir}/qemu-ifup %{buildroot}%_datadir/%name/qemu-ifup
 install -D -p -m 0644 %{rpmfilesdir}/80-qemu-ga.rules %{buildroot}/usr/lib/udev/rules.d/80-qemu-ga.rules
+install -D -m 0644 %{rpmfilesdir}/qemu-ga.sysconfig %{buildroot}%{_distconfdir}/sysconfig/qemu-ga/qemu-ga.sysconfig
 install -D -m 0755 scripts/analyze-migration.py  %{buildroot}%_bindir/analyze-migration.py
 install -D -m 0755 scripts/vmstate-static-checker.py  %{buildroot}%_bindir/vmstate-static-checker.py
 install -D -m 0755 scripts/kvm/vmxcap  %{buildroot}%_bindir/vmxcap
@@ -1802,6 +1803,7 @@ to provide information and control at the guest OS level.
 %attr(0755,root,kvm) %_bindir/qemu-ga
 %_mandir/man8/qemu-ga.8.gz
 %{_unitdir}/qemu-guest-agent.service
+%{_distconfdir}/sysconfig/qemu-ga/qemu-ga.sysconfig
 /usr/lib/udev/rules.d/80-qemu-ga.rules
 
 %pre guest-agent
