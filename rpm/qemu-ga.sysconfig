@@ -1,0 +1,19 @@
+# This is a systemd environment file, not a shell script.
+# It provides settings for "/lib/systemd/system/qemu-guest-agent.service".
+
+# Guest agent command with comma-separated blocked RPCs to disable,
+# or empty list to enable all.
+#
+# You can get the list of RPC commands using "qemu-ga --block-rpcs='?'".
+# There should be no spaces between commas and commands in the block list.
+#FILTER_RPC_ARGS="--block-rpcs=guest-file-open,guest-file-close,guest-file-read,guest-file-write,guest-file-seek,guest-file-flush,guest-exec,guest-exec-status"
+# For now, we "just" limit arbitrary command execution in the guest, but
+# we may tighten the policy, or adopt a different approach, in the future.
+FILTER_RPC_ARGS="--block-rpcs=guest-exec,guest-exec-status"
+
+# Guest agent command with comma-separated allowed RPCs to enable,
+# or empty list to disable all.
+#
+# You can get the list of RPC commands using "qemu-ga --allow-rpcs='?'".
+# There should be no spaces between commas and commands in the allow list.
+#FILTER_RPC_ARGS=""
