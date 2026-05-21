@@ -927,18 +927,7 @@ unlink %{buildroot}%_bindir/elf2dmp
 # install base, as the one that we have there is the upstream binary, that got
 # copied there during `make install`.
 
-%if %{build_ppc_firmware}
-# In support of update-alternatives
-#
-# The reason why we do this, is because we have (only for PPC) an skiboot
-# package, shipping an alternative version of skiboot.lid. That is, in fact,
-# what's "on the other end" of us supporting update-alternatives for this
-# particular firmware.
-mv %{buildroot}%_datadir/%name/skiboot.lid %{buildroot}%_datadir/%name/skiboot.lid.qemu
-# create a dummy target for /etc/alternatives/skiboot.lid
-mkdir -p %{buildroot}%{_sysconfdir}/alternatives
-ln -s -f %{_sysconfdir}/alternatives/skiboot.lid %{buildroot}%{_datadir}/%name/skiboot.lid
-%else
+%if ! %{build_ppc_firmware}
 for f in %{ppc_extra_firmware} ; do
   unlink %{buildroot}%_datadir/%name/$f
 done
@@ -1888,8 +1877,7 @@ It can be used as partition firmware for pSeries machines running on QEMU or KVM
 Summary:        OPAL firmware (aka skiboot), used in booting OpenPOWER systems
 Group:          System/Emulators/PC
 BuildArch:      noarch
-Requires(post): update-alternatives
-Requires(postun): update-alternatives
+Conflicts:      opal-firmware
 
 %description skiboot
 Provides OPAL (OpenPower Abstraction Layer) firmware, aka skiboot, as
@@ -1898,16 +1886,16 @@ traditionally packaged with QEMU.
 %files skiboot
 %dir %_datadir/%name
 %_datadir/%name/skiboot.lid
-%_datadir/%name/skiboot.lid.qemu
-%ghost %_sysconfdir/alternatives/skiboot.lid
 
-%post skiboot
-update-alternatives --install \
-   %{_datadir}/%name/skiboot.lid skiboot.lid %{_datadir}/%name/skiboot.lid.qemu 15
-
-%preun skiboot
-if [ ! -f %{_datadir}/%name/skiboot.lid.qemu ] ; then
-   update-alternatives --remove skiboot.lid %{_datadir}/%name/skiboot.lid.qemu
+%pre skiboot
+# Remove the symlink from where we were using update-alternatives.
+if [ "$1" -ge 1 ]; then
+  if [ -x %{_sbindir}/update-alternatives ]; then
+    %{_sbindir}/update-alternatives --remove skiboot.lid %{_datadir}/%name/skiboot.lid.qemu || :
+  fi
+  if [ -L %{_datadir}/%name/skiboot.lid ]; then
+    rm -f %{_datadir}/%name/skiboot.lid
+  fi
 fi
 # End of "if build_ppc_firmware"
 %endif
