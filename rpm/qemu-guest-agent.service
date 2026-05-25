@@ -3,9 +3,11 @@ Description=QEMU Guest Agent
 Documentation=http://wiki.qemu.org/Features/GuestAgent
 BindsTo=dev-virtio\x2dports-org.qemu.guest_agent.0.device
 After=dev-virtio\x2dports-org.qemu.guest_agent.0.device
+IgnoreOnIsolate=True
 
 [Service]
 Type=simple
+UMask=0077
 # Our config file
 EnvironmentFile=-/usr/etc/sysconfig/qemu-ga
 # Overrides from the admin (if any)
