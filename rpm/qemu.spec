@@ -537,6 +537,16 @@ efi-rtl8139.rom efi-virtio.rom efi-vmxnet3.rom}
 
 %define rpmfilesdir %{_builddir}/qemu-%{version}/rpm
 
+# Workaround for GCC packages that only contain the versioned binaries
+%if %{build_ppc_firmware}
+mkdir -p %{_builddir}/cross-tools
+PPC_GCC=$(ls /usr/bin/powerpc64-suse-linux-gcc-* 2>/dev/null | head -n1)
+if [ -n "$PPC_GCC" ]; then
+    ln -sf "$PPC_GCC" %{_builddir}/cross-tools/powerpc64-suse-linux-gcc
+    export PATH=%{_builddir}/cross-tools:$PATH
+fi
+%endif
+
 %if %{legacy_qemu_kvm}
 # FIXME: Why are we copying the s390 specific one?
 cp %{rpmfilesdir}/supported.s390.txt docs/supported.rst
