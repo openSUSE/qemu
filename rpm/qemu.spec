@@ -1743,7 +1743,7 @@ a virtfs helper, ivshmem, disk utilities and scripts for various purposes.
 %_bindir/qemu-keymap
 %_bindir/vmstate-static-checker.py
 %_bindir/vmxcap
-%verify(not mode) %attr(4750,root,kvm) %_libexecdir/qemu-bridge-helper
+%verify(not group mode) %attr(4750,root,kvm) %_libexecdir/qemu-bridge-helper
 %dir %_sysconfdir/%name
 %config(noreplace) %_sysconfdir/%name/bridge.conf
 
