@@ -2561,11 +2561,16 @@ VirtQueue *virtio_add_queue(VirtIODevice *vdev, int queue_size,
     if (i == VIRTIO_QUEUE_MAX || queue_size > VIRTQUEUE_MAX_SIZE)
         abort();
 
-    /*
-     * Always set to max queue size for qemu <11.1.  See discussion starting
-     * https://lore.kernel.org/qemu-devel/a5cff318f06cd06b37224e15ee74d64d1df8b12b.1785179875.git.mst@redhat.com/
-     */
-    queue_size = VIRTQUEUE_MAX_SIZE;
+    BusState *qbus = qdev_get_parent_bus(DEVICE(vdev));
+    if (qbus && qbus->parent &&
+        object_property_find(OBJECT(qbus->parent), VIRTIO_QUEUE_SIZE_OVERRIDE)) {
+        int override = object_property_get_int(OBJECT(qbus->parent),
+                                               VIRTIO_QUEUE_SIZE_OVERRIDE,
+                                               &error_abort);
+        if (override) {
+            queue_size = override;
+        }
+    }
 
     vdev->vq[i].vring.num = queue_size;
     vdev->vq[i].vring.num_default = queue_size;
