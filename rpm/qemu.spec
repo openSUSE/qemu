@@ -539,6 +539,7 @@ efi-rtl8139.rom efi-virtio.rom efi-vmxnet3.rom}
 
 # Workaround for GCC packages that only contain the versioned binaries
 %if %{build_ppc_firmware}
+%ifnarch ppc64 ppc64le
 mkdir -p %{_builddir}/cross-tools
 PPC_GCC=$(ls /usr/bin/powerpc64-suse-linux-gcc-* 2>/dev/null | head -n1)
 if [ -n "$PPC_GCC" ]; then
@@ -546,6 +547,18 @@ if [ -n "$PPC_GCC" ]; then
     ln -sf /usr/bin/powerpc64-suse-linux-ld %{_builddir}/cross-tools/powerpc64-suse-linux-ld
     export PATH=%{_builddir}/cross-tools:$PATH
 fi
+%endif
+%endif
+%if %{build_x86_firmware}
+%ifnarch x86_64
+mkdir -p %{_builddir}/cross-tools
+X86_GCC=$(ls /usr/bin/x86_64-suse-linux-gcc-* 2>/dev/null | head -n1)
+if [ -n "$X86_GCC" ]; then
+    ln -sf "$X86_GCC" %{_builddir}/cross-tools/x86_64-suse-linux-gcc
+    ln -sf /usr/bin/x86_64-suse-linux-ld %{_builddir}/cross-tools/x86_64-suse-linux-ld
+    export PATH=%{_builddir}/cross-tools:$PATH
+fi
+%endif
 %endif
 
 %if %{legacy_qemu_kvm}
