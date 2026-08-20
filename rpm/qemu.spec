@@ -85,7 +85,6 @@
 %bcond_without fuse
 
 %global have_libcbor 1
-%global have_block_gluster 0
 
 # enforce pxe rom sizes for migration compatability from SLE 11 SP3 forward
 # the following need to be > 64K
@@ -100,7 +99,7 @@ URL:            https://www.qemu.org/
 Summary:        Machine emulator and virtualizer
 License:        BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
 Group:          System/Emulators/PC
-Version:        11.0.3
+Version:        11.1.0
 Release:        0
 Source0:        qemu-%{version}.tar.xz
 Source1:        common.inc
@@ -217,9 +216,6 @@ BuildRequires:  pkgconfig(alsa)
 BuildRequires:  pkgconfig(epoxy)
 BuildRequires:  pkgconfig(gbm)
 BuildRequires:  pkgconfig(glib-2.0) >= 2.56
-%if %{have_block_gluster}
-BuildRequires:  pkgconfig(glusterfs-api) >= 3
-%endif
 BuildRequires:  pkgconfig(gnutls) >= 3.5.18
 BuildRequires:  pkgconfig(gtk+-3.0) >= 3.22
 BuildRequires:  pkgconfig(jack)
@@ -314,9 +310,6 @@ Suggests:       qemu-block-rbd
 %endif
 Suggests:       qemu-accel-qtest
 Suggests:       qemu-block-dmg
-%if %{have_block_gluster}
-Suggests:       qemu-block-gluster
-%endif
 Suggests:       qemu-block-iscsi
 Suggests:       qemu-block-ssh
 Suggests:       qemu-chardev-baum
@@ -415,11 +408,12 @@ This package acts as an umbrella package to the other QEMU sub-packages.
 %_datadir/%name/qemu-ifup
 %_datadir/%name/qemu-nsis.bmp
 %_datadir/%name/trace-events-all
-%_mandir/man1/%name.1.gz
-%_mandir/man7/qemu-block-drivers.7.gz
-%_mandir/man7/qemu-cpu-models.7.gz
-%_mandir/man7/qemu-qmp-ref.7.gz
-%_mandir/man7/qemu-ga-ref.7.gz
+%_mandir/man1/%name.1*
+%{_mandir}/man1/qemu-vnc.1*
+%_mandir/man7/qemu-block-drivers.7*
+%_mandir/man7/qemu-cpu-models.7*
+%_mandir/man7/qemu-qmp-ref.7*
+%_mandir/man7/qemu-ga-ref.7*
 %{_libdir}/%{name}/hw-uefi-vars.so
 /usr/lib/supportconfig/plugins/%name
 %license COPYING COPYING.LIB LICENSE
@@ -700,9 +694,6 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-gcrypt \
 	--enable-gettext \
 	--enable-gio \
-%if %{have_block_gluster}
-	--enable-glusterfs \
-%endif
 	--enable-gnutls \
 	--enable-gtk \
 	--enable-guest-agent \
@@ -735,6 +726,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--enable-png \
 	--enable-qcow1 \
 	--enable-qed \
+	--enable-qemu-vnc \
 	--enable-rdma \
 	--enable-relocatable \
 	--enable-replication \
@@ -1290,6 +1282,7 @@ popular QEMU packages which are dedicated to a single architecture.)
 
 %files extra
 %_bindir/qemu-system-alpha
+%_bindir/qemu-system-hexagon
 %_bindir/qemu-system-hppa
 %_bindir/qemu-system-loongarch64
 %_bindir/qemu-system-mips64
@@ -1434,21 +1427,6 @@ qemu-img tool and QEMU system emulation.
 %dir %_libdir/%name
 %_libdir/%name/block-dmg-bz2.so
 %_libdir/%name/block-dmg-lzfse.so
-
-%if %{have_block_gluster}
-%package block-gluster
-Summary:        GlusterFS block support for QEMU
-Group:          System/Emulators/PC
-%{qemu_module_conflicts}
-
-%description block-gluster
-This package contains a module for accessing network-based image files over a
-GlusterFS network connection from qemu-img tool and QEMU system emulation.
-
-%files block-gluster
-%dir %_libdir/%name
-%_libdir/%name/block-gluster.so
-%endif
 
 %package block-iscsi
 Summary:        iSCSI block support for QEMU
