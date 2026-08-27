@@ -4155,7 +4155,7 @@ static inline void gen_op_mfspr(DisasContext *ctx)
         }
     } else {
         /* ISA 2.07 defines these as no-ops */
-        if ((ctx->insns_flags2 & PPC2_ISA207S) &&
+        if ((ctx->insns_flags2 & PPC2_ISA207) &&
             (sprn >= 808 && sprn <= 811)) {
             /* This is a nop */
             return;
@@ -4334,7 +4334,7 @@ static void gen_mtspr(DisasContext *ctx)
         }
     } else {
         /* ISA 2.07 defines these as no-ops */
-        if ((ctx->insns_flags2 & PPC2_ISA207S) &&
+        if ((ctx->insns_flags2 & PPC2_ISA207) &&
             (sprn >= 808 && sprn <= 811)) {
             /* This is a nop */
             return;
