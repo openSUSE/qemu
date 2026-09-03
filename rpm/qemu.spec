@@ -88,7 +88,7 @@ URL:            https://www.qemu.org/
 Summary:        Machine emulator and virtualizer
 License:        BSD-2-Clause AND BSD-3-Clause AND GPL-2.0-only AND GPL-2.0-or-later AND LGPL-2.1-or-later AND MIT
 Group:          System/Emulators/PC
-Version:        11.1.0
+Version:        11.1.1
 Release:        0
 Source0:        qemu-%{version}.tar.xz
 Source1:        common.inc
@@ -579,6 +579,11 @@ export HOSTNAME=OBS # is used in roms/SLOF/Makefile.gen (boo#1084909)
 # Let's try to stick to _FORTIFY_SOURCE=2 for now
 EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g') -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -Wno-error"
 
+%ifarch aarch64
+# bypass GCS linker validation that fails on AArch64
+EXTRA_LDFLAGS="%{?__global_ldflags} -Wl,-z,gcs-report-dynamic=none"
+%endif
+
 %srcdir/configure \
 %if 0%{?suse_version} >= 1600
 	--python=%_bindir/python3 \
@@ -588,6 +593,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--docdir=%_docdir \
 	--datadir=%_datadir \
 	--extra-cflags="${EXTRA_CFLAGS}" \
+	--extra-ldflags="${EXTRA_LDFLAGS}" \
 	--firmwarepath=%_datadir/%name \
 	--libdir=%_libdir \
 	--libexecdir=%_libexecdir \
