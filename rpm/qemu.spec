@@ -600,6 +600,11 @@ export HOSTNAME=OBS # is used in roms/SLOF/Makefile.gen (boo#1084909)
 # Let's try to stick to _FORTIFY_SOURCE=2 for now
 EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g') -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 -Wno-error"
 
+%ifarch aarch64
+# bypass GCS linker validation that fails on AArch64
+EXTRA_LDFLAGS="%{?__global_ldflags} -Wl,-z,gcs-report-dynamic=none"
+%endif
+
 %srcdir/configure \
 %if 0%{?suse_version} >= 1600
 	--python=%_bindir/python3 \
@@ -609,6 +614,7 @@ EXTRA_CFLAGS="$(echo %{optflags} | sed -E 's/-[A-Z]?_FORTIFY_SOURCE[=]?[0-9]*//g
 	--docdir=%_docdir \
 	--datadir=%_datadir \
 	--extra-cflags="${EXTRA_CFLAGS}" \
+	--extra-ldflags="${EXTRA_LDFLAGS}" \
 	--firmwarepath=%_datadir/%name \
 	--libdir=%_libdir \
 	--libexecdir=%_libexecdir \
