@@ -966,6 +966,9 @@ cp %{rpmfilesdir}/APIC.core-count2 %{rpmfilesdir}/DSDT.core-count2 %{rpmfilesdir
 echo 'int main (void) { return 0; }' > %{srcdir}/tests/unit/test-seccomp.c
 # keyctl is not yet supported by linux-user emulation
 echo 'int main (void) { return 0; }' > %{srcdir}/tests/unit/test-crypto-secret.c
+# get_mempolicy & libnuma are not implemented by linux-user emulation
+echo 'int main (void) { return 0; }' > %{srcdir}/tests/unit/test-qdev-global-props.c
+echo 'int main (void) { return 0; }' > %{srcdir}/tests/unit/test-qga.c
 # fuse is not supported by linux-user emulation
 printf '#!/bin/bash\ntouch $TEST_DIR/108.notrun\nexit 0\n' > %{srcdir}/tests/qemu-iotests/108
 %endif
