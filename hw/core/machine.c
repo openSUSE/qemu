@@ -58,7 +58,6 @@ GlobalProperty hw_compat_10_0[] = {
     { "vfio-pci", "x-migration-load-config-after-iter", "off" },
     { "ramfb", "use-legacy-x86-rom", "true"},
     { "vfio-pci-nohotplug", "use-legacy-x86-rom", "true" },
-    { "chardev-qemu-vdagent", "x-migration-blocked", "true" },
 };
 const size_t hw_compat_10_0_len = G_N_ELEMENTS(hw_compat_10_0);
 
@@ -76,6 +75,10 @@ const size_t hw_compat_9_2_len = G_N_ELEMENTS(hw_compat_9_2);
 
 GlobalProperty hw_compat_9_1[] = {
     { TYPE_PCI_DEVICE, "x-pcie-ext-tag", "false" },
+    /* Upstream, this is hw_compat_10_0, but we've backported
+       the vdagent-migration patches back until 9.2, so we
+       want to allow it for those machines. */
+    { "chardev-qemu-vdagent", "x-migration-blocked", "true" },
 };
 const size_t hw_compat_9_1_len = G_N_ELEMENTS(hw_compat_9_1);
 

@@ -26,7 +26,7 @@
 struct VDAgentChardev {
     Chardev parent;
 
-    /* needed for machine versions < 10.1 when migration was not supported */
+    /* needed for machine versions < 9.2 when migration was not supported */
     Error *migration_blocker;
     bool migration_blocked;
 
@@ -1102,7 +1102,7 @@ static void vdagent_post_init(Object *obj)
     if (vd->migration_blocked) {
         error_setg(&vd->migration_blocker,
                    "The vdagent chardev doesn't support migration with machine"
-                   " version less than 10.1");
+                   " version less than 9.2");
     }
 }
 
