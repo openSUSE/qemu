@@ -1214,7 +1214,6 @@ This package provides i386 and x86_64 emulation.
 Summary:        Machine emulator and virtualizer for Power architectures
 Group:          System/Emulators/PC
 Requires:       %name = %{version}
-Requires:       qemu-ipxe
 Requires:       qemu-SLOF
 Requires:       qemu-vgabios
 
