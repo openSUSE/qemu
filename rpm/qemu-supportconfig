@@ -5,49 +5,341 @@
 #              about QEMU
 #############################################################
 
-RCFILE="/usr/lib/supportconfig/resources/supportconfig.rc"
-OF="output-qemu.txt"
+MOD_DIR="/sys/module/"
+KVM_DEBUGFS_DIR="/sys/kernel/debug/kvm/"
+# doesn't like the commas
+# shellcheck disable=SC2054
+PS_OPTS=(-T -o pid,ppid,tid,thcount,stat,sgi_p,wchan:25,psr,comm:20,cmd)
+QEMU_PATTERNS=(qemu-system- qemu-kvm)
+VIRT_PATTERNS=(qemu-pr-helper virtiofsd virt)
+RPM_PATTERNS=('name=qemu*' 'name=gdb' 'name=systemtap' 'name=perf'
+              'name=libvirt' 'name=virt*')
 
-if [ -s $RCFILE ]; then
-    if ! source $RCFILE; then
-        log_write $OF "ERROR: Initializing resource file: $RCFILE"
-        exit 1
-    fi
-fi
+usage()
+{
+    cat <<EOF
+Usage: $(basename "$0")
 
-rpm_verify $OF qemu || exit 111
-
-# skip if the host is xen
-log_write $OF "#==[ Checking if booted Xen ]=================================#"
-if [ -d /proc/xen ] && [ -e /proc/xen/capabilities ] && [ `cat /proc/xen/capabilities` = "control_d" ]; then
-    log_write $OF "Yes"
-    log_write $OF "Skipped"
+Gather data for troubleshooting virtual machines. Run
+either as a standalone bash script with data emitted to
+stdout or invoked by supportconfig as a plugin in which
+case the data is found at plugin-qemu.txt.
+EOF
     exit 0
-else
-    log_write $OF "No"
-fi
+}
 
-# basic system information
-log_cmd $OF "uname -r"
-log_cmd $OF "lscpu"
-log_cmd $OF "lspci -v"
-log_cmd $OF "lsscsi"
-log_cmd $OF "kvm_stat -1"
-log_cmd $OF "lsmod | grep ^kvm"
-for MODULE in `lsmod | grep ^kvm | cut -d ' ' -f 1`; do
-    log_cmd $OF "modinfo $MODULE"
+[[ -n "$1" ]] && usage
+while getopts "" opt; do
+    case $opt in
+        *) usage
+           ;;
+    esac
 done
-log_cmd $OF "ps -ef | grep qemu"
+shift $((OPTIND - 1))
 
-# list contents of common config and image directories
-log_cmd $OF "ls -alR /var/lib/libvirt/images/"
+init()
+{
+    # sanity check: skip if basic commands are missing (unlikely)
+    if { ! command -v rpm || ! command -v grep || ! command -v pgrep || ! command -v cat; } &>/dev/null
+    then
+        exit 111;
+    fi
 
-# network-related info often useful for debugging
-nm_enabled=$(systemctl is-enabled NetworkManager.service > /dev/null 2>&1; echo $?)
-if [ $nm_enabled -eq 0 ]; then
-    log_write $OF "NOTE: NetworkManager should not be enabled on a KVM host"
+    # skip if the host is xen
+    if [[ -d /proc/xen && -e /proc/xen/capabilities &&
+              "$(cat /proc/xen/capabilities)" == "control_d" ]]; then
+        echo "Skipped, using Xen"
+        exit 111
+    fi
+
+    # Skip if QEMU is not installed. Note that rpm can still return error
+    # code if it finds differences in what's installed vs. what is
+    # expected from the package metadata.
+    rpm -V qemu | grep "not installed" && exit 111
+
+    command -v eu-stack &>/dev/null
+    has_eu_stack=$?
+
+    command -v coredumpctl &>/dev/null
+    has_coredumpctl=$?
+
+    command -v diff &>/dev/null
+    has_diff=$?
+}
+
+# Pretty-print a fixed-length line matching standard supportconfig
+# headers. E.g.: #==[ Header ]=====#
+lvl=1
+header()
+{
+    local title="$1"
+    local width=53
+    local indent_len=$(( lvl * 2 ))
+    local pad_len=$(( width - indent_len - ${#title} - 6 ))
+    local pad
+    local indent
+
+    if (( pad_len < 1 )); then
+        pad_len=1
+    fi
+
+    printf -v pad '%*s' "$pad_len" ''
+    pad="${pad// /=}"
+
+    printf -v indent '%*s' "$indent_len" ''
+    indent="${indent// /=}"
+
+    echo "#${indent}[ $title ]$pad#"
+}
+
+subheader() { lvl=2; header "$@"; lvl=1; }
+blankline() { echo; }
+
+# Set the now_s and now_us variables with the seconds and microseconds
+# from the epoch. Prefer using the bash builtin if present, otherwise
+# use date.
+load_timestamp()
+{
+    local now=${EPOCHREALTIME:-$(date +%s.%N)}
+
+    # the format is "s.us", lose the dot
+    now_s=${now%.*}
+    now_us=${now#*.}
+
+    # Normalize between the two different sources by truncating to the
+    # microseconds range.
+    now_us=${now_us:0:6}
+}
+
+# Set the kvm_stats variable with PID, timestamp and KVM debugfs
+# entries for a single guest. The stats for each vcpu are excluded to
+# avoid a long runtime.
+load_kvm_stats()
+{
+    local pid="$1"
+
+    load_timestamp
+    IFS='' read -r -d '' kvm_stats <<EOF
+$pid
+stats collected at (us):$now_s.$now_us
+$(# this is just 'grep . -H' but stripping the path
+for file in "${KVM_DEBUGFS_DIR}${pid}"-*/*; do
+    [[ -f "$file" ]] || continue
+    read -r val < "$file"
+    # basename:val
+    echo "${file##*/}:${val}"
+done)
+EOF
+}
+
+eu_stack_dump()
+{
+    local tid="$1"
+    local which="$2"
+    local stack=
+
+    if [[ "$which" == "single" ]]; then
+        stack=$(timeout -s 9 -k .5 .3 \
+                        eu-stack -1 -p "$tid" -n5 2>/dev/null)
+    else
+        stack=$(timeout -s 9 -k .5 1 \
+                        eu-stack -p "$tid" -n5 2>/dev/null)
+    fi
+
+    [[ -z "$stack" ]] && return
+
+    while IFS= read -r _line; do
+        # strip the PID line if present
+        [[ "$_line" =~ ^PID ]] && continue
+
+        # strip the TID line if it's just the one
+        [[ "$_line" == "TID $tid:" && "$which" == "single" ]] && continue
+
+        # Add spaces to line up function name with wchan as printed by
+        # the ps command.
+        echo "    $_line"
+    done <<< "$stack"
+}
+
+dump_stacks()
+{
+    local pid="$1"
+    local tid="${2:-$pid}"
+    local which="$3"
+
+    if [[ $has_eu_stack -eq 0 ]]; then
+        eu_stack_dump "$tid" "$which"
+    elif [[ "$which" == "single" ]]; then
+        cat "/proc/$pid/task/$tid/stack"
+    else
+        grep . -rHs /proc/"$pid"/task/*/stack
+    fi
+}
+
+init
+load_timestamp
+start_s="$now_s"
+start_us="$now_us"
+
+# Stores samples of KVM stats for each guest. Stats are collected once
+# in the loop below and a second time when this script ends. This
+# provides a way to compare stats progression without introducing
+# extra delays in supportconfig execution.
+per_pid_stats=()
+
+# Arbitrary sequential index, just so there's something to grep for in
+# the logs.
+guest_nr=0
+
+# for use with pgrep (not grep) and bash regular expressions
+qemu_re=$(IFS='|'; echo "${QEMU_PATTERNS[*]}")
+virt_re=$(IFS='|'; echo "${VIRT_PATTERNS[*]}")
+
+# The 'ps' command line lists all threads and needs the processes
+# PIDs, use 'pgrep' to find them first.
+qemu_pids=$(pgrep -d, "$qemu_re")
+
+header "QEMU coredumps"
+if [[ $has_coredumpctl -eq 0 ]]; then
+    IFS=$'\n' read -d '' -r -a dumps < <(coredumpctl list --no-legend --since "2 days ago")
+    for dump in "${dumps[@]}"; do
+        if [[ "$dump" =~ "No coredumps" ]]; then
+            echo "None"
+            break;
+        elif [[ "$dump" =~ $qemu_re ]]; then
+            echo "$dump"
+        fi
+    done
+
+    if [[ "${#dumps[@]}" -gt 0 && "${dumps[-1]}" =~ $qemu_re ]]; then
+        read -r _ _ _ _ pid _ <<< "${dumps[-1]}"
+        subheader "Latest coredump"
+        coredumpctl --no-pager info "$pid" 2>/dev/null
+    fi
+else
+    echo "coredumpctl not available"
 fi
-log_cmd $OF "ip route list"
-log_cmd $OF "ip neigh list"
-log_cmd $OF "ip link show type bridge"
-log_cmd $OF "bridge link show"
+blankline
+
+header "QEMU processes"
+if [[ -n "$qemu_pids" ]]; then
+    while IFS= read -r line; do
+        read -r pid ppid tid _ state _ wchan _ _ cmd <<< "$line"
+
+        # save the ps header
+        [[ "$pid" == "PID" ]] && ps_hdr=$line && continue
+
+        if [[ "$pid" == "$tid" ]]; then
+            [[ $guest_nr -ne 0 ]] && blankline
+            subheader "#$(( guest_nr++ ))"
+            echo "$ps_hdr"
+            echo "$line"
+
+            # collect the kvm stats for this guest and save for later
+            load_kvm_stats "$pid"
+            per_pid_stats+=("$kvm_stats")
+        else
+            # strip cmd from thread lines to reduce clutter
+            echo "${line%"${cmd}"}"
+        fi
+
+        # Waiting on a mutex, show the waiter thread stack. Maybe we
+        # can determine by code inspection who is the holder.
+        if [[ "$wchan" =~ futex ]]; then
+            dump_stacks "$pid" "$tid" single
+        fi
+
+        if [[ "$state" =~ D ]]; then
+            dump_stacks "$pid"
+        fi
+
+        if [[ "$state" =~ Z ]]; then
+            dump_stacks "$ppid"
+        fi
+    done < <(ps "${PS_OPTS[@]}" -p "$qemu_pids")
+else
+    echo "None"
+fi
+
+blankline
+
+header "Hugepages"
+grep Huge /proc/meminfo
+ls -l --full-time /dev/hugepages/libvirt/qemu 2>/dev/null
+blankline
+
+subheader "mm/hugepages"
+grep . -Hrs /sys/kernel/mm/hugepages/
+blankline
+
+subheader "mm/transparent_hugepage"
+grep . -Hs /sys/kernel/mm/transparent_hugepage/*enabled
+grep . -Hs /sys/kernel/mm/transparent_hugepage/*/*enabled
+blankline
+
+header "Virtualization modules"
+for mod in "$MOD_DIR"kvm*; do
+    [[ -d "$mod" ]] || continue
+    name=${mod##"$MOD_DIR"}
+
+    subheader "$name"
+
+    # Pick just a few fields to show, no point in dumping everything
+    # from module signatures to the list of parameters' types.
+    cat <<EOF
+suserelease: $(modinfo -F suserelease "$name")
+filename: $(modinfo -F filename "$name")
+vermagic: $(modinfo -F vermagic "$name")
+depends:  $(modinfo -F depends "$name")
+EOF
+    echo "parameters:"
+    for p in "$mod"/parameters/*; do
+        [[ -f "$p" ]] || continue
+        read -r val < "$p"
+        # basename:val
+        echo "${p##*/}:${val}"
+    done
+    blankline
+done
+
+header "Other virtualization processes"
+pgrep -a "$virt_re"
+blankline
+
+header "Virtualization and debug packages"
+rpm -qa "${RPM_PATTERNS[@]}" | sort
+blankline
+
+header "KVM stats"
+guest_nr=0
+if [[ "${#per_pid_stats[@]}" -gt 0 ]]; then
+    for guest_stats in "${per_pid_stats[@]}"; do
+        # fetch the pid from the entry
+        IFS=$'\n' read -r -d '' pid kvm_stats_before <<< "$guest_stats"
+
+        # load a new set of stats
+        load_kvm_stats "$pid"
+
+        # strip the pid from the new entry to keep the lines aligned
+        IFS=$'\n' read -r -d '' _ kvm_stats_after <<< "$kvm_stats"
+
+        subheader "#$(( guest_nr++ )) PID=$pid"
+
+        if [[ "$has_diff" -eq 0 ]]; then
+            diff -y <(echo "$kvm_stats_before") <(echo "$kvm_stats_after")
+        else
+            echo "$kvm_stats_after"
+        fi
+        blankline
+    done
+fi
+
+load_timestamp
+elapsed_s=$(( 10#$now_s - 10#$start_s ))
+elapsed_us=$(( 10#$now_us - 10#$start_us ))
+if (( elapsed_us < 0 )); then
+    (( elapsed_s-- ))
+    elapsed_us=$(( 1000000 + elapsed_us ))
+fi
+
+header "Done in ${elapsed_s}.${elapsed_us}us"
