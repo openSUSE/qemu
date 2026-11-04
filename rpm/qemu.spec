@@ -127,7 +127,6 @@ BuildRequires:  gcc-32bit
 %if 0%{with xen}
 BuildRequires:  xen-devel >= 4.2
 %endif
-BuildRequires:  pkgconfig(libpmem)
 %endif
 %ifnarch s390x
 BuildRequires:  libnuma-devel
